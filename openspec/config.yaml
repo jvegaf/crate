@@ -1,0 +1,57 @@
+strict_tdd: false
+context: |
+  @bbx-audio/crate is a Node.js/TypeScript ESM, Svelte project.
+  Detected markers: package.json, yarn package manager, docs/package.json, docs/tsconfig.json, docs/yarn package manager, apps/desktop/package.json, apps/desktop/tsconfig.json, apps/desktop/npm package manager, apps/mobile/package.json, apps/mobile/tsconfig.json, apps/mobile/npm package manager, GitHub Actions.
+  Package managers: yarn, npm.
+  Additional evidence: Test-like files detected (2); examples: src-tauri/src/services/cloud_sync/tests/convergence.rs, src-tauri/src/services/cloud_sync/tests/mod.rs.
+  No reliable test runner was detected; verify testing manually before enabling strict TDD.
+  Unit tests: none.
+  Integration tests: none.
+  E2E tests: none.
+rules:
+  proposal:
+    require_problem_statement: true
+  spec:
+    require_acceptance_criteria: true
+  design:
+    require_tradeoffs: true
+  tasks:
+    protect_review_workload: true
+  apply:
+    test_command: ""
+  verify:
+    test_command: ""
+testing:
+  detected: "2026-09-24"
+  runner:
+    command: ""
+    framework: ""
+  layers:
+    unit: ""
+    integration: ""
+    e2e: ""
+  commands:
+    unit:
+      []
+    integration:
+      []
+    e2e:
+      []
+  coverage:
+    command: ""
+    commands:
+      []
+quality:
+  lint: "yarn lint"
+  lint_commands:
+    - scope: "."
+      command: "yarn lint"
+      framework: "linter"
+  typecheck: ""
+  typecheck_commands:
+    []
+  format: "yarn format"
+  format_commands:
+    - scope: "."
+      command: "yarn format"
+      framework: "formatter"
