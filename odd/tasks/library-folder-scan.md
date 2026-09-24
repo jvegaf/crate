@@ -53,10 +53,10 @@ and no recursive walk anywhere in the codebase. The user decided (session 2026-0
 ## Tasks
 
 - [x] T1 Recon: scout the `library_roots` subsystem, the import pipeline, and the Settings > Library UI
-- [ ] T2 Backend: single source of truth for supported audio extensions, used by all backend call sites
-- [ ] T3 Backend: `register_root_with_id` + canonicalize in `set_root_mapping` + deterministic longest-prefix root matching, with tests
-- [ ] T4 Backend: `services/library/scan.rs` — resolve root, walk, hash-skip, import, count
-- [ ] T5 Backend: `get_music_library_folder` / `set_music_library_folder` / `scan_music_library_folder` commands, registered in `generate_handler!` under `#[cfg(feature = "desktop")]`
+- [x] T2 Backend: single source of truth for supported audio extensions, used by all backend call sites
+- [x] T3 Backend: `ensure_root` + `root_mapping` + canonicalize in `set_root_mapping` + deterministic longest-prefix root matching, with tests
+- [x] T4 Backend: `services/library/scan.rs` — resolve root, walk, hash-skip, import, count
+- [x] T5 Backend: `get_music_library_folder` / `set_music_library_folder` / `scan_music_library_folder` commands, registered in `generate_handler!` under `#[cfg(feature = "desktop")]`
 - [ ] T6 Shared: API wrappers in `shared/api/library.ts` + `LibraryFolderScanResult` type
 - [ ] T7 Desktop: `libraryStore` scan action (refresh tracks + honor auto-analyze)
 - [ ] T8 Desktop: Settings > Library section — path display, folder picker, rescan, result summary
@@ -155,4 +155,126 @@ and no recursive walk anywhere in the codebase. The user decided (session 2026-0
 
 | Commit | Message | Files |
 | --- | --- | --- |
-| _pending_ | `docs(odd): track library-folder-scan feature` | `odd/tasks/library-folder-scan.md` |
+| `3ba365b` | `docs(odd): track library-folder-scan feature` | `odd/tasks/library-folder-scan.md` |
+| `2af6559` | `fix(cloud-sync): resolve library roots deterministically by longest prefix` | `services/cloud_sync/resolution.rs` |
+| `6c54963` | `feat(library): scan a music folder and import new tracks` | `services/library/{mod,import,relocation,scan}.rs`, `commands/library.rs`, `lib.rs` |
+| `5c07605` | `feat(library): expose the music folder commands to the frontend` | `shared/api/library.ts`, `shared/types/index.ts` |
+| `dde8148` | `feat(settings): choose and scan the music folder in Library settings` | `apps/desktop/src/lib/stores/library.ts`, `settings/tabs/LibraryTab.svelte`, `shared/i18n/locales/*.json` (15) |
+
+Portability: `2af6559`, `6c54963`, `5c07605` and `dde8148` are upstream-portable (no fork
+tooling); `3ba365b` and the evidence commit are fork-only and must never travel upstream.
+`2af6559` is an independently useful fix and can be offered upstream on its own, before the
+feature.
+
+## Slice 1 evidence (backend)
+
+- **Design correction found during reconnaissance.** The plan said `register_root_with_id`; the
+  signature scout showed `register_root` generates `uuid::Uuid::new_v4()` (`resolution.rs:105`). The
+  implemented shape is an additive `ensure_root(conn, id, name)` (idempotent insert, dirty only when a
+  row is really inserted) with `register_root` delegating to it, which keeps existing callers
+  byte-identical while allowing the stable id `local-music-library`.
+- **Verification run by the implementing writer:** `cargo test --features desktop` → **178 passed,
+  0 failed** (4 new tests: `nested_roots_resolve_to_most_specific`,
+  `file_outside_every_mapping_resolves_to_none`, `sibling_prefix_does_not_match`,
+  `symlinked_path_resolves_to_mapped_root`); `cargo check --features desktop` → ok;
+  `cargo fmt --check -- --config tab_spaces=4` → clean.
+- **`cargo fmt` could not be run bare**, and this is an environment trap worth remembering: there is a
+  global `~/.config/rustfmt/rustfmt.toml` with `tab_spaces = 2` and the repo has no `rustfmt.toml`, so
+  a bare `cargo fmt` rewrites the whole crate to 2 spaces. The CI gate is unaffected (CI has no such
+  global config); locally, verify with `cargo fmt --check -- --config tab_spaces=4`.
+- **Extension dedup verified independently with `ast-grep`**: exactly one copy of the extension array
+  remains in Rust (`services/library/mod.rs:29`) and it is referenced from `import.rs:51`,
+  `import.rs:230`, `relocation.rs:43` and `scan.rs:89`. The other `"aiff"` occurrences are per-extension
+  `match` arms with different semantics (`hash.rs:97` container-header skip,
+  `export/device_library_plus/models.rs:40`, `export/pdb/writer.rs:229`) and were correctly left alone.
+- **Parent review of the diff** (not delegated): `generate_handler!` registers the three commands with
+  `#[cfg(feature = "desktop")]` on its own line; the extension substitution in `import.rs` keeps the
+  lowercasing and the unsupported-format error path unchanged; `mod scan;` is declared.
+- **Behaviour changes accepted in `resolution.rs`**: `set_root_mapping` now stores the canonicalized
+  path (fallback: raw string); `try_assign_root_for_import` canonicalizes the candidate (fallback: raw
+  path) and orders by descending mapped-path length. Pre-existing mappings written non-canonically
+  before this commit may stop matching until re-saved — recorded as a known consequence, not a bug.
+- **Known limitations carried into the frontend slice**: a hard DB error in `find_track_by_hash`
+  propagates and aborts the scan (only per-file hash/import errors accumulate); `ensure_root` advances
+  the HLC clock even on an idempotent no-op (deliberate, to keep `register_root` behaviour identical);
+  the mobile target had not been compiled yet at slice 1 (it is a T10 gate). The canonical
+  `scanned_count` semantics is **"supported audio files discovered"**, not "files walked" — the UI must
+  label it that way.
+
+## Slice 2 evidence (frontend)
+
+- **Writer stalled once** mid-slice (timed out after an edit) having completed the types, API wrappers,
+  store and component plus 7 of 15 locales. It was resumed with a narrowed prompt rather than relaunched,
+  and finished the remaining 8 locales and all four frontend gates.
+- **Parent review of the frontend diff** before committing: `LibraryFolderScanResult` matches the Rust
+  struct field-for-field in snake_case; the store's success path is correct because `loadTracks()`
+  resets `loading` in both paths and swallows its own errors, so a refetch failure cannot be
+  misreported as a scan failure; every `Text`/`Button` prop used (`truncate`, `tabular`,
+  `color="danger"`, `title`, `disabled`) exists in the component definitions.
+- **i18n coverage verified programmatically**: all 13 keys present in all 15 locales, `{error}`
+  preserved verbatim in both `*Error` keys, and every key referenced by `LibraryTab.svelte` resolves in
+  `en.json`. Translations authored by the model and **not native-reviewed**: `pt` assumes Brazilian
+  Portuguese; `ja`/`ko`/`zh` naturalness and `uk`/`ro`/`tr` terminology are the weakest confidence
+  (notably `sv` "Sök igenom igen" and `uk` "З помилками" are the least literal renderings).
+- **One accepted scope deviation**: `yarn format:check` failed on `LibraryTab.svelte` and the sanctioned
+  `yarn format:fix` collapsed a three-line `$translate(...)` call to one line. Whitespace-only, inside
+  the authored section.
+
+## T10 verification (independently delegated, read-only)
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| rustfmt | `cargo fmt --check -- --config tab_spaces=4` | GREEN |
+| clippy | `cargo clippy --features desktop -- -D warnings` | **RED — pre-existing, base-only** |
+| rust tests | `cargo test --features desktop` | GREEN — 178 passed, 0 failed |
+| mobile compile | `cargo check --target aarch64-apple-ios --no-default-features --features mobile` | **NOT VERIFIED — host cannot run it** |
+| svelte-check (desktop) | `yarn check:svelte` | GREEN — 0 errors, 0 warnings |
+| svelte-check (mobile) | `yarn check:svelte:mobile` | GREEN — 0 errors, 0 warnings |
+| Prettier | `yarn format:check` | GREEN |
+| ESLint | `yarn lint:check` | GREEN |
+
+**The clippy gate is red on this branch and was already red before it.** The single error is
+`clippy::double-ended-iterator-last` at `src-tauri/src/services/device.rs:95`
+(`device.split('/').last()` where clippy wants `next_back()`), promoted to an error by `-D warnings`.
+Evidence that it is not ours: `git diff --name-only 3ba365b~1 HEAD` does not list `device.rs`, and the
+offending line is byte-identical at `3ba365b~1`. The resolved toolchain honours the pin
+(`rustc 1.95.0-nightly c04308580`, `clippy 0.1.95`). This means the exact CI clippy gate fails on
+`develop` as well — an open question worth its own diagnosis (whether upstream CI is genuinely red, or
+CI's clippy differs from the pinned toolchain), deliberately **not** fixed here because an unrelated
+fix does not belong in this feature branch.
+
+**The mobile compile gate is not runnable on this Linux host, and this is a property of the host, not
+the change.** The target was installed correctly (`aarch64-apple-ios` on `nightly-2026-02-19`), but the
+build dies in the build script of the transitive dependency `objc2-exception-helper`, which needs
+`xcrun` to locate the iOS SDK; `xcrun`/`xcode-select` do not exist off macOS. No `Checking crate` line
+is ever reached, so `services/cloud_sync/resolution.rs` — the one feature file that is **not**
+desktop-gated and therefore must compile on mobile — was never actually type-checked for iOS. CI runs
+this gate on `runs-on: macos-latest` (`.github/workflows/ci.build.yml:87`, job defined at `:62`). The feature touches neither
+`Cargo.toml` nor `Cargo.lock`, so the dependency graph is identical to the base.
+
+Residual mobile risk, stated instead of assumed: the desktop-gated feature files cannot be part of a
+mobile build by construction (`services/mod.rs:21`, `commands/mod.rs:19`), and the `resolution.rs`
+changes use only cross-platform std (`std::fs::canonicalize`, `std::path::Path`) plus the already-present
+`rusqlite` extension trait and `uuid`. That is a structural argument, not a compile result.
+
+## Follow-ups (recorded, deliberately not done here)
+
+1. **`clippy::double-ended-iterator-last` at `services/device.rs:95`** — pre-existing, blocks the CI
+   clippy gate for every branch. Diagnose whether upstream CI is red or diverges from the pin, then fix
+   on its own branch; it must not ride along with this feature.
+2. **No `rustfmt.toml` in the repo** — a global `~/.config/rustfmt/rustfmt.toml` with `tab_spaces = 2`
+   makes a bare `cargo fmt` rewrite the whole crate locally. A committed `rustfmt.toml` would pin the
+   style for every contributor and is upstream-portable.
+3. **`clear_music_library_folder`** and the ability to unset or rename the folder from Settings.
+4. **No progress feedback or cancellation** during a long first scan.
+5. **No backfill** of `library_root_id`/`relative_path` for tracks imported before the folder was set.
+6. **Extension list still duplicated in the frontend** (`trackController.ts:157`,
+   `playlistController.ts:255`) — the backend now has one source of truth; the TS copies are separate.
+7. **Native review-translation review** of the 13 new keys in the 13 lower-confidence locales.
+
+## Open question for the user
+
+`library_roots` rows sync, so the designated `local-music-library` root appears on other devices as an
+*unmapped* root until the user picks a folder there. This was judged the intended multi-device behaviour
+(each device maps its own path, and the synced `library_root_id` + `relative_path` resolve locally), but
+it is a product-visible consequence the user has not explicitly confirmed.
