@@ -24,3 +24,5 @@ conf/
 
 # Cloud sync config (real values; see src-tauri/cloud_sync.config.example.json)
 /src-tauri/cloud_sync.config.json
+# Local Pi runtime state
+.atl/
