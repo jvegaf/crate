@@ -21,3 +21,7 @@ docs/.astro/
 
 # Svelte
 **/.svelte-kit/
+
+# Local agent runtime state — machine-generated and rewritten by tooling in its own style,
+# so it must not be able to fail the repo's format gate.
+.pi/
