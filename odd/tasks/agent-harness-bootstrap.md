@@ -59,8 +59,28 @@ Context: `jvegaf/crate` is a fork of `blackboxaudio/crate`. Stack: Tauri v2 + Ru
   and `data-theme`/`data-accent`/`data-font` wiring, `ssr = false` + `fallback: 'index.html'`,
   and zero `feature = "mobile"` gates in Rust source.
 
-## Pending (user decisions)
+## Decisions (resolved)
 
-- Whether to commit the harness (`AGENTS.md`, `.agents/`, `odd/`, `openspec/`, `.pi/`) on `develop`
-  or keep parts local. Nothing is committed; commits require explicit authorization.
-- Whether to add `.agents/`, `odd/`, `openspec/`, `.pi/` to `.gitignore` (only `.atl/` is ignored today).
+- **Harness versioning:** user chose to version **the whole harness** — `AGENTS.md`, `.agents/`,
+  `odd/`, `openspec/`, `.pi/` — on the fork integration line (`develop`), keeping feature branches
+  pure for upstream.
+- **Prettier conflict found and fixed:** `yarn format:check` was already failing on
+  `.pi/gentle-ai/sdd-preflight.json`, because gentle-ai regenerates it with 2-space indentation while
+  the repo requires tabs. Reformatting cannot hold against the next rewrite, so `.pi/` was added to
+  `.prettierignore` instead. `yarn format:check` is now green.
+- **Branch handling:** the five commits were made on `harness-bootstrap` and fast-forward merged into
+  `develop` (no merge commit), satisfying branch-first while keeping the agreed end state.
+
+## Commit evidence (on `develop`, not pushed)
+
+| Commit | Message | Files |
+| --- | --- | --- |
+| `dd5914a` | `chore: keep local Pi runtime state out of prettier` | `.prettierignore` |
+| `0c155a4` | `docs(agents): add AGENTS.md repository contract` | `AGENTS.md` |
+| `c68c983` | `chore(agents): add crate project skills` | `.agents/skills/**` (5 skills) |
+| `cbea411` | `chore(odd): track agent-harness-bootstrap feature` | `odd/tasks/agent-harness-bootstrap.md` |
+| `01803c6` | `chore(sdd): add openspec config and gentle-ai preflight` | `openspec/config.yaml`, `.pi/gentle-ai/sdd-preflight.json` |
+
+Post-commit state: working tree clean; `develop` = `upstream/develop` + 6 commits (the 5 above plus the
+pre-existing Yarn Berry migration `746c7c5`); `origin/develop` still at `746c7c5` — **nothing pushed**.
+Verified gates: `yarn format:check` green.
