@@ -257,11 +257,72 @@ mobile build by construction (`services/mod.rs:21`, `commands/mod.rs:19`), and t
 changes use only cross-platform std (`std::fs::canonicalize`, `std::path::Path`) plus the already-present
 `rusqlite` extension trait and `uuid`. That is a structural argument, not a compile result.
 
+## Native review (RDD, lineage `review-8569dcf40fea291e`)
+
+RDD reads `on (decided by default)`, so the candidate went through the native lifecycle. The candidate was
+the **feature slice** (`0d69bd2..HEAD`, committed-only, 27 paths), not the fork's accumulated divergence:
+the first `inspect` derived `746c7c5` as the base, which would have swept in 12 commits of harness and docs
+work from earlier sessions, and the review contract explicitly forbids the accumulated feature branch as a
+candidate. Re-inspecting with the narrower `baseRef` produced the correct 27-path projection.
+
+| Field | Value |
+| --- | --- |
+| Lineage | `review-8569dcf40fea291e` |
+| Target | `sha256:806e705bffb45814af057923f7106e199a6018fb270b10938c23d375067bace8` |
+| Tier / changed lines | medium / 1081 |
+| Lenses selected | `review-reliability` (one consolidated lens for this tier) |
+| Reviewers prepared / submitted | 1 / 1 (`pi_host_relay`, 90439 prompt bytes, 3863 result bytes) |
+| Outcome | **approved** |
+| Acknowledgement | `gentle-ai.review-acknowledged/v1`, authority **burned** |
+| Delivery | ordinary repository policy (not granted by the review) |
+
+### Advisory findings — all non-blocking, no correction opened
+
+The closure states it plainly: every finding is informational, none opened a correction, none reopens the
+review, and no correction transition is offered for this candidate. They are recorded as later work.
+
+| Id | Lens | Location | Severity | The parent's reading of the location |
+| --- | --- | --- | --- | --- |
+| R3-001 | reliability | `services/library/scan.rs:48-97` | WARNING | The scan body has no bound on the walk (no file cap, no cancellation) and folds `WalkDir` traversal errors into the same `failed_count` as per-file import errors, so the summary conflates two different failure classes |
+| R3-002 | reliability | `services/library/scan.rs:102-115` | SUGGESTION | `self.find_track_by_hash(&hash)?` propagates a DB error and aborts the whole scan, discarding counts for everything already imported in this run |
+| R3-003 | reliability | `settings/tabs/LibraryTab.svelte:50-57` | WARNING | The component infers scan failure from `get(libraryStore).error`, shared mutable state, instead of from the outcome of the call it just made — a stale error from another operation would be misattributed to the scan |
+
+The reviewers' own finding text lives in the native store; the table records the provider-issued
+locations and severities plus the parent's reading, never a paraphrase presented as the reviewer's words.
+
+### Infrastructure blockers hit and resolved during the lifecycle
+
+1. `inspect` was first blocked with `package-local-binary-missing`: the `gentle-pi` package had no
+   package-local `gentle-ai` binary (only `bin/gentle-shell.mjs`). Resolved with the sanctioned recovery
+   `node scripts/install-gentle-ai.mjs` from the package directory, which installed v3.7.0 into
+   `.gentle-ai/v3.7.0/gentle-ai`. **Side effect, user-visible and expected:** that installer also ran
+   `installTuiModeSetting()` (the package directory is a pi-managed install) and enabled fullscreen in the
+   global Pi settings. `GENTLE_PI_SKIP_GENTLE_AI_INSTALL` was not set, so this was an install that had
+   never completed rather than a deliberate opt-out.
+2. The first reviewer run failed with `reviewer-config-invalid`: *"no model is configured for
+   review-reliability"*. The review host relay refuses to fall back to an ambient default model by design
+   (`lib/review-host-relay.ts:594-598`), which is why `gentle-ai-worker` ran fine via `subagent_run` while
+   the reviewer could not. Root cause: **`~/.pi/gentle-ai/models.json` did not exist** (`gentlePiConfigHome()`
+   is `~/.pi/gentle-ai` per `lib/agent-home.ts:14`; `modelConfigPath` is that directory's `models.json` per
+   `extensions/gentle-ai.ts:1959`). A first attempt wrote `~/.pi/agent/subagents.json`, which is a
+   **different** mechanism (`agentModelProfileConfigPath`, the subagent model profiles) and did not resolve
+   the blocker. The working fix is a flat `routingKey -> {model}` map at `~/.pi/gentle-ai/models.json`,
+   verified by importing the package's own `readModelConfigFile` (status `valid`, all four keys accepted,
+   `review-reliability -> command-code/deepseek/deepseek-v4.1-flash`). Both files now exist; the
+   `subagents.json` one is harmless but was not the fix.
+
 ## Follow-ups (recorded, deliberately not done here)
 
 1. **`clippy::double-ended-iterator-last` at `services/device.rs:95`** — pre-existing, blocks the CI
    clippy gate for every branch. Diagnose whether upstream CI is red or diverges from the pin, then fix
    on its own branch; it must not ride along with this feature.
+2. **R3-002: a DB error mid-scan aborts the run** and discards partial counts (`scan.rs:112`). Accumulate
+   instead of propagating, so a transient failure does not throw away a completed import.
+3. **R3-001: bound the walk** (cap and/or cancellation) and separate traversal failures from per-file
+   import failures in `LibraryFolderScanResult` so the summary stops conflating them.
+4. **R3-003: stop inferring scan failure from `get(libraryStore).error`** in `LibraryTab.svelte`. Have
+   the store expose the outcome of that specific call (or return a discriminated result) instead of
+   reading shared mutable state.
 2. **No `rustfmt.toml` in the repo** — a global `~/.config/rustfmt/rustfmt.toml` with `tab_spaces = 2`
    makes a bare `cargo fmt` rewrite the whole crate locally. A committed `rustfmt.toml` would pin the
    style for every contributor and is upstream-portable.
@@ -271,6 +332,11 @@ changes use only cross-platform std (`std::fs::canonicalize`, `std::path::Path`)
 6. **Extension list still duplicated in the frontend** (`trackController.ts:157`,
    `playlistController.ts:255`) — the backend now has one source of truth; the TS copies are separate.
 7. **Native review-translation review** of the 13 new keys in the 13 lower-confidence locales.
+8. **Assign models to the remaining agent routing keys.** `~/.pi/gentle-ai/models.json` now covers the four
+   `review-*` lenses only. `jd-judge-a`, `jd-judge-b`, `jd-fix-agent` and every `sdd-*` agent will hit the
+   same `reviewer-config-invalid` refusal the first time they are driven through the host relay.
+9. **Enable a stronger model for reviewers.** All six models in `enabledModels` are lightweight/flash-tier;
+   an adversarial reviewer benefits from the strongest available model.
 
 ## Open question for the user
 
