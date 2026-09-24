@@ -160,6 +160,9 @@ and no recursive walk anywhere in the codebase. The user decided (session 2026-0
 | `6c54963` | `feat(library): scan a music folder and import new tracks` | `services/library/{mod,import,relocation,scan}.rs`, `commands/library.rs`, `lib.rs` |
 | `5c07605` | `feat(library): expose the music folder commands to the frontend` | `shared/api/library.ts`, `shared/types/index.ts` |
 | `dde8148` | `feat(settings): choose and scan the music folder in Library settings` | `apps/desktop/src/lib/stores/library.ts`, `settings/tabs/LibraryTab.svelte`, `shared/i18n/locales/*.json` (15) |
+| `9f73ff2` | `docs(odd): record library-folder-scan evidence` | `odd/tasks/library-folder-scan.md` |
+| `ae5108a` | `docs(odd): record library-folder-scan review outcome` | `odd/tasks/library-folder-scan.md` |
+| `892e3c6` | `fix(library): keep a failed folder scan distinguishable and non-fatal` | `services/library/scan.rs`, `apps/desktop/src/lib/stores/library.ts`, `settings/tabs/LibraryTab.svelte` |
 
 Portability: `2af6559`, `6c54963`, `5c07605` and `dde8148` are upstream-portable (no fork
 tooling); `3ba365b` and the evidence commit are fork-only and must never travel upstream.
@@ -257,7 +260,7 @@ mobile build by construction (`services/mod.rs:21`, `commands/mod.rs:19`), and t
 changes use only cross-platform std (`std::fs::canonicalize`, `std::path::Path`) plus the already-present
 `rusqlite` extension trait and `uuid`. That is a structural argument, not a compile result.
 
-## Native review (RDD, lineage `review-8569dcf40fea291e`)
+## Native review, first pass (RDD, lineage `review-8569dcf40fea291e`)
 
 RDD reads `on (decided by default)`, so the candidate went through the native lifecycle. The candidate was
 the **feature slice** (`0d69bd2..HEAD`, committed-only, 27 paths), not the fork's accumulated divergence:
@@ -290,6 +293,11 @@ review, and no correction transition is offered for this candidate. They are rec
 The reviewers' own finding text lives in the native store; the table records the provider-issued
 locations and severities plus the parent's reading, never a paraphrase presented as the reviewer's words.
 
+> **This approval is weak evidence — see the second review below.** The same lens on a nearly identical
+> candidate produced these three advisory findings with one model and two *blocking* findings with another.
+> An approval emitted by a model that intermittently cannot produce output is not a reliable signal, and
+> the fact that it arrived first is an accident of ordering.
+
 ### Infrastructure blockers hit and resolved during the lifecycle
 
 1. `inspect` was first blocked with `package-local-binary-missing`: the `gentle-pi` package had no
@@ -311,32 +319,104 @@ locations and severities plus the parent's reading, never a paraphrase presented
    `review-reliability -> command-code/deepseek/deepseek-v4.1-flash`). Both files now exist; the
    `subagents.json` one is harmless but was not the fix.
 
+## Second review and the correction blocker
+
+A later reminder reported an unreviewed candidate: the evidence commit `ae5108a` had moved HEAD inside the
+committed range, so the fork's **accumulated divergence** reappeared as the candidate (41 paths, 2412
+lines). `inspect` named exactly that target (`a5dba4db`) and offered `review.start` for it. The user chose
+to postpone it, so its lineage `review-db1c6d4828a4bd60` was left **open and `reviewing`** (a forecast was
+taken; nothing ran) rather than abandoned — abandoning is irreversible and would foreclose reviewing it
+later. The review was then narrowed again to the feature slice: lineage `review-b101f3dba7f53a07`, target
+`e37b1820`, 27 paths, **1147** changed lines (the extra 66 over the first pass are the evidence docs).
+
+### The reviewer model had to be replaced
+
+The first attempt reused `command-code/deepseek/deepseek-v4.1-flash` and **failed with
+`stopReason: length` after 115 s, emitting no text at all**. The same model and lens had produced a result
+on the nearly identical earlier candidate, so it is not reliable in this role: it intermittently burns its
+whole output budget on reasoning. It was replaced with `command-code/Qwen/Qwen3.7-Flash` plus
+`thinking: low`. Two facts discovered on the way:
+
+- `thinking: "minimal"` is **rejected upstream**: *"Invalid option: expected one of
+  \"low\"|\"medium\"|\"high\"|\"xhigh\"|\"max\""*. Pi's `THINKING_LEVELS` enum
+  (`lib/model-routing-authority.ts:4`) includes `off` and `minimal`, but the command-code API does not
+  accept them. `low` is the floor.
+- With a working model the verdict flipped to **`correction_required`**.
+
+### The correction
+
+The provider named exactly two findings, both `evidence_class: deterministic` and
+`causal_disposition: introduced` (ours):
+
+| Id | Severity | Location | Claim |
+| --- | --- | --- | --- |
+| R3-002 | CRITICAL | `services/library/scan.rs:90-95` | A DB error in `find_track_by_hash` aborts the entire scan, discarding all counts and imported ids collected so far |
+| R3-003 | BLOCKER | `stores/library.ts:155-158` | The store returns an empty result on failure, so the caller misreads a failed scan as a successful empty scan |
+
+Both were real and both were ours. Fixed in `892e3c6` (**41 diff lines**: 20 insertions + 21 deletions,
+inside the frozen 200-correction budget): the lookup error is absorbed as a per-file failure, the store
+rethrows instead of fabricating a result, and the component derives the outcome only from its own call.
+All seven gates were re-run green after the fix (rustfmt with `--config tab_spaces=4`, `cargo test` 178
+passed, `cargo check`, svelte-check desktop and mobile, `format:check`, `lint:check`).
+
+### Blocker: the correction-plan slot cannot be submitted
+
+The correction plan was rejected **three times, with three different reasons**, none of them about content,
+and nothing was consumed on any attempt (`mutation_performed: false`):
+
+1. `capture-binding-rejected` — *"unknown, expired, or belongs to a different session route"*;
+2. `capture-binding-rejected` — *"unknown, expired, or belongs to a different session route"*, using the
+   freshly re-rendered binding with its argument order preserved;
+3. `capture-binding-rejected` — *"does not carry one non-empty matching provider lineage and target token"*.
+
+Evidence that this is a defect in the route rather than a mistake in the submission:
+
+- two renders of the **same** binding serialized `submission.argumentTokens` with `--request-hash` and
+  `--repository-context` **swapped**, while `substitutionLocation: 5` pointed at `--correction-lines` in
+  both;
+- the current render contradicts itself: `arguments` orders `repository-context` before `request-hash`,
+  while `submission.argumentTokens` orders them the other way;
+- after the fix was committed, `STATUS` exposed **both** identities at once —
+  `target_identity: sha256:33ff9a35...` (current, tree `9964d725`) and `authority_target_identity:
+  sha256:e37b1820...` (what the correction is bound to) — while still offering the plan request bound to the
+  pre-correction target.
+
+The plausible reading, which could **not** be proven without destructive git surgery, is that the plan must
+be declared while the candidate still matches the authority target, and that window was closed because the
+fix was prepared in the working tree (then committed) before the plan was submitted. The user chose to
+document the blocker rather than rewrite history, so lineage `review-b101f3dba7f53a07` remains
+`correction_required` with `892e3c6` committed and verified, and the review lifecycle is **not closed**.
+
 ## Follow-ups (recorded, deliberately not done here)
 
 1. **`clippy::double-ended-iterator-last` at `services/device.rs:95`** — pre-existing, blocks the CI
    clippy gate for every branch. Diagnose whether upstream CI is red or diverges from the pin, then fix
    on its own branch; it must not ride along with this feature.
-2. **R3-002: a DB error mid-scan aborts the run** and discards partial counts (`scan.rs:112`). Accumulate
-   instead of propagating, so a transient failure does not throw away a completed import.
+2. **The correction lifecycle is stuck** (see the blocker section). Two ways forward: retry the plan with
+   the candidate restored to the authority target, or review the corrected candidate under a fresh
+   lineage. Until one of them happens, `review-b101f3dba7f53a07` stays `correction_required`.
 3. **R3-001: bound the walk** (cap and/or cancellation) and separate traversal failures from per-file
-   import failures in `LibraryFolderScanResult` so the summary stops conflating them.
-4. **R3-003: stop inferring scan failure from `get(libraryStore).error`** in `LibraryTab.svelte`. Have
-   the store expose the outcome of that specific call (or return a discriminated result) instead of
-   reading shared mutable state.
-2. **No `rustfmt.toml` in the repo** — a global `~/.config/rustfmt/rustfmt.toml` with `tab_spaces = 2`
+   import failures in `LibraryFolderScanResult` so the summary stops conflating them. Not fixed here
+   because the correction was bounded to R3-002 and R3-003.
+4. **No `rustfmt.toml` in the repo** — a global `~/.config/rustfmt/rustfmt.toml` with `tab_spaces = 2`
    makes a bare `cargo fmt` rewrite the whole crate locally. A committed `rustfmt.toml` would pin the
    style for every contributor and is upstream-portable.
-3. **`clear_music_library_folder`** and the ability to unset or rename the folder from Settings.
-4. **No progress feedback or cancellation** during a long first scan.
-5. **No backfill** of `library_root_id`/`relative_path` for tracks imported before the folder was set.
-6. **Extension list still duplicated in the frontend** (`trackController.ts:157`,
+5. **`clear_music_library_folder`** and the ability to unset or rename the folder from Settings.
+6. **No progress feedback or cancellation** during a long first scan.
+7. **No backfill** of `library_root_id`/`relative_path` for tracks imported before the folder was set.
+8. **Extension list still duplicated in the frontend** (`trackController.ts:157`,
    `playlistController.ts:255`) — the backend now has one source of truth; the TS copies are separate.
-7. **Native review-translation review** of the 13 new keys in the 13 lower-confidence locales.
-8. **Assign models to the remaining agent routing keys.** `~/.pi/gentle-ai/models.json` now covers the four
-   `review-*` lenses only. `jd-judge-a`, `jd-judge-b`, `jd-fix-agent` and every `sdd-*` agent will hit the
-   same `reviewer-config-invalid` refusal the first time they are driven through the host relay.
-9. **Enable a stronger model for reviewers.** All six models in `enabledModels` are lightweight/flash-tier;
-   an adversarial reviewer benefits from the strongest available model.
+9. **Native review of the new i18n keys** in the 13 lower-confidence locales (`pt`, `ja`, `ko`, `zh`,
+   `uk`, `ro`, `tr`, `sv` are the weakest).
+10. **Assign models to the remaining agent routing keys** in `~/.pi/gentle-ai/models.json`, which currently
+    covers the four `review-*` lenses only. `jd-judge-a`, `jd-judge-b`, `jd-fix-agent` and every `sdd-*`
+    agent will hit the same `reviewer-config-invalid` refusal the first time they are driven through the
+    host relay.
+11. **Enable a stronger model for reviewers.** All six models in `enabledModels` are lightweight/flash-tier,
+    and that already cost one wasted run. An adversarial reviewer benefits from the strongest available
+    model.
+
+**Resolved by this work and therefore removed from the list:** R3-002 and R3-003, both fixed in `892e3c6`.
 
 ## Open question for the user
 
