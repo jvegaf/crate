@@ -387,6 +387,32 @@ fix was prepared in the working tree (then committed) before the plan was submit
 document the blocker rather than rewrite history, so lineage `review-b101f3dba7f53a07` remains
 `correction_required` with `892e3c6` committed and verified, and the review lifecycle is **not closed**.
 
+## Review disposition — explicitly left unreviewed (user decision)
+
+After the correction lifecycle blocked, a further reminder reported yet another unreviewed candidate
+(`b6c3c885`): once more the fork's accumulated divergence, 41 paths, same `paths_digest` as before.
+`inspect` confirmed the scope and offered `review.start` for it (lineage `review-2508edfbb45c15ab`, left
+unused). The user was asked with the cost of every path on the table, and chose to **leave this and every
+remaining candidate in this worktree unreviewed and close the work**.
+
+Recorded so that nobody later reads it as an oversight or a skipped step:
+
+- **No further review was invoked** — not the accumulated divergence, not the feature slice, not the
+  validation of the fix. This is an explicit human disposition.
+- **`892e3c6` (the R3-002 / R3-003 fix) carries no review verdict.** Its only evidence is the seven gates
+  re-run green after it: verified, but not reviewed.
+- **The feature carries no trustworthy native review receipt.** The first pass's `806e705b` approval is
+  weak evidence (the same lens with a working model produced blocking findings), and the second pass ended
+  in a `correction_required` that was never validated. Neither is a receipt to lean on.
+- Two lineages stay **open and deliberately not abandoned**, because abandoning is irreversible:
+  `review-db1c6d4828a4bd60` (`reviewing`, wide scope, forecast taken, nothing run) and
+  `review-b101f3dba7f53a07` (`correction_required`, fix committed, plan slot rejected by the route defect).
+- **Narrowing scope does not stop the reminder.** Two narrowed reviews were approved and the reminder
+  returned regardless, because the extension keeps deriving the accumulated divergence as the candidate.
+  The only guaranteed stops are reviewing that scope or disabling the review switch for this clone
+  (`gentle-ai review mode disable --scope clone`); the user chose the report-level disposition, which is
+  what the procedure asks for when the human leaves a candidate unreviewed.
+
 ## Follow-ups (recorded, deliberately not done here)
 
 1. **`clippy::double-ended-iterator-last` at `services/device.rs:95`** — pre-existing, blocks the CI
@@ -417,6 +443,9 @@ document the blocker rather than rewrite history, so lineage `review-b101f3dba7f
     model.
 
 **Resolved by this work and therefore removed from the list:** R3-002 and R3-003, both fixed in `892e3c6`.
+
+**Open by explicit user decision:** the native review. `892e3c6` is unreviewed, and the reminder loop only
+stops by reviewing the accumulated divergence or by disabling the switch for this clone.
 
 ## Open question for the user
 
