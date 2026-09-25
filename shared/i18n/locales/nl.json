@@ -86,6 +86,7 @@
 			"musicFolderChange": "Map wijzigen",
 			"musicFolderRescan": "Opnieuw scannen",
 			"musicFolderScanning": "Scannen…",
+			"musicFolderProgress": "{current} van {total} nummers importeren…",
 			"musicFolderFound": "Gevonden audiobestanden",
 			"musicFolderImported": "Geïmporteerd",
 			"musicFolderSkipped": "Al in de bibliotheek",

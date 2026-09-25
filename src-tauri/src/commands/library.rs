@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use tauri::State;
+use tauri::{Emitter, State};
 
-use crate::error::Result;
+use crate::error::{CrateError, Result};
 use crate::models::{
     DuplicateResolution, FileMatchResult, ImportResult, ImportResultWithDuplicates, Track,
     TrackFilter, TrackUpdate,
@@ -180,7 +180,20 @@ pub async fn set_music_library_folder(
 
 #[tauri::command]
 pub async fn scan_music_library_folder(
+    app: tauri::AppHandle,
     library: State<'_, LibraryService>,
 ) -> Result<LibraryFolderScanResult> {
-    library.scan_music_library_folder()
+    // The scan is fully synchronous (hashing + SQLCipher transactions), so it must run on
+    // a blocking thread: running it on a tokio worker would stall the async runtime for
+    // the whole import. The service is cloned out of `State` so the closure owns it.
+    let library = library.inner().clone();
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        library.scan_music_library_folder_with_progress(|progress| {
+            let _ = app_handle.emit("library-scan-progress", progress);
+        })
+    })
+    .await
+    .map_err(|e| CrateError::InvalidOperation(format!("Library scan task failed: {e}")))?
 }

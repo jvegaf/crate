@@ -86,6 +86,7 @@
 			"musicFolderChange": "更改文件夹",
 			"musicFolderRescan": "重新扫描",
 			"musicFolderScanning": "正在扫描…",
+			"musicFolderProgress": "正在导入 {current}/{total} 首曲目…",
 			"musicFolderFound": "找到的音频文件",
 			"musicFolderImported": "已导入",
 			"musicFolderSkipped": "已在曲库中",

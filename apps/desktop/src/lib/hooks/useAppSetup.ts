@@ -35,6 +35,7 @@ import {
 	discoveryStore,
 	updaterStore,
 	previewInfo,
+	startScanProgressListening,
 } from '$lib/stores'
 import { tagFilterMode } from '$shared/stores/ui'
 import { recentlyToggledMixedTags } from '$shared/stores/ui'
@@ -649,6 +650,7 @@ export function createAppSetup(config: AppSetupConfig): AppSetupResult {
 		const minDisplayTime = 1000
 
 		await exportStore.startListening()
+		await startScanProgressListening()
 
 		const cleanupApp = await useAppInitialization({
 			stores: {

@@ -86,6 +86,7 @@
 			"musicFolderChange": "Schimbă folderul",
 			"musicFolderRescan": "Rescanează",
 			"musicFolderScanning": "Se scanează…",
+			"musicFolderProgress": "Se importă {current} din {total} piste…",
 			"musicFolderFound": "Fișiere audio găsite",
 			"musicFolderImported": "Importate",
 			"musicFolderSkipped": "Deja în bibliotecă",

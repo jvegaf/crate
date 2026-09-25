@@ -16,6 +16,7 @@ use lofty::tag::{Tag, TagType};
 
 /// Service for managing album artwork extraction and storage.
 /// Artwork is stored as 500x500 WEBP images in the app data directory.
+#[derive(Clone)]
 pub struct ArtworkService {
     artwork_dir: PathBuf,
 }

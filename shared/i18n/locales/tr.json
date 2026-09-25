@@ -86,6 +86,7 @@
 			"musicFolderChange": "Klasörü değiştir",
 			"musicFolderRescan": "Yeniden tara",
 			"musicFolderScanning": "Taranıyor…",
+			"musicFolderProgress": "{total} parçadan {current} tanesi içe aktarılıyor…",
 			"musicFolderFound": "Bulunan ses dosyaları",
 			"musicFolderImported": "İçe aktarılan",
 			"musicFolderSkipped": "Kitaplıkta zaten var",

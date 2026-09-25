@@ -86,6 +86,7 @@
 			"musicFolderChange": "フォルダを変更",
 			"musicFolderRescan": "再スキャン",
 			"musicFolderScanning": "スキャン中…",
+			"musicFolderProgress": "{total} 曲中 {current} 曲をインポート中…",
 			"musicFolderFound": "検出した音声ファイル",
 			"musicFolderImported": "インポート済み",
 			"musicFolderSkipped": "ライブラリに存在",

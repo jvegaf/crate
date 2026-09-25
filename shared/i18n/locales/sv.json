@@ -86,6 +86,7 @@
 			"musicFolderChange": "Byt mapp",
 			"musicFolderRescan": "Sök igenom igen",
 			"musicFolderScanning": "Söker igenom…",
+			"musicFolderProgress": "Importerar {current} av {total} spår…",
 			"musicFolderFound": "Hittade ljudfiler",
 			"musicFolderImported": "Importerade",
 			"musicFolderSkipped": "Redan i biblioteket",

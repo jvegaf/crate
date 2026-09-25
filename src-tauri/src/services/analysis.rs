@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use rusqlite::Connection;
@@ -59,9 +60,26 @@ struct TrackAnalysisTask {
     handle: JoinHandle<()>,
 }
 
+/// Upper bound on concurrent analyses.
+///
+/// Analysis is CPU-bound and `spawn_blocking` sizes its pool independently of the core count, so
+/// without an explicit ceiling a large batch pins every core and freezes the host.
+const ANALYSIS_WORKER_LIMIT_MAX: usize = 4;
+
+/// How many tracks may be analyzed at once: half the available cores, capped at
+/// [`ANALYSIS_WORKER_LIMIT_MAX`] and never zero. A host that refuses to report its parallelism is
+/// treated as a small machine rather than as an unbounded one.
+fn analysis_worker_limit() -> usize {
+    std::thread::available_parallelism()
+        .map(|cores| (cores.get() / 2).clamp(1, ANALYSIS_WORKER_LIMIT_MAX))
+        .unwrap_or(2)
+}
+
 pub struct AnalysisService {
     conn: Arc<Mutex<Connection>>,
     tasks: Arc<Mutex<HashMap<String, TrackAnalysisTask>>>,
+    /// Worker slots bounding how much analysis runs at once.
+    slots: Arc<Semaphore>,
 }
 
 impl AnalysisService {
@@ -69,6 +87,7 @@ impl AnalysisService {
         Self {
             conn,
             tasks: Arc::new(Mutex::new(HashMap::new())),
+            slots: Arc::new(Semaphore::new(analysis_worker_limit())),
         }
     }
 
@@ -92,11 +111,102 @@ impl AnalysisService {
         Ok(())
     }
 
+    /// Take one of the service's worker slots, giving up immediately if the track is cancelled
+    /// while it waits in the queue.
+    ///
+    /// `biased` puts the cancellation arm first, so a track cancelled while queued releases at once
+    /// instead of waiting for a slot it is about to discard.
+    async fn acquire_analysis_slot(
+        slots: &Arc<Semaphore>,
+        cancel_token: &CancellationToken,
+    ) -> Option<OwnedSemaphorePermit> {
+        tokio::select! {
+            biased;
+            _ = cancel_token.cancelled() => None,
+            permit = slots.clone().acquire_owned() => permit.ok(),
+        }
+    }
+
+    /// Emit the terminal `Cancelled` event for a track and drop it from the task map.
+    fn emit_cancelled(
+        app: &AppHandle,
+        track_id: &str,
+        tasks: &Arc<Mutex<HashMap<String, TrackAnalysisTask>>>,
+    ) {
+        let _ = app.emit(
+            "analysis-track-event",
+            TrackAnalysisEvent {
+                track_id: track_id.to_string(),
+                state: AnalysisStatus::Cancelled,
+                result: None,
+                updated_track: None,
+                error: None,
+            },
+        );
+        if let Ok(mut t) = tasks.lock() {
+            t.remove(track_id);
+        }
+    }
+
+    /// Read the stored BPM/key for a track. Returns `Some` only when BOTH are present,
+    /// because a partial analysis is not a reason to skip the DSP.
+    fn get_existing_analysis(
+        conn: &Arc<Mutex<Connection>>,
+        track_id: &str,
+    ) -> Result<Option<(f64, String)>> {
+        let conn = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        let row = conn.query_row(
+            "SELECT bpm, key FROM tracks WHERE id = ?1",
+            [track_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<f64>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )?;
+        Ok(match row {
+            (Some(bpm), Some(key)) => Some((bpm, key)),
+            _ => None,
+        })
+    }
+
+    /// Emit a terminal `Completed` event for a track that was skipped, so the UI clears
+    /// its pending state without any DSP having run.
+    fn emit_skip_completion(
+        app: &AppHandle,
+        track_id: &str,
+        bpm: f64,
+        key: String,
+        tasks: &Arc<Mutex<HashMap<String, TrackAnalysisTask>>>,
+    ) {
+        let _ = app.emit(
+            "analysis-track-event",
+            TrackAnalysisEvent {
+                track_id: track_id.to_string(),
+                state: AnalysisStatus::Completed,
+                result: Some(AnalysisResult {
+                    track_id: track_id.to_string(),
+                    bpm: Some(bpm),
+                    key: Some(key),
+                    success: true,
+                    error: None,
+                }),
+                updated_track: None,
+                error: None,
+            },
+        );
+        if let Ok(mut t) = tasks.lock() {
+            t.remove(track_id);
+        }
+    }
+
     /// Analyze multiple tracks with per-track events (async, non-blocking)
     pub async fn analyze_tracks_async(
         &self,
         app_handle: AppHandle,
         track_ids: Vec<String>,
+        force: bool,
     ) -> Result<()> {
         for track_id in track_ids {
             let cancel_token = CancellationToken::new();
@@ -105,6 +215,7 @@ impl AnalysisService {
             let tid = track_id.clone();
             let token = cancel_token.clone();
             let tasks = self.tasks.clone();
+            let slots = self.slots.clone();
 
             // Emit "pending" event immediately
             let _ = app.emit(
@@ -119,7 +230,7 @@ impl AnalysisService {
             );
 
             let handle = tauri::async_runtime::spawn(async move {
-                Self::analyze_single_track_task(conn, app, tid, token, tasks).await;
+                Self::analyze_single_track_task(conn, app, tid, token, tasks, slots, force).await;
             });
 
             // Store task for potential cancellation
@@ -143,24 +254,41 @@ impl AnalysisService {
         track_id: String,
         cancel_token: CancellationToken,
         tasks: Arc<Mutex<HashMap<String, TrackAnalysisTask>>>,
+        slots: Arc<Semaphore>,
+        force: bool,
     ) {
         // Check if already cancelled before starting
         if cancel_token.is_cancelled() {
-            let _ = app.emit(
-                "analysis-track-event",
-                TrackAnalysisEvent {
-                    track_id: track_id.clone(),
-                    state: AnalysisStatus::Cancelled,
-                    result: None,
-                    updated_track: None,
-                    error: None,
-                },
-            );
-            if let Ok(mut t) = tasks.lock() {
-                t.remove(&track_id);
-            }
+            Self::emit_cancelled(&app, &track_id, &tasks);
             return;
         }
+
+        // Skip tracks that already carry BPM and key (typically from their own tags at import)
+        // unless the caller explicitly forced a re-analysis.
+        if !force {
+            match Self::get_existing_analysis(&conn, &track_id) {
+                Ok(Some((bpm, key))) => {
+                    Self::emit_skip_completion(&app, &track_id, bpm, key, &tasks);
+                    return;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    // A lookup failure must not silently skip analysis; fall through to the
+                    // normal path so the real error surfaces the usual way.
+                    log::warn!("Failed to check existing analysis for {track_id}: {e}");
+                }
+            }
+        }
+
+        // Wait for a free worker slot before any heavy work, and hold it until this track is done.
+        // The `Analyzing` emit stays behind the acquire: a queued track is `pending`, not running.
+        let _slot = match Self::acquire_analysis_slot(&slots, &cancel_token).await {
+            Some(permit) => permit,
+            None => {
+                Self::emit_cancelled(&app, &track_id, &tasks);
+                return;
+            }
+        };
 
         // Emit "analyzing" status
         let _ = app.emit(
@@ -186,19 +314,7 @@ impl AnalysisService {
 
         // Check if cancelled during analysis
         if cancel_token.is_cancelled() {
-            let _ = app.emit(
-                "analysis-track-event",
-                TrackAnalysisEvent {
-                    track_id: track_id.clone(),
-                    state: AnalysisStatus::Cancelled,
-                    result: None,
-                    updated_track: None,
-                    error: None,
-                },
-            );
-            if let Ok(mut t) = tasks.lock() {
-                t.remove(&track_id);
-            }
+            Self::emit_cancelled(&app, &track_id, &tasks);
             return;
         }
 
@@ -687,6 +803,146 @@ impl Clone for AnalysisService {
         Self {
             conn: self.conn.clone(),
             tasks: self.tasks.clone(),
+            // Shared on purpose: a clone must not bring its own set of slots, or every clone would
+            // multiply the ceiling instead of honoring it.
+            slots: self.slots.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// Bounds the derived ceiling: never zero, never above the cap.
+    #[test]
+    fn worker_limit_is_never_zero_and_never_above_the_cap() {
+        let limit = analysis_worker_limit();
+
+        assert!(limit >= 1, "a zero limit would stall the queue forever");
+        assert!(limit <= ANALYSIS_WORKER_LIMIT_MAX);
+    }
+
+    /// The service must expose exactly the ceiling it advertises.
+    #[test]
+    fn service_offers_exactly_the_worker_limit() {
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        let service = AnalysisService::new(conn);
+
+        assert_eq!(service.slots.available_permits(), analysis_worker_limit());
+    }
+
+    /// A clone shares the slot pool instead of doubling it.
+    #[test]
+    fn clones_share_one_slot_pool() {
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        let service = AnalysisService::new(conn);
+        let clone = service.clone();
+
+        let taken = service.slots.clone().try_acquire_owned().unwrap();
+
+        assert_eq!(clone.slots.available_permits(), analysis_worker_limit() - 1);
+
+        drop(taken);
+    }
+
+    /// The gate has to actually block: with the only slot taken, the next waiter waits until that
+    /// permit is released.
+    #[tokio::test]
+    async fn a_taken_slot_blocks_the_next_waiter() {
+        let slots = Arc::new(Semaphore::new(1));
+
+        let held = AnalysisService::acquire_analysis_slot(&slots, &CancellationToken::new())
+            .await
+            .expect("the only slot must be free");
+
+        let mut waiter = {
+            let slots = slots.clone();
+            tokio::spawn(async move {
+                AnalysisService::acquire_analysis_slot(&slots, &CancellationToken::new()).await
+            })
+        };
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut waiter)
+                .await
+                .is_err(),
+            "the waiter acquired a slot that was already taken"
+        );
+
+        drop(held);
+
+        let permit = tokio::time::timeout(Duration::from_secs(5), waiter)
+            .await
+            .expect("releasing the slot must let the waiter through")
+            .expect("the waiter task must not panic");
+
+        assert!(permit.is_some());
+    }
+
+    /// A track cancelled while queued gives up immediately and takes nothing, even with every slot
+    /// occupied.
+    #[tokio::test]
+    async fn a_cancelled_waiter_gives_up_without_taking_a_slot() {
+        let slots = Arc::new(Semaphore::new(1));
+
+        let held = AnalysisService::acquire_analysis_slot(&slots, &CancellationToken::new())
+            .await
+            .expect("the only slot must be free");
+
+        let cancelled = CancellationToken::new();
+        cancelled.cancel();
+
+        let permit = tokio::time::timeout(
+            Duration::from_secs(5),
+            AnalysisService::acquire_analysis_slot(&slots, &cancelled),
+        )
+        .await
+        .expect("a cancelled track must not block on the queue");
+
+        assert!(permit.is_none(), "a cancelled track must not take a slot");
+
+        drop(held);
+        assert_eq!(
+            slots.available_permits(),
+            1,
+            "the cancelled track leaked a slot"
+        );
+    }
+
+    /// The skip guard only fires on a complete pair: a row missing either half must not
+    /// be treated as already analyzed.
+    #[test]
+    fn get_existing_analysis_only_returns_a_complete_pair() {
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        conn.lock()
+            .unwrap()
+            .execute_batch("CREATE TABLE tracks (id TEXT PRIMARY KEY, bpm REAL, key TEXT)")
+            .unwrap();
+
+        let insert = |id: &str, bpm: Option<f64>, key: Option<&str>| {
+            conn.lock()
+                .unwrap()
+                .execute(
+                    "INSERT INTO tracks (id, bpm, key) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![id, bpm, key],
+                )
+                .unwrap();
+        };
+        insert("complete", Some(120.0), Some("Am"));
+        insert("bpm-only", Some(120.0), None);
+        insert("neither", None, None);
+
+        assert_eq!(
+            AnalysisService::get_existing_analysis(&conn, "complete").unwrap(),
+            Some((120.0, "Am".to_string()))
+        );
+        assert!(AnalysisService::get_existing_analysis(&conn, "bpm-only")
+            .unwrap()
+            .is_none());
+        assert!(AnalysisService::get_existing_analysis(&conn, "neither")
+            .unwrap()
+            .is_none());
     }
 }

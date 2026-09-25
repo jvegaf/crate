@@ -14,6 +14,7 @@ import { toastStore } from '$shared/stores/toast'
 import { autoAnalyzeOnImport } from '$shared/stores/settings'
 import { analysisStore } from './analysis'
 import { syncStore } from './sync'
+import { dismiss as dismissScanProgress } from './scanProgress'
 
 // =============================================================================
 // State
@@ -168,6 +169,9 @@ function createLibraryStore() {
 				// Rethrow instead of returning an empty result: a failed scan must not be
 				// reported as an empty successful scan.
 				throw error
+			} finally {
+				// Clear the live progress indicator whether the scan succeeded or failed.
+				dismissScanProgress()
 			}
 		},
 

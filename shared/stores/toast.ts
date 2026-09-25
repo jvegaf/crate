@@ -19,6 +19,8 @@ export interface Toast {
 	message: string
 	duration: number
 	action?: ToastAction
+	/** Determinate progress rendered as a thin bar inside the toast. */
+	progress?: { current: number; total: number }
 }
 
 interface ToastState {
@@ -87,6 +89,21 @@ function createToastStore() {
 			}
 
 			return id
+		},
+
+		/**
+		 * Update an existing toast in place (no-op when the id is unknown).
+		 * Lets a caller refresh the message and progress of a live toast without
+		 * dismissing and recreating it, which would flicker.
+		 */
+		update(id: string, patch: Partial<Omit<Toast, 'id'>>) {
+			update((state) => {
+				if (!state.toasts.some((t) => t.id === id)) return state
+				return {
+					...state,
+					toasts: state.toasts.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+				}
+			})
 		},
 
 		/**

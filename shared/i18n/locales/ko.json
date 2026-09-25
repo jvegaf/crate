@@ -86,6 +86,7 @@
 			"musicFolderChange": "폴더 변경",
 			"musicFolderRescan": "다시 검사",
 			"musicFolderScanning": "검사 중…",
+			"musicFolderProgress": "{total}곡 중 {current}곡 가져오는 중…",
 			"musicFolderFound": "발견한 오디오 파일",
 			"musicFolderImported": "가져옴",
 			"musicFolderSkipped": "라이브러리에 있음",

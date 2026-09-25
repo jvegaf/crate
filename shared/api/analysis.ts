@@ -4,9 +4,10 @@ import type { Track } from '../types'
 /**
  * Analyze tracks for BPM and key detection
  * Progress events are emitted via 'analysis-track-event' Tauri event for each track
+ * `force` defaults to false and bypasses the skip guard for tracks that already have BPM/key
  */
-export async function analyzeTracks(trackIds: string[]): Promise<void> {
-	return invoke('analyze_tracks', { trackIds })
+export async function analyzeTracks(trackIds: string[], force: boolean = false): Promise<void> {
+	return invoke('analyze_tracks', { trackIds, force })
 }
 
 /**

@@ -188,6 +188,21 @@ export interface LibraryFolderScanResult {
 	errors: string[]
 }
 
+/**
+ * Live progress emitted once per processed file while a music-folder scan runs.
+ *
+ * This is an event payload, not a return value: it is separate from
+ * `LibraryFolderScanResult` and flows through the `library-scan-progress` event.
+ */
+export interface LibraryScanProgress {
+	current: number
+	total: number
+	imported_count: number
+	skipped_existing_count: number
+	failed_count: number
+	current_file: string | null
+}
+
 // =============================================================================
 // Duplicate Track Detection Types
 // =============================================================================

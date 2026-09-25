@@ -5,6 +5,7 @@ use lofty::config::{ParseOptions, ParsingMode};
 use lofty::file::{AudioFile, TaggedFile};
 use lofty::prelude::*;
 use lofty::probe::Probe;
+use lofty::tag::Tag;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::probe::Hint;
 
@@ -116,12 +117,11 @@ impl LibraryService {
         Ok(track)
     }
 
-    /// Import a single track with a pre-computed hash
-    pub(crate) fn import_single_track_with_hash(
-        &self,
-        path: &PathBuf,
-        file_hash: String,
-    ) -> Result<Track> {
+    /// Build a `Track` from a file on disk, stamping a pre-computed content hash.
+    ///
+    /// Reads the format, tags, audio properties and artwork, but performs no database
+    /// write: callers decide how the row is persisted (single insert or scan batch).
+    pub(crate) fn build_track_from_file(&self, path: &PathBuf, file_hash: String) -> Result<Track> {
         // Determine format from extension
         let format = path
             .extension()
@@ -178,6 +178,17 @@ impl LibraryService {
             track.sample_rate = sr;
             track.bitrate = br;
         }
+
+        Ok(track)
+    }
+
+    /// Import a single track with a pre-computed hash
+    pub(crate) fn import_single_track_with_hash(
+        &self,
+        path: &PathBuf,
+        file_hash: String,
+    ) -> Result<Track> {
+        let track = self.build_track_from_file(path, file_hash)?;
 
         // Insert into database
         self.insert_track(&track)?;
@@ -306,12 +317,20 @@ impl LibraryService {
         Ok((duration_ms, sample_rate, bitrate))
     }
 
+    /// Lock the shared connection and delegate the insert to [`Self::insert_track_in`].
     fn insert_track(&self, track: &Track) -> Result<()> {
         let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        Self::insert_track_in(&conn, track)
+    }
 
-        let hlc = dirty::next_hlc(&conn)?;
+    /// Insert or update a track row on a caller-supplied connection.
+    ///
+    /// Takes `&Connection` (not `&self`) so a batch scan can run the insert inside its
+    /// own transaction while holding the mutex guard once.
+    pub(crate) fn insert_track_in(conn: &Connection, track: &Track) -> Result<()> {
+        let hlc = dirty::next_hlc(conn)?;
         let (library_root_id, relative_path) =
-            resolution::assign_root_for_import(&conn, &track.file_path)?;
+            resolution::assign_root_for_import(conn, &track.file_path)?;
 
         conn.execute(
             r#"
@@ -381,18 +400,60 @@ impl LibraryService {
             ],
         )?;
 
-        dirty::mark_dirty(&conn, &buckets::bucket_for_track_id(&track.id))?;
+        dirty::mark_dirty(conn, &buckets::bucket_for_track_id(&track.id))?;
 
         Ok(())
     }
 
-    fn extract_bpm(&self, _tag: &dyn Accessor) -> Option<f64> {
-        // BPM is often stored as a text field
-        None // Will be populated by Rekordbox import or analysis
+    fn extract_bpm(&self, tag: &Tag) -> Option<f64> {
+        // BPM is stored as UTF-8 text (TBPM in ID3v2, tmpo in MP4, BPM in Vorbis)
+        tag.get_string(&ItemKey::IntegerBpm)
+            .and_then(|s| s.trim().parse::<f64>().ok())
     }
 
-    fn extract_key(&self, _tag: &dyn Accessor) -> Option<String> {
-        // Key is often stored in a custom tag
-        None // Will be populated by Rekordbox import or analysis
+    fn extract_key(&self, tag: &Tag) -> Option<String> {
+        // Initial key is stored as UTF-8 text (TKEY in ID3v2, INITIALKEY/KEY in Vorbis,
+        // com.apple.iTunes:initialkey in MP4). All map to ItemKey::InitialKey.
+        tag.get_string(&ItemKey::InitialKey)
+            .map(|s| s.trim().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lofty::tag::TagType;
+
+    /// The tag path needs no database state and no real artwork directory, so an
+    /// in-memory connection and a throwaway path are enough.
+    fn service() -> LibraryService {
+        LibraryService::new(
+            Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+            PathBuf::from("/tmp"),
+        )
+    }
+
+    #[test]
+    fn extract_bpm_reads_integer_bpm_tag() {
+        let mut tag = Tag::new(TagType::Id3v2);
+        tag.insert_text(ItemKey::IntegerBpm, "120".to_string());
+
+        assert_eq!(service().extract_bpm(&tag), Some(120.0));
+    }
+
+    #[test]
+    fn extract_key_reads_initial_key_tag_trimmed() {
+        let mut tag = Tag::new(TagType::Id3v2);
+        tag.insert_text(ItemKey::InitialKey, "Am ".to_string());
+
+        assert_eq!(service().extract_key(&tag), Some("Am".to_string()));
+    }
+
+    #[test]
+    fn empty_tag_yields_no_bpm_or_key() {
+        let tag = Tag::new(TagType::Id3v2);
+
+        assert_eq!(service().extract_bpm(&tag), None);
+        assert_eq!(service().extract_key(&tag), None);
     }
 }

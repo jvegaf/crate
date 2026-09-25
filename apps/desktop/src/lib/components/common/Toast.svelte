@@ -13,6 +13,12 @@
 
 	let { toast, onDismiss }: Props = $props()
 
+	const progressPercent = $derived(
+		toast.progress && toast.progress.total > 0
+			? Math.min(100, Math.round((toast.progress.current / toast.progress.total) * 100))
+			: 0
+	)
+
 	const baseStyles = 'flex items-center gap-3 rounded-md border px-4 py-3 shadow-lg min-w-[300px] max-w-[400px]'
 
 	const typeStyles: Record<ToastType, string> = {
@@ -37,6 +43,16 @@
 
 		<!-- Message -->
 		<Text as="span" class="flex-1">{toast.message}</Text>
+
+		<!-- Determinate progress bar (only present while a scan reports progress) -->
+		{#if toast.progress}
+			<div class="h-1 w-16 flex-shrink-0 overflow-hidden rounded-full bg-surface-2">
+				<div
+					class="h-full rounded-full bg-brand-primary transition-[width] duration-200"
+					style="width: {progressPercent}%"
+				></div>
+			</div>
+		{/if}
 
 		<!-- Action button -->
 		{#if toast.action}

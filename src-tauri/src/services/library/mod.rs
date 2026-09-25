@@ -29,6 +29,7 @@ use crate::services::ArtworkService;
 pub const SUPPORTED_AUDIO_EXTENSIONS: &[&str] =
     &["mp3", "wav", "aiff", "aif", "flac", "m4a", "aac"];
 
+#[derive(Clone)]
 pub struct LibraryService {
     conn: Arc<Mutex<Connection>>,
     artwork_service: ArtworkService,
@@ -62,6 +63,20 @@ pub struct LibraryFolderScanResult {
     pub failed_count: usize,
     pub imported_track_ids: Vec<String>,
     pub errors: Vec<String>,
+}
+
+/// Live progress for a recursive music-folder scan.
+///
+/// Emitted once per processed file (not per chunk) so the frontend can show a running
+/// counter. Serializes as snake_case like the rest of the library results.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LibraryScanProgress {
+    pub current: usize,
+    pub total: usize,
+    pub imported_count: usize,
+    pub skipped_existing_count: usize,
+    pub failed_count: usize,
+    pub current_file: Option<String>,
 }
 
 /// Result of processing a single import path

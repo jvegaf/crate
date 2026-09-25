@@ -86,6 +86,7 @@
 			"musicFolderChange": "Cambia cartella",
 			"musicFolderRescan": "Riscansiona",
 			"musicFolderScanning": "Scansione…",
+			"musicFolderProgress": "Importazione di {current} di {total} brani…",
 			"musicFolderFound": "File audio trovati",
 			"musicFolderImported": "Importati",
 			"musicFolderSkipped": "Già nella libreria",

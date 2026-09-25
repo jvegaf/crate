@@ -86,6 +86,7 @@
 			"musicFolderChange": "Change folder",
 			"musicFolderRescan": "Rescan",
 			"musicFolderScanning": "Scanning…",
+			"musicFolderProgress": "Importing {current} of {total} tracks…",
 			"musicFolderFound": "Audio files found",
 			"musicFolderImported": "Imported",
 			"musicFolderSkipped": "Already in library",

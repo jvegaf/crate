@@ -86,6 +86,7 @@
 			"musicFolderChange": "Zmień folder",
 			"musicFolderRescan": "Skanuj ponownie",
 			"musicFolderScanning": "Skanowanie…",
+			"musicFolderProgress": "Importowanie {current} z {total} utworów…",
 			"musicFolderFound": "Znalezione pliki audio",
 			"musicFolderImported": "Zaimportowane",
 			"musicFolderSkipped": "Już w bibliotece",

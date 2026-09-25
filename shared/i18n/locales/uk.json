@@ -86,6 +86,7 @@
 			"musicFolderChange": "Змінити папку",
 			"musicFolderRescan": "Сканувати знову",
 			"musicFolderScanning": "Сканування…",
+			"musicFolderProgress": "Імпортування {current} з {total} треків…",
 			"musicFolderFound": "Знайдені аудіофайли",
 			"musicFolderImported": "Імпортовано",
 			"musicFolderSkipped": "Уже в бібліотеці",

@@ -382,5 +382,12 @@ ALTER TABLE discovery_releases ADD COLUMN surfaced_at TEXT;
         r#"
 ALTER TABLE discovery_releases ADD COLUMN source_page_url TEXT;
 "#,
+        // idx_tracks_file_hash — the folder scan looks a track up by content hash once
+        // per discovered file. Without a covering index every lookup full-scans `tracks`
+        // and builds a whole row even when nothing matches, making the first import
+        // quadratic. `IF NOT EXISTS` keeps the appended migration idempotent.
+        r#"
+CREATE INDEX IF NOT EXISTS idx_tracks_file_hash ON tracks(file_hash);
+"#,
     ]
 }

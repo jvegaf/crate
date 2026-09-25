@@ -2,6 +2,12 @@
 export { appStore, appInfo, isDev, appVersion, appEnvironment, appDataDir, appLoading, devToolsOpen } from './app'
 export { libraryStore, sortedTracks, displayedTracks, trackCount, isLoading } from './library'
 export {
+	scanProgress,
+	startListening as startScanProgressListening,
+	stopListening as stopScanProgressListening,
+	dismiss as dismissScanProgress,
+} from './scanProgress'
+export {
 	playerStore,
 	isPlaying,
 	currentTrack,

@@ -92,7 +92,7 @@ fn get_volume_uuid_linux(mount_point: &str) -> Option<String> {
 
                     // Check if this UUID symlink points to our device
                     if device.ends_with(&*target_str)
-                        || target_str.ends_with(device.split('/').last().unwrap_or(""))
+                        || target_str.ends_with(device.split('/').next_back().unwrap_or(""))
                     {
                         return entry.file_name().to_str().map(|s| s.to_string());
                     }

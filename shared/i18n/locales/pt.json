@@ -86,6 +86,7 @@
 			"musicFolderChange": "Alterar pasta",
 			"musicFolderRescan": "Analisar novamente",
 			"musicFolderScanning": "Analisando…",
+			"musicFolderProgress": "Importando {current} de {total} faixas…",
 			"musicFolderFound": "Arquivos de áudio encontrados",
 			"musicFolderImported": "Importados",
 			"musicFolderSkipped": "Já na biblioteca",

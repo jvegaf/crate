@@ -141,13 +141,15 @@ impl LibraryService {
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         // Fetch tags for all tracks
-        let tracks_with_tags = self.fetch_tags_for_tracks(&conn, tracks)?;
+        let tracks_with_tags = Self::fetch_tags_for_tracks(&conn, tracks)?;
 
         Ok(tracks_with_tags)
     }
 
+    /// Fetch tags for a batch of tracks on a caller-supplied connection.
+    ///
+    /// Associated (no `&self`) so hash lookups can run while a scan holds the mutex guard.
     pub(crate) fn fetch_tags_for_tracks(
-        &self,
         conn: &Connection,
         mut tracks: Vec<Track>,
     ) -> Result<Vec<Track>> {
@@ -264,7 +266,7 @@ impl LibraryService {
         )?;
 
         // Fetch tags
-        let tracks_with_tags = self.fetch_tags_for_tracks(&conn, vec![track])?;
+        let tracks_with_tags = Self::fetch_tags_for_tracks(&conn, vec![track])?;
         tracks_with_tags
             .into_iter()
             .next()
@@ -274,7 +276,17 @@ impl LibraryService {
     /// Find an existing track by its file hash
     pub fn find_track_by_hash(&self, file_hash: &str) -> Result<Option<Track>> {
         let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        Self::find_track_by_hash_in(&conn, file_hash)
+    }
 
+    /// Find an existing track by its file hash on a caller-supplied connection.
+    ///
+    /// Takes `&Connection` (not `&self`) so the folder scan can look a hash up while it
+    /// already holds the mutex guard; locking again from the same thread would deadlock.
+    pub(crate) fn find_track_by_hash_in(
+        conn: &Connection,
+        file_hash: &str,
+    ) -> Result<Option<Track>> {
         let result = conn.query_row(
             r#"
             SELECT
@@ -328,7 +340,7 @@ impl LibraryService {
         match result {
             Ok(track) => {
                 // Fetch tags for the track
-                let tracks_with_tags = self.fetch_tags_for_tracks(&conn, vec![track])?;
+                let tracks_with_tags = Self::fetch_tags_for_tracks(conn, vec![track])?;
                 Ok(tracks_with_tags.into_iter().next())
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
