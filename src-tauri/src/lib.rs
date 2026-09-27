@@ -72,7 +72,7 @@ use services::{
 #[cfg(feature = "desktop")]
 use services::{
   export::CheckpointService, AnalysisService, AudioService, DeviceService, DiagnosticsService,
-  ExportService, LibraryService, MediaControlsService, SyncService,
+  ExportService, FileTagsService, LibraryService, MediaControlsService, SyncService,
 };
 use tauri::Manager;
 
@@ -384,7 +384,13 @@ pub fn run() {
       // playback, USB export/sync, device detection, diagnostics) are gated out of
       // the mobile build along with their commands and backing crates.
       #[cfg(feature = "desktop")]
-      let library_service = LibraryService::new(conn.clone(), app_data_dir.clone());
+      let file_tags_service = FileTagsService::new();
+      #[cfg(feature = "desktop")]
+      let library_service = LibraryService::new(
+        conn.clone(),
+        app_data_dir.clone(),
+        file_tags_service.clone(),
+      );
       let tag_service = TagService::new(conn.clone());
       let playlist_service = PlaylistService::new(conn.clone());
       let settings_service = SettingsService::new(conn.clone());
@@ -402,7 +408,7 @@ pub fn run() {
       #[cfg(feature = "desktop")]
       let diagnostics_service = DiagnosticsService::new(app_data_dir.clone());
       #[cfg(feature = "desktop")]
-      let analysis_service = AnalysisService::new(conn.clone());
+      let analysis_service = AnalysisService::new(conn.clone(), file_tags_service);
       let backup_service = BackupService::new(conn.clone());
       let discovery_service = DiscoveryService::new(conn.clone(), app_data_dir.clone());
       let follow_service = FollowService::new(conn.clone(), app_data_dir.clone());

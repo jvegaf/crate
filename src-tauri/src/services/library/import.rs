@@ -431,9 +431,11 @@ mod tests {
   /// The tag path needs no database state and no real artwork directory, so an
   /// in-memory connection and a throwaway path are enough.
   fn service() -> LibraryService {
+    use crate::services::FileTagsService;
     LibraryService::new(
       Arc::new(Mutex::new(test_utils::make_memory_db())),
       PathBuf::from("/tmp"),
+      FileTagsService::new(),
     )
   }
 

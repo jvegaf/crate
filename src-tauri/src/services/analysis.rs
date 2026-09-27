@@ -21,6 +21,7 @@ use symphonia::core::probe::Hint;
 use crate::error::{CrateError, Result};
 use crate::models::{KeyNotationFormat, Tag, Track};
 use crate::services::cloud_sync::pipeline::{buckets, dirty};
+use crate::services::FileTagsService;
 
 /// Standard key notation (as emitted by stratum-dsp) to Camelot wheel codes.
 ///
@@ -151,14 +152,16 @@ pub struct AnalysisService {
   tasks: Arc<Mutex<HashMap<String, TrackAnalysisTask>>>,
   /// Worker slots bounding how much analysis runs at once.
   slots: Arc<Semaphore>,
+  file_tags: FileTagsService,
 }
 
 impl AnalysisService {
-  pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+  pub fn new(conn: Arc<Mutex<Connection>>, file_tags: FileTagsService) -> Self {
     Self {
       conn,
       tasks: Arc::new(Mutex::new(HashMap::new())),
       slots: Arc::new(Semaphore::new(analysis_worker_limit())),
+      file_tags,
     }
   }
 
@@ -289,6 +292,7 @@ impl AnalysisService {
       let tasks = self.tasks.clone();
       let slots = self.slots.clone();
       let format = key_notation_format.clone();
+      let file_tags = self.file_tags.clone();
 
       // Emit "pending" event immediately
       let _ = app.emit(
@@ -303,7 +307,10 @@ impl AnalysisService {
       );
 
       let handle = tauri::async_runtime::spawn(async move {
-        Self::analyze_single_track_task(conn, app, tid, token, tasks, slots, force, format).await;
+        Self::analyze_single_track_task(
+          conn, app, tid, token, tasks, slots, force, format, file_tags,
+        )
+        .await;
       });
 
       // Store task for potential cancellation
@@ -334,6 +341,7 @@ impl AnalysisService {
     slots: Arc<Semaphore>,
     force: bool,
     key_notation_format: Option<String>,
+    file_tags: FileTagsService,
   ) {
     // Check if already cancelled before starting
     if cancel_token.is_cancelled() {
@@ -384,6 +392,7 @@ impl AnalysisService {
     let conn_clone = conn.clone();
     let tid_clone = track_id.clone();
     let token_clone = cancel_token.clone();
+    let file_tags_clone = file_tags.clone();
 
     let result = tokio::task::spawn_blocking(move || {
       Self::analyze_track_with_cancellation(
@@ -391,6 +400,7 @@ impl AnalysisService {
         &tid_clone,
         &token_clone,
         key_notation_format.as_deref(),
+        &file_tags_clone,
       )
     })
     .await;
@@ -453,6 +463,7 @@ impl AnalysisService {
     track_id: &str,
     cancel_token: &CancellationToken,
     key_notation_format: Option<&str>,
+    file_tags: &FileTagsService,
   ) -> Result<(AnalysisResult, Option<Track>)> {
     // Get track from database
     let track = Self::get_track_static(conn, track_id)?;
@@ -493,6 +504,9 @@ impl AnalysisService {
 
         // Update the database
         Self::update_track_analysis_static(conn, track_id, bpm, key.as_deref())?;
+
+        // Persist BPM/key back to the audio file.
+        let _ = file_tags.write_bpm_and_key(file_path, bpm.unwrap_or(0.0), key.as_deref());
 
         // Get updated track
         let updated_track = Self::get_track_static(conn, track_id).ok();
@@ -939,6 +953,7 @@ impl Clone for AnalysisService {
       // Shared on purpose: a clone must not bring its own set of slots, or every clone would
       // multiply the ceiling instead of honoring it.
       slots: self.slots.clone(),
+      file_tags: self.file_tags.clone(),
     }
   }
 }
@@ -960,8 +975,9 @@ mod tests {
   /// The service must expose exactly the ceiling it advertises.
   #[test]
   fn service_offers_exactly_the_worker_limit() {
+    use crate::services::FileTagsService;
     let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
-    let service = AnalysisService::new(conn);
+    let service = AnalysisService::new(conn, FileTagsService::new());
 
     assert_eq!(service.slots.available_permits(), analysis_worker_limit());
   }
@@ -969,8 +985,9 @@ mod tests {
   /// A clone shares the slot pool instead of doubling it.
   #[test]
   fn clones_share_one_slot_pool() {
+    use crate::services::FileTagsService;
     let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
-    let service = AnalysisService::new(conn);
+    let service = AnalysisService::new(conn, FileTagsService::new());
     let clone = service.clone();
 
     let taken = service.slots.clone().try_acquire_owned().unwrap();

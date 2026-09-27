@@ -16,6 +16,7 @@ use crate::models::{
   DuplicateResolution, DuplicateTrack, FileMatchResult, ImportResult, ImportResultWithDuplicates,
   Tag, Track, TrackFilter, TrackUpdate,
 };
+use crate::services::file_tags::FileTagsService;
 use crate::services::hash::compute_audio_hash;
 use crate::services::ArtworkService;
 
@@ -33,13 +34,19 @@ pub const SUPPORTED_AUDIO_EXTENSIONS: &[&str] =
 pub struct LibraryService {
   conn: Arc<Mutex<Connection>>,
   artwork_service: ArtworkService,
+  file_tags: FileTagsService,
 }
 
 impl LibraryService {
-  pub fn new(conn: Arc<Mutex<Connection>>, app_data_dir: PathBuf) -> Self {
+  pub fn new(
+    conn: Arc<Mutex<Connection>>,
+    app_data_dir: PathBuf,
+    file_tags: FileTagsService,
+  ) -> Self {
     Self {
       conn,
       artwork_service: ArtworkService::new(app_data_dir),
+      file_tags,
     }
   }
 }

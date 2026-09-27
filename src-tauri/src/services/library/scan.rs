@@ -240,7 +240,13 @@ mod tests {
     let app_data = tmp.join("appdata");
     std::fs::create_dir_all(&root).unwrap();
 
-    let service = LibraryService::new(Arc::new(Mutex::new(test_conn())), app_data);
+    use crate::services::FileTagsService;
+
+    let service = LibraryService::new(
+      Arc::new(Mutex::new(test_conn())),
+      app_data,
+      FileTagsService::new(),
+    );
     service
       .set_music_library_folder(root.to_str().unwrap())
       .unwrap();

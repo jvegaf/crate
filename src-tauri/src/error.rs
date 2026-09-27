@@ -47,6 +47,10 @@ pub enum CrateError {
   #[error("Analysis error: {0}")]
   Analysis(String),
 
+  #[allow(dead_code)]
+  #[error("File-tags error: {0}")]
+  FileTags(String),
+
   #[error("Discovery error: {0}")]
   Discovery(String),
 

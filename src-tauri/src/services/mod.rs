@@ -17,6 +17,8 @@ pub mod diagnostics;
 pub mod discovery;
 #[cfg(feature = "desktop")]
 pub mod export;
+#[cfg(feature = "desktop")]
+pub mod file_tags;
 pub mod follow;
 #[cfg(feature = "desktop")]
 pub mod hash;
@@ -44,6 +46,8 @@ pub use diagnostics::DiagnosticsService;
 pub use discovery::DiscoveryService;
 #[cfg(feature = "desktop")]
 pub use export::ExportService;
+#[cfg(feature = "desktop")]
+pub use file_tags::FileTagsService;
 pub use follow::FollowService;
 #[cfg(feature = "desktop")]
 pub use library::LibraryService;

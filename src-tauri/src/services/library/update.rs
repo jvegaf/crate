@@ -1,7 +1,28 @@
 use super::*;
 use crate::services::cloud_sync::pipeline::{buckets, dirty};
+use std::path::PathBuf;
 
 impl LibraryService {
+  /// Helper: write BPM/key changes back to the audio file after DB update.
+  fn write_file_meta_to_path(
+    file_tags: &FileTagsService,
+    file_path: &str,
+    bpm: Option<f64>,
+    key: Option<&str>,
+  ) -> Result<()> {
+    if bpm.is_none() && key.is_none() {
+      return Ok(());
+    }
+
+    let path = PathBuf::from(file_path);
+    if !path.exists() {
+      log::debug!("Skipping file tag write – file not found: {path:?}");
+      return Ok(());
+    }
+
+    file_tags.write_bpm_and_key(&path, bpm.unwrap_or(0.0), key)
+  }
+
   pub fn update_track(&self, id: &str, update: TrackUpdate) -> Result<Track> {
     let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
 
@@ -77,7 +98,19 @@ impl LibraryService {
     dirty::mark_dirty(&conn, &buckets::bucket_for_track_id(id))?;
 
     drop(conn);
-    self.get_track(id)
+
+    // Get the track to access its file path for writing metadata to the audio file
+    let track = self.get_track(id)?;
+
+    // Persist BPM/key to the audio file if either was provided.
+    let _ = Self::write_file_meta_to_path(
+      &self.file_tags,
+      &track.file_path,
+      update.bpm,
+      update.key.as_deref(),
+    );
+
+    Ok(track)
   }
 
   /// Update multiple tracks with the same update data (bulk operation)
@@ -168,10 +201,16 @@ impl LibraryService {
 
     drop(conn);
 
-    // Return all updated tracks
+    // Return all updated tracks, writing BPM/key to audio files along the way.
     let mut updated_tracks = Vec::new();
-    for id in ids {
-      if let Ok(track) = self.get_track(&id) {
+    for id in &ids {
+      if let Ok(track) = self.get_track(id) {
+        let _ = Self::write_file_meta_to_path(
+          &self.file_tags,
+          &track.file_path,
+          update.bpm,
+          update.key.as_deref(),
+        );
         updated_tracks.push(track);
       }
     }
