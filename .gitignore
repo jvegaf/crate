@@ -27,3 +27,6 @@ conf/
 # Local Pi runtime state
 .atl/
 /.yarn
+
+# Vitest cache
+.vitest/
