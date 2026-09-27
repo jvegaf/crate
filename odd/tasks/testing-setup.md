@@ -60,4 +60,14 @@ Establish testing infrastructure for both Rust backend and SvelteKit frontend, w
 | `npx vitest run` | ✅ 13 passing, 0 failed |
 | `cargo fmt --check` (src-tauri) | ⚠️ drift pre-existing en build.rs/main.rs (no tocados) |
 | Prettier check (root files) | ✅ Todos formateados |
-| Commit work-unit | ⛔ Sin commits (regla de AGENTS.md §3 — usuario pidió "dale con todo", no especificó commits) |
+| Commit work-unit | ✅ **3 commits** (ver abajo) |
+
+### Commits realizados
+
+```sh
+3ccf928 chore: add Vitest cache to .gitignore
+322ab3a feat(test): expand Rust and frontend test coverage
+67bc68f feat(test): add testing infrastructure and CI pipeline
+```
+
+Todos en `dev`. No push (AGENTS.md §3).
