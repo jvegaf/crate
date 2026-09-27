@@ -32,8 +32,10 @@ export function formatBpm(bpm: number | null): string {
 }
 
 /**
- * Mapping from Standard notation to Camelot wheel notation
- * Keys are stored in Standard format and converted to Camelot for display when needed
+ * Mapping from Standard notation to Camelot wheel notation.
+ * Includes enharmonic equivalents (e.g. F#/Gb, C#/Db) — all resolve to
+ * the same Camelot code. When converting *back* to Standard, the canonical
+ * spelling (sharps, except Ab) is returned.
  */
 const STANDARD_TO_CAMELOT: Record<string, string> = {
 	// Major keys
@@ -75,8 +77,19 @@ const STANDARD_TO_CAMELOT: Record<string, string> = {
 }
 
 /**
- * Format key for display based on notation format preference
- * Keys are stored in Standard notation and converted to Camelot when that format is selected
+ * Reverse map: Camelot → Standard (derived automatically).
+ * Enharmonic pairs resolve to the canonical Standard spelling
+ * (sharps; flats only where Ab has no sharp counterpart).
+ */
+const CAMELOT_TO_STANDARD: Record<string, string> = Object.fromEntries(
+	Object.entries(STANDARD_TO_CAMELOT).map(([k, v]) => [v, k]),
+)
+
+/**
+ * Format key for display based on notation format preference.
+ * Converts bidirectionally: detects whether the stored key is in
+ * Standard or Camelot and translates to the requested display format.
+ * Unknown keys pass through unchanged (safe fallback).
  */
 export function formatKey(key: string | null, format: 'standard' | 'camelot' = 'camelot'): string {
 	if (!key) return '-'
@@ -85,7 +98,8 @@ export function formatKey(key: string | null, format: 'standard' | 'camelot' = '
 		return STANDARD_TO_CAMELOT[key] ?? key
 	}
 
-	return key
+	// Convert Camelot → Standard when user selects standard format
+	return CAMELOT_TO_STANDARD[key] ?? key
 }
 
 /**

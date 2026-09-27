@@ -4,196 +4,196 @@ use tauri::{Emitter, State};
 
 use crate::error::{CrateError, Result};
 use crate::models::{
-    DuplicateResolution, FileMatchResult, ImportResult, ImportResultWithDuplicates, Track,
-    TrackFilter, TrackUpdate,
+  DuplicateResolution, FileMatchResult, ImportResult, ImportResultWithDuplicates, Track,
+  TrackFilter, TrackUpdate,
 };
 use crate::services::library::{LibraryFolderScanResult, RescanResult};
 use crate::services::LibraryService;
 
 #[tauri::command]
 pub async fn import_tracks(
-    paths: Vec<String>,
-    library: State<'_, LibraryService>,
+  paths: Vec<String>,
+  library: State<'_, LibraryService>,
 ) -> Result<ImportResult> {
-    let pathbufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
-    library.import_tracks(pathbufs)
+  let pathbufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+  library.import_tracks(pathbufs)
 }
 
 #[tauri::command]
 pub async fn get_tracks(
-    filter: Option<TrackFilter>,
-    library: State<'_, LibraryService>,
+  filter: Option<TrackFilter>,
+  library: State<'_, LibraryService>,
 ) -> Result<Vec<Track>> {
-    library.get_tracks(filter)
+  library.get_tracks(filter)
 }
 
 #[tauri::command]
 pub async fn get_track(id: String, library: State<'_, LibraryService>) -> Result<Track> {
-    library.get_track(&id)
+  library.get_track(&id)
 }
 
 #[tauri::command]
 pub async fn update_track(
-    id: String,
-    update: TrackUpdate,
-    library: State<'_, LibraryService>,
+  id: String,
+  update: TrackUpdate,
+  library: State<'_, LibraryService>,
 ) -> Result<Track> {
-    library.update_track(&id, update)
+  library.update_track(&id, update)
 }
 
 #[tauri::command]
 pub async fn delete_tracks(ids: Vec<String>, library: State<'_, LibraryService>) -> Result<()> {
-    library.delete_tracks(ids)
+  library.delete_tracks(ids)
 }
 
 #[tauri::command]
 pub async fn search_tracks(
-    query: String,
-    library: State<'_, LibraryService>,
+  query: String,
+  library: State<'_, LibraryService>,
 ) -> Result<Vec<Track>> {
-    let filter = TrackFilter {
-        search: Some(query),
-        ..Default::default()
-    };
-    library.get_tracks(Some(filter))
+  let filter = TrackFilter {
+    search: Some(query),
+    ..Default::default()
+  };
+  library.get_tracks(Some(filter))
 }
 
 #[tauri::command]
 pub async fn rescan_artwork(library: State<'_, LibraryService>) -> Result<RescanResult> {
-    library.rescan_all_artwork()
+  library.rescan_all_artwork()
 }
 
 #[tauri::command]
 pub async fn rescan_track_artwork(id: String, library: State<'_, LibraryService>) -> Result<bool> {
-    library.rescan_track_artwork(&id)
+  library.rescan_track_artwork(&id)
 }
 
 #[tauri::command]
 pub async fn check_file_exists(
-    track_id: String,
-    library: State<'_, LibraryService>,
+  track_id: String,
+  library: State<'_, LibraryService>,
 ) -> Result<bool> {
-    library.check_track_file_exists(&track_id)
+  library.check_track_file_exists(&track_id)
 }
 
 #[tauri::command]
 pub async fn validate_replacement_file(
-    track_id: String,
-    new_path: String,
-    library: State<'_, LibraryService>,
+  track_id: String,
+  new_path: String,
+  library: State<'_, LibraryService>,
 ) -> Result<FileMatchResult> {
-    library.validate_replacement_file(&track_id, &PathBuf::from(new_path))
+  library.validate_replacement_file(&track_id, &PathBuf::from(new_path))
 }
 
 #[tauri::command]
 pub async fn relocate_track(
-    track_id: String,
-    new_path: String,
-    force: bool,
-    library: State<'_, LibraryService>,
+  track_id: String,
+  new_path: String,
+  force: bool,
+  library: State<'_, LibraryService>,
 ) -> Result<Track> {
-    library.relocate_track(&track_id, &PathBuf::from(new_path), force)
+  library.relocate_track(&track_id, &PathBuf::from(new_path), force)
 }
 
 #[tauri::command]
 pub async fn set_track_colors(
-    track_ids: Vec<String>,
-    color: Option<String>,
-    library: State<'_, LibraryService>,
+  track_ids: Vec<String>,
+  color: Option<String>,
+  library: State<'_, LibraryService>,
 ) -> Result<()> {
-    library.set_track_colors(track_ids, color)
+  library.set_track_colors(track_ids, color)
 }
 
 #[tauri::command]
 pub async fn update_tracks(
-    ids: Vec<String>,
-    update: TrackUpdate,
-    library: State<'_, LibraryService>,
+  ids: Vec<String>,
+  update: TrackUpdate,
+  library: State<'_, LibraryService>,
 ) -> Result<Vec<Track>> {
-    library.update_tracks(ids, update)
+  library.update_tracks(ids, update)
 }
 
 #[tauri::command]
 pub async fn set_track_artwork(
-    track_id: String,
-    file_path: String,
-    library: State<'_, LibraryService>,
+  track_id: String,
+  file_path: String,
+  library: State<'_, LibraryService>,
 ) -> Result<Track> {
-    library.set_track_artwork(&track_id, &PathBuf::from(file_path))
+  library.set_track_artwork(&track_id, &PathBuf::from(file_path))
 }
 
 #[tauri::command]
 pub async fn delete_track_artwork(
-    track_id: String,
-    library: State<'_, LibraryService>,
+  track_id: String,
+  library: State<'_, LibraryService>,
 ) -> Result<Track> {
-    library.delete_track_artwork(&track_id)
+  library.delete_track_artwork(&track_id)
 }
 
 #[tauri::command]
 pub async fn reextract_track_artwork(
-    track_id: String,
-    library: State<'_, LibraryService>,
+  track_id: String,
+  library: State<'_, LibraryService>,
 ) -> Result<Track> {
-    library.reextract_track_artwork(&track_id)
+  library.reextract_track_artwork(&track_id)
 }
 
 #[tauri::command]
 pub async fn compare_track_artworks(
-    track_ids: Vec<String>,
-    library: State<'_, LibraryService>,
+  track_ids: Vec<String>,
+  library: State<'_, LibraryService>,
 ) -> Result<Option<String>> {
-    library.compare_track_artworks(&track_ids)
+  library.compare_track_artworks(&track_ids)
 }
 
 #[tauri::command]
 pub async fn import_tracks_with_duplicates(
-    paths: Vec<String>,
-    library: State<'_, LibraryService>,
+  paths: Vec<String>,
+  library: State<'_, LibraryService>,
 ) -> Result<ImportResultWithDuplicates> {
-    let pathbufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
-    library.import_tracks_with_duplicate_detection(pathbufs)
+  let pathbufs: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+  library.import_tracks_with_duplicate_detection(pathbufs)
 }
 
 #[tauri::command]
 pub async fn resolve_duplicate(
-    resolution: DuplicateResolution,
-    library: State<'_, LibraryService>,
+  resolution: DuplicateResolution,
+  library: State<'_, LibraryService>,
 ) -> Result<Option<Track>> {
-    library.resolve_duplicate(resolution)
+  library.resolve_duplicate(resolution)
 }
 
 #[tauri::command]
 pub async fn get_music_library_folder(
-    library: State<'_, LibraryService>,
+  library: State<'_, LibraryService>,
 ) -> Result<Option<String>> {
-    library.music_library_folder()
+  library.music_library_folder()
 }
 
 #[tauri::command]
 pub async fn set_music_library_folder(
-    path: String,
-    library: State<'_, LibraryService>,
+  path: String,
+  library: State<'_, LibraryService>,
 ) -> Result<String> {
-    library.set_music_library_folder(&path)
+  library.set_music_library_folder(&path)
 }
 
 #[tauri::command]
 pub async fn scan_music_library_folder(
-    app: tauri::AppHandle,
-    library: State<'_, LibraryService>,
+  app: tauri::AppHandle,
+  library: State<'_, LibraryService>,
 ) -> Result<LibraryFolderScanResult> {
-    // The scan is fully synchronous (hashing + SQLCipher transactions), so it must run on
-    // a blocking thread: running it on a tokio worker would stall the async runtime for
-    // the whole import. The service is cloned out of `State` so the closure owns it.
-    let library = library.inner().clone();
-    let app_handle = app.clone();
+  // The scan is fully synchronous (hashing + SQLCipher transactions), so it must run on
+  // a blocking thread: running it on a tokio worker would stall the async runtime for
+  // the whole import. The service is cloned out of `State` so the closure owns it.
+  let library = library.inner().clone();
+  let app_handle = app.clone();
 
-    tauri::async_runtime::spawn_blocking(move || {
-        library.scan_music_library_folder_with_progress(|progress| {
-            let _ = app_handle.emit("library-scan-progress", progress);
-        })
+  tauri::async_runtime::spawn_blocking(move || {
+    library.scan_music_library_folder_with_progress(|progress| {
+      let _ = app_handle.emit("library-scan-progress", progress);
     })
-    .await
-    .map_err(|e| CrateError::InvalidOperation(format!("Library scan task failed: {e}")))?
+  })
+  .await
+  .map_err(|e| CrateError::InvalidOperation(format!("Library scan task failed: {e}")))?
 }

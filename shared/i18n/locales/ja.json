@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "古いCDJ向けのレガシー形式",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "OPUS-QUAD、OMNIS-DUO、XDJ-AZ向け"
+			"exportFormatDeviceLibraryPlusDescription": "OPUS-QUAD、OMNIS-DUO、XDJ-AZ向け",
+			"cancel": "キャンセル",
+			"ok": "OK",
+			"recalcKeysTitle": "トーンを再計算",
+			"recalcKeysDesc": "ライブラリ内の全トラックのトーンを現在選択されたフォーマットに変換します。分析は再実行されません。",
+			"recalcAction": "すべて変換",
+			"recalcProgress": "変換中…（{count} 完了）",
+			"recalcConfirm": "全トラックのトーンを現在のフォーマットに変換しますか？",
+			"recalcComplete": "{count} トラック変換済み",
+			"recalcError": "トーンの変換に失敗しました。"
 		},
 		"discovery": {
 			"metadata": "メタデータ",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "ライブラリから削除",
 		"relocate": "再配置...",
 		"analyze": "分析",
-		"stopAnalysis": "分析を停止"
+		"stopAnalysis": "分析を停止",
+		"cancel": "キャンセル",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {

@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "Verouderd formaat voor oudere CDJs",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "Voor OPUS-QUAD, OMNIS-DUO, XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "Voor OPUS-QUAD, OMNIS-DUO, XDJ-AZ",
+			"cancel": "Annuleren",
+			"ok": "OK",
+			"recalcKeysTitle": "Toonsoorten opnieuw berekenen",
+			"recalcKeysDesc": "Zet alle track-toonsoorten van je bibliotheek om naar het geselecteerde formaat. Geen nieuwe analyse.",
+			"recalcAction": "Alles converteren",
+			"recalcProgress": "Converteren… ({count} gedaan)",
+			"recalcConfirm": "Toonsoorten van alle tracks omzetten naar het huidige formaat?",
+			"recalcComplete": "{count} track(s) geconverteerd",
+			"recalcError": "Toonsoort-conversie mislukt."
 		},
 		"discovery": {
 			"metadata": "Metagegevens",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "Verwijderen uit bibliotheek",
 		"relocate": "Verplaatsen...",
 		"analyze": "Analyseren",
-		"stopAnalysis": "Analyse stoppen"
+		"stopAnalysis": "Analyse stoppen",
+		"cancel": "Annuleren",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {

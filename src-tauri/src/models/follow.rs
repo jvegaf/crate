@@ -11,65 +11,65 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum FollowType {
-    #[default]
-    Artist,
-    Label,
+  #[default]
+  Artist,
+  Label,
 }
 
 impl std::fmt::Display for FollowType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FollowType::Artist => write!(f, "artist"),
-            FollowType::Label => write!(f, "label"),
-        }
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      FollowType::Artist => write!(f, "artist"),
+      FollowType::Label => write!(f, "label"),
     }
+  }
 }
 
 impl std::str::FromStr for FollowType {
-    type Err = String;
+  type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "artist" => Ok(FollowType::Artist),
-            "label" => Ok(FollowType::Label),
-            _ => Err(format!("Unknown follow type: {s}")),
-        }
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s.to_lowercase().as_str() {
+      "artist" => Ok(FollowType::Artist),
+      "label" => Ok(FollowType::Label),
+      _ => Err(format!("Unknown follow type: {s}")),
     }
+  }
 }
 
 /// Per-source health for the watch loop (device-local; never synced).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FollowHealth {
-    #[default]
-    Unknown,
-    Ok,
-    Error,
-    RateLimited,
+  #[default]
+  Unknown,
+  Ok,
+  Error,
+  RateLimited,
 }
 
 impl std::fmt::Display for FollowHealth {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FollowHealth::Unknown => write!(f, "unknown"),
-            FollowHealth::Ok => write!(f, "ok"),
-            FollowHealth::Error => write!(f, "error"),
-            FollowHealth::RateLimited => write!(f, "rate_limited"),
-        }
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      FollowHealth::Unknown => write!(f, "unknown"),
+      FollowHealth::Ok => write!(f, "ok"),
+      FollowHealth::Error => write!(f, "error"),
+      FollowHealth::RateLimited => write!(f, "rate_limited"),
     }
+  }
 }
 
 impl std::str::FromStr for FollowHealth {
-    type Err = String;
+  type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s.to_lowercase().as_str() {
-            "ok" => FollowHealth::Ok,
-            "error" => FollowHealth::Error,
-            "rate_limited" => FollowHealth::RateLimited,
-            _ => FollowHealth::Unknown,
-        })
-    }
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    Ok(match s.to_lowercase().as_str() {
+      "ok" => FollowHealth::Ok,
+      "error" => FollowHealth::Error,
+      "rate_limited" => FollowHealth::RateLimited,
+      _ => FollowHealth::Unknown,
+    })
+  }
 }
 
 /// A followed artist or label, flattened for the frontend. The first block mirrors
@@ -78,29 +78,29 @@ impl std::str::FromStr for FollowHealth {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FollowedSource {
-    pub id: String,
-    pub url: String,
-    pub source_type: String,
-    pub follow_type: String,
-    pub name: Option<String>,
-    pub artwork_url: Option<String>,
-    pub artwork_path: Option<String>,
-    pub enabled: bool,
-    pub date_added: String,
-    pub date_modified: String,
-    #[serde(default)]
-    pub last_checked_at: Option<String>,
-    #[serde(default)]
-    pub health: String,
-    #[serde(default)]
-    pub last_error: Option<String>,
-    /// Releases surfaced by this source that are still flagged "new".
-    #[serde(default)]
-    pub new_count: i64,
-    /// Most recent `release_date` among this source's surfaced releases (for the
-    /// "Recently released" sort).
-    #[serde(default)]
-    pub last_release_at: Option<String>,
+  pub id: String,
+  pub url: String,
+  pub source_type: String,
+  pub follow_type: String,
+  pub name: Option<String>,
+  pub artwork_url: Option<String>,
+  pub artwork_path: Option<String>,
+  pub enabled: bool,
+  pub date_added: String,
+  pub date_modified: String,
+  #[serde(default)]
+  pub last_checked_at: Option<String>,
+  #[serde(default)]
+  pub health: String,
+  #[serde(default)]
+  pub last_error: Option<String>,
+  /// Releases surfaced by this source that are still flagged "new".
+  #[serde(default)]
+  pub new_count: i64,
+  /// Most recent `release_date` among this source's surfaced releases (for the
+  /// "Recently released" sort).
+  #[serde(default)]
+  pub last_release_at: Option<String>,
 }
 
 /// Input to follow a source. From a pasted URL only `url` is set (the service scans
@@ -109,26 +109,26 @@ pub struct FollowedSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FollowedSourceCreate {
-    pub url: String,
-    #[serde(default)]
-    pub source_type: Option<String>,
-    #[serde(default)]
-    pub follow_type: Option<String>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub artwork_url: Option<String>,
+  pub url: String,
+  #[serde(default)]
+  pub source_type: Option<String>,
+  #[serde(default)]
+  pub follow_type: Option<String>,
+  #[serde(default)]
+  pub name: Option<String>,
+  #[serde(default)]
+  pub artwork_url: Option<String>,
 }
 
 /// Result of checking one followed source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceCheckResult {
-    pub source_id: String,
-    pub name: Option<String>,
-    pub new_count: usize,
-    pub health: String,
-    pub error: Option<String>,
+  pub source_id: String,
+  pub name: Option<String>,
+  pub new_count: usize,
+  pub health: String,
+  pub error: Option<String>,
 }
 
 /// Aggregate payload emitted as the `followed-releases-found` event after a check
@@ -136,9 +136,9 @@ pub struct SourceCheckResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FollowedReleasesFound {
-    pub total_new: usize,
-    pub by_source: Vec<SourceCheckResult>,
-    /// Ids of the discovery releases newly surfaced this sweep.
-    pub release_ids: Vec<String>,
-    pub checked_at: String,
+  pub total_new: usize,
+  pub by_source: Vec<SourceCheckResult>,
+  /// Ids of the discovery releases newly surfaced this sweep.
+  pub release_ids: Vec<String>,
+  pub checked_at: String,
 }

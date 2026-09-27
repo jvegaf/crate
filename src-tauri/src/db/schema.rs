@@ -1,7 +1,7 @@
 pub fn get_migrations() -> Vec<&'static str> {
-    vec![
-        // Migration 1: Initial schema
-        r#"
+  vec![
+    // Migration 1: Initial schema
+    r#"
 -- Core tables
 CREATE TABLE tracks (
     id TEXT PRIMARY KEY,
@@ -236,16 +236,16 @@ CREATE TABLE discovery_audio_cache (
     PRIMARY KEY (release_id, track_position)
 );
 "#,
-        // Migration 2: Track-level likes for discovery releases
-        r#"
+    // Migration 2: Track-level likes for discovery releases
+    r#"
 ALTER TABLE discovery_tracks ADD COLUMN is_liked INTEGER NOT NULL DEFAULT 0;
 "#,
-        // Migration 3: Cloud-sync foundations — HLC columns, track rooting, indexes.
-        // `library_roots` is created first so the `tracks.library_root_id` FK resolves.
-        // `_hlc TEXT NOT NULL DEFAULT ''` back-fills existing rows with the "never stamped"
-        // sentinel (which sorts below every real HLC). A REFERENCES column added via
-        // ALTER TABLE must default to NULL (it does), which SQLite permits.
-        r#"
+    // Migration 3: Cloud-sync foundations — HLC columns, track rooting, indexes.
+    // `library_roots` is created first so the `tracks.library_root_id` FK resolves.
+    // `_hlc TEXT NOT NULL DEFAULT ''` back-fills existing rows with the "never stamped"
+    // sentinel (which sorts below every real HLC). A REFERENCES column added via
+    // ALTER TABLE must default to NULL (it does), which SQLite permits.
+    r#"
 CREATE TABLE library_roots (
     id   TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -280,9 +280,9 @@ CREATE INDEX idx_discovery_release_tags_hlc      ON discovery_release_tags(_hlc)
 CREATE INDEX idx_playlist_discovery_releases_hlc ON playlist_discovery_releases(_hlc);
 CREATE INDEX idx_library_roots_hlc               ON library_roots(_hlc);
 "#,
-        // Migration 4: Cloud-sync bookkeeping. These tables are device-local — they are
-        // never themselves serialized as sync buckets.
-        r#"
+    // Migration 4: Cloud-sync bookkeeping. These tables are device-local — they are
+    // never themselves serialized as sync buckets.
+    r#"
 -- Per-device mapping from a synced library_root to its local absolute folder.
 CREATE TABLE IF NOT EXISTS sync_root_mappings (
     library_root_id     TEXT PRIMARY KEY,
@@ -311,13 +311,13 @@ CREATE TABLE IF NOT EXISTS sync_state (
     value TEXT NOT NULL
 );
 "#,
-        // Migration 5: Follow artists & labels.
-        // `followed_sources`, `discovery_release_sources`, and the new
-        // `discovery_releases` columns (`is_new`, `surfaced_at`) SYNC — they carry
-        // `_hlc` and are registered as sync buckets (see pipeline::buckets). The
-        // per-device watch bookkeeping (`followed_source_state`,
-        // `followed_source_releases`) stays LOCAL and is never serialized as a bucket.
-        r#"
+    // Migration 5: Follow artists & labels.
+    // `followed_sources`, `discovery_release_sources`, and the new
+    // `discovery_releases` columns (`is_new`, `surfaced_at`) SYNC — they carry
+    // `_hlc` and are registered as sync buckets (see pipeline::buckets). The
+    // per-device watch bookkeeping (`followed_source_state`,
+    // `followed_source_releases`) stays LOCAL and is never serialized as a bucket.
+    r#"
 -- SYNCED: the artists/labels the user follows.
 CREATE TABLE followed_sources (
     id            TEXT PRIMARY KEY,
@@ -375,19 +375,19 @@ CREATE INDEX idx_discovery_release_sources_hlc ON discovery_release_sources(_hlc
 ALTER TABLE discovery_releases ADD COLUMN is_new INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE discovery_releases ADD COLUMN surfaced_at TEXT;
 "#,
-        // discovery_releases.source_page_url — the artist/label page a release was
-        // discovered from. Bandcamp label discographies span many artist subdomains, so a
-        // release's own URL host isn't the followed page; recording the scanned page lets a
-        // label follow match every release imported from it. Synced.
-        r#"
+    // discovery_releases.source_page_url — the artist/label page a release was
+    // discovered from. Bandcamp label discographies span many artist subdomains, so a
+    // release's own URL host isn't the followed page; recording the scanned page lets a
+    // label follow match every release imported from it. Synced.
+    r#"
 ALTER TABLE discovery_releases ADD COLUMN source_page_url TEXT;
 "#,
-        // idx_tracks_file_hash — the folder scan looks a track up by content hash once
-        // per discovered file. Without a covering index every lookup full-scans `tracks`
-        // and builds a whole row even when nothing matches, making the first import
-        // quadratic. `IF NOT EXISTS` keeps the appended migration idempotent.
-        r#"
+    // idx_tracks_file_hash — the folder scan looks a track up by content hash once
+    // per discovered file. Without a covering index every lookup full-scans `tracks`
+    // and builds a whole row even when nothing matches, making the first import
+    // quadratic. `IF NOT EXISTS` keeps the appended migration idempotent.
+    r#"
 CREATE INDEX IF NOT EXISTS idx_tracks_file_hash ON tracks(file_hash);
 "#,
-    ]
+  ]
 }

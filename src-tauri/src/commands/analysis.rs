@@ -7,41 +7,51 @@ use crate::services::AnalysisService;
 /// Analyze tracks for BPM and key detection with per-track events
 #[tauri::command]
 pub async fn analyze_tracks(
-    track_ids: Vec<String>,
-    analysis: State<'_, AnalysisService>,
-    app_handle: AppHandle,
-    force: bool,
+  track_ids: Vec<String>,
+  key_notation_format: Option<String>,
+  analysis: State<'_, AnalysisService>,
+  app_handle: AppHandle,
+  force: bool,
 ) -> Result<()> {
-    analysis
-        .analyze_tracks_async(app_handle, track_ids, force)
-        .await
+  analysis
+    .analyze_tracks_async(app_handle, track_ids, force, key_notation_format)
+    .await
+}
+
+/// Recalculate every stored track key to the target notation format
+#[tauri::command]
+pub async fn recalculate_all_keys(
+  key_notation_format: String,
+  analysis: State<'_, AnalysisService>,
+) -> Result<i32> {
+  analysis.recalculate_all_keys(key_notation_format)
 }
 
 /// Cancel analysis for a specific track
 #[tauri::command]
 pub async fn cancel_track_analysis(
-    track_id: String,
-    analysis: State<'_, AnalysisService>,
+  track_id: String,
+  analysis: State<'_, AnalysisService>,
 ) -> Result<bool> {
-    analysis.cancel_track_analysis(&track_id)
+  analysis.cancel_track_analysis(&track_id)
 }
 
 /// Cancel all running analysis operations (legacy)
 #[tauri::command]
 pub async fn cancel_analysis(analysis: State<'_, AnalysisService>) -> Result<()> {
-    analysis.cancel_analysis()
+  analysis.cancel_analysis()
 }
 
 /// Get updated tracks after analysis
 #[tauri::command]
 pub async fn get_analyzed_tracks(
-    track_ids: Vec<String>,
-    analysis: State<'_, AnalysisService>,
+  track_ids: Vec<String>,
+  analysis: State<'_, AnalysisService>,
 ) -> Result<Vec<Track>> {
-    let mut tracks = Vec::new();
-    for id in track_ids {
-        let track = analysis.get_updated_track(&id)?;
-        tracks.push(track);
-    }
-    Ok(tracks)
+  let mut tracks = Vec::new();
+  for id in track_ids {
+    let track = analysis.get_updated_track(&id)?;
+    tracks.push(track);
+  }
+  Ok(tracks)
 }

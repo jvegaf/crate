@@ -10,8 +10,6 @@ import type { playlistsStore as PlaylistsStoreType } from '$shared/stores/playli
 import type { missingTracksStore as MissingTracksStoreType } from '$lib/stores/missingTracks'
 import type { uiStore as UIStoreType } from '$shared/stores/ui'
 import type { toastStore as ToastStoreType } from '$shared/stores/toast'
-import * as libraryApi from '$shared/api/library'
-
 // =============================================================================
 // Types
 // =============================================================================
@@ -149,7 +147,8 @@ export function createTrackController(
 	}
 
 	/**
-	 * Open file dialog and import tracks to the library
+	 * Open file dialog and import tracks to the library.
+	 * After completion, navigates to the library view.
 	 */
 	async function handleImport(): Promise<void> {
 		const selected = await withNativeDialog(() =>
@@ -167,9 +166,14 @@ export function createTrackController(
 		if (selected && Array.isArray(selected)) {
 			const result = await libraryStore.importTracks(selected)
 
+			// Nothing imported and no duplicates — nothing to do
+			if (result.tracks.length === 0 && result.duplicates.length === 0) {
+				return
+			}
+
 			// Handle duplicates if any were detected
 			if (result.duplicates.length > 0 && modalActions) {
-				modalActions.openDuplicateTrackModal(result.duplicates, (updatedTracks, newTracks, replacedTrackIds) => {
+				function handleDuplicateResolution(updatedTracks: Track[], newTracks: Track[], replacedTrackIds: string[]) {
 					// Remove old tracks that were replaced
 					if (replacedTrackIds.length > 0) {
 						libraryStore.removeTracksFromState(replacedTrackIds)
@@ -198,7 +202,19 @@ export function createTrackController(
 							toastStore.success(get(translate)('toast.tracksImported', { values: { count: totalImported } }))
 						}
 					}
-				})
+
+					// Switch to library view after successful import
+					if (totalImported > 0) {
+						uiStore.setActiveView('library')
+					}
+				}
+
+				modalActions.openDuplicateTrackModal(result.duplicates, handleDuplicateResolution)
+			}
+
+			// No duplicates — navigate to library view
+			if (result.duplicates.length === 0 && result.tracks.length > 0) {
+				uiStore.setActiveView('library')
 			}
 		}
 	}

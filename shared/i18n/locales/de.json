@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "Legacy-Format für ältere CDJs",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "Für OPUS-QUAD, OMNIS-DUO, XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "Für OPUS-QUAD, OMNIS-DUO, XDJ-AZ",
+			"cancel": "Abbrechen",
+			"ok": "OK",
+			"recalcKeysTitle": "Tonality neu berechnen",
+			"recalcKeysDesc": "Konvertiere die Tonality aller Tracks in deiner Bibliothek zum aktuell ausgewählten Format. Keine neue Analyse.",
+			"recalcAction": "Alle Tonalitys konvertieren",
+			"recalcProgress": "Wird konvertiert… ({count} fertig)",
+			"recalcConfirm": "Tonalitys aller Tracks ins aktuelle Format konvertieren?",
+			"recalcComplete": "{count} Track(s) konvertiert",
+			"recalcError": "Tonality-Konversion fehlgeschlagen."
 		},
 		"discovery": {
 			"metadata": "Metadaten",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "Aus Bibliothek entfernen",
 		"relocate": "Verschieben...",
 		"analyze": "Analysieren",
-		"stopAnalysis": "Analyse stoppen"
+		"stopAnalysis": "Analyse stoppen",
+		"cancel": "Abbrechen",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {

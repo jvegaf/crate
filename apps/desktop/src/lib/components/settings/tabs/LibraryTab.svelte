@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { KeyNotationFormat, ExportFormat, UsbDevice, LibraryFolderScanResult } from '$shared/types'
-	import { Text, Checkbox, Button } from '$lib/components/common'
+	import { Text, Checkbox, Button, Spinner } from '$lib/components/common'
 	import DeviceItem from '$lib/components/devices/DeviceItem.svelte'
 	import {
 		settingsStore,
@@ -14,9 +14,13 @@
 	import { devices } from '$lib/stores/devices'
 	import { libraryStore } from '$lib/stores/library'
 	import * as libraryApi from '$shared/api/library'
+	import { recalculateAllKeys } from '$shared/api/analysis'
+	import { toastStore } from '$shared/stores/toast'
 	import { translate } from '$shared/i18n'
 	import { withNativeDialog } from '$shared/utils'
+	import { get } from 'svelte/store'
 	import { open } from '@tauri-apps/plugin-dialog'
+	// Dialog confirm rendered natively — avoids Tauri dialog-plugin confirm ACL issue.
 
 	let musicFolderPath = $state<string | null>(null)
 	let busy = $state(false)
@@ -24,6 +28,11 @@
 	let scanResult = $state<LibraryFolderScanResult | null>(null)
 	let folderError = $state<string | null>(null)
 	let scanError = $state<string | null>(null)
+	let convertingKeys = $state(false)
+	let convertedKeyCount = $state(0)
+
+	// Confirmation dialog state for bulk key conversion
+	let showRecalcConfirm = $state(false)
 
 	function toErrorMessage(error: unknown): string {
 		return error instanceof Error ? error.message : String(error)
@@ -84,6 +93,26 @@
 
 	function handleKeyNotationFormatChange(format: KeyNotationFormat) {
 		settingsStore.setKeyNotationFormat(format)
+	}
+
+	async function handleRecalculateKeys() {
+		if (convertingKeys) return
+		showRecalcConfirm = true
+	}
+
+	async function handleRecalcConfirmSubmit() {
+		showRecalcConfirm = false
+		convertingKeys = true
+		convertedKeyCount = 0
+		try {
+			convertedKeyCount = await recalculateAllKeys(get(keyNotationFormat))
+			toastStore.success($translate('settings.library.recalcComplete', { values: { count: convertedKeyCount } }))
+		} catch (error) {
+			console.error('Failed to recalculate track keys:', error)
+			toastStore.error($translate('settings.library.recalcError'))
+		} finally {
+			convertingKeys = false
+		}
 	}
 
 	function handleExportFormatChange(format: ExportFormat) {
@@ -225,6 +254,45 @@
 			</button>
 		</div>
 	</section>
+
+	<!-- Recalculate Keys Section -->
+	<section>
+		<Text variant="header-3" class="mb-2">{$translate('settings.library.recalcKeysTitle')}</Text>
+		<Text variant="caption" as="p" class="mb-4">{$translate('settings.library.recalcKeysDesc')}</Text>
+
+		{#if convertingKeys}
+			<div class="flex items-center gap-2">
+				<Spinner class="h-4 w-4" />
+				<Text variant="body-2" as="p">
+					{$translate('settings.library.recalcProgress', { values: { count: convertedKeyCount } })}
+				</Text>
+			</div>
+		{:else}
+			<Button variant="secondary" size="sm" onclick={handleRecalculateKeys}>
+				{$translate('settings.library.recalcAction')}
+			</Button>
+		{/if}
+	</section>
+
+	<!-- Confirmation dialog for bulk key conversion -->
+	{#if showRecalcConfirm}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+			onclick={(e) => e.target === e.currentTarget && (showRecalcConfirm = false)}
+		>
+			<div class="w-full max-w-sm rounded-lg border border-stroke-subtle bg-surface-1 p-6 shadow-xl">
+				<Text variant="body-2" class="mb-4">{$translate('settings.library.recalcConfirm')}</Text>
+				<div class="flex justify-end gap-3">
+					<Button variant="ghost" size="sm" onclick={() => (showRecalcConfirm = false)}>
+						{$translate('contextMenu.cancel')}
+					</Button>
+					<Button variant="secondary" size="sm" onclick={handleRecalcConfirmSubmit}>
+						{$translate('contextMenu.ok')}
+					</Button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Analysis Section -->
 	<section>

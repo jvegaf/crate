@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "Äldre format för gamla CDJ:er",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "För OPUS-QUAD, OMNIS-DUO, XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "För OPUS-QUAD, OMNIS-DUO, XDJ-AZ",
+			"cancel": "Avbryt",
+			"ok": "OK",
+			"recalcKeysTitle": "Beräkna om nycklar",
+			"recalcKeysDesc": "Konvertera alla låttoner i ditt bibliotek till det valda formatet. Ingen ny analys.",
+			"recalcAction": "Konvertera alla",
+			"recalcProgress": "Konverterar… ({count} klart)",
+			"recalcConfirm": "Konvertera alla låttoner till nuvarande format?",
+			"recalcComplete": "{count} spår konverterade",
+			"recalcError": "Nyckelkonvertering misslyckades."
 		},
 		"discovery": {
 			"metadata": "Metadata",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "Ta bort från bibliotek",
 		"relocate": "Flytta...",
 		"analyze": "Analysera",
-		"stopAnalysis": "Stoppa analys"
+		"stopAnalysis": "Stoppa analys",
+		"cancel": "Avbryt",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {

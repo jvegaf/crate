@@ -11,13 +11,13 @@ use crate::error::Result;
 const KEY: &str = "cloud_refresh_token";
 
 pub fn store_refresh_token(conn: &Connection, token: &str) -> Result<()> {
-    super::write_state(conn, KEY, token)
+  super::write_state(conn, KEY, token)
 }
 
 pub fn load_refresh_token(conn: &Connection) -> Result<Option<String>> {
-    Ok(super::read_state(conn, KEY)?.filter(|s| !s.is_empty()))
+  Ok(super::read_state(conn, KEY)?.filter(|s| !s.is_empty()))
 }
 
 pub fn clear_refresh_token(conn: &Connection) -> Result<()> {
-    super::write_state(conn, KEY, "")
+  super::write_state(conn, KEY, "")
 }

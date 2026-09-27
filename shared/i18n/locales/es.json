@@ -98,6 +98,13 @@
 			"keyNotationCamelot": "Camelot",
 			"keyNotationStandard": "Estándar",
 			"keyNotationDescription": "Elige cómo se muestran las tonalidades musicales.",
+			"recalcKeysTitle": "Recalcular tonalidades",
+			"recalcKeysDesc": "Convierte la tonalidad de todas las pistas de tu biblioteca al formato seleccionado. No vuelve a analizar las pistas.",
+			"recalcAction": "Convertir todas las tonalidades",
+			"recalcProgress": "Convirtiendo… ({count} listas)",
+			"recalcConfirm": "¿Convertir las tonalidades de todas las pistas al formato actual?",
+			"recalcComplete": "Se convirtieron {count} pista(s)",
+			"recalcError": "No se pudieron convertir las tonalidades.",
 			"autoAnalyzeOnImport": "Analizar automáticamente al importar",
 			"autoAnalyzeOnImportDescription": "Analizar automáticamente BPM y tonalidad al importar pistas.",
 			"sync": "Sincronización",
@@ -464,7 +471,9 @@
 		"removeFromLibrary": "Quitar de la biblioteca",
 		"relocate": "Reubicar...",
 		"analyze": "Analizar",
-		"stopAnalysis": "Detener análisis"
+		"stopAnalysis": "Detener análisis",
+		"cancel": "Cancelar",
+		"ok": "Aceptar"
 	},
 	"modals": {
 		"createPlaylist": {

@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "Format moștenit pentru CDJ-uri mai vechi",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "Pentru OPUS-QUAD, OMNIS-DUO, XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "Pentru OPUS-QUAD, OMNIS-DUO, XDJ-AZ",
+			"cancel": "Anulare",
+			"ok": "OK",
+			"recalcKeysTitle": "Recalculatează tonalitățile",
+			"recalcKeysDesc": "Convertiți tonalitatea tuturor pieselor din bibliotecă în formatul selectat. Fără re-analizare.",
+			"recalcAction": "Convertire totală",
+			"recalcProgress": "Se convertește… ({count} făcute)",
+			"recalcConfirm": "Convertiți tonalitățile tuturor pieselor în formatul curent?",
+			"recalcComplete": "{count} piesă(e) convertite",
+			"recalcError": "Eșec conversie tonalitate."
 		},
 		"discovery": {
 			"metadata": "Metadate",
@@ -463,7 +472,9 @@
 		"removeFromLibrary": "Elimină din Bibliotecă",
 		"relocate": "Relocalizează...",
 		"analyze": "Analizează",
-		"stopAnalysis": "Oprire analiză"
+		"stopAnalysis": "Oprire analiză",
+		"cancel": "Anulare",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {

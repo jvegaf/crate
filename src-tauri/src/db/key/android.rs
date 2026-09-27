@@ -33,35 +33,35 @@ static INIT: Once = Once::new();
 pub struct AndroidKeystoreProvider;
 
 impl KeyProvider for AndroidKeystoreProvider {
-    fn get_or_create(&self, _app_data_dir: &Path) -> Result<String> {
-        ensure_credential_builder()?;
+  fn get_or_create(&self, _app_data_dir: &Path) -> Result<String> {
+    ensure_credential_builder()?;
 
-        let entry = Entry::new(KEYSTORE_SERVICE, KEYSTORE_USER)
-            .map_err(|e| CrateError::KeyStorage(format!("failed to open keystore entry: {e}")))?;
+    let entry = Entry::new(KEYSTORE_SERVICE, KEYSTORE_USER)
+      .map_err(|e| CrateError::KeyStorage(format!("failed to open keystore entry: {e}")))?;
 
-        match entry.get_password() {
-            Ok(key) => {
-                let key = key.trim().to_string();
-                if key.is_empty() {
-                    // A present-but-empty item is corruption, not a first launch.
-                    return Err(CrateError::KeyStorage(
-                        "keystore returned an empty key; refusing to overwrite".to_string(),
-                    ));
-                }
-                Ok(key)
-            }
-            Err(KeyringError::NoEntry) => {
-                // First launch: generate a key and store it in the Keystore.
-                let key = generate_key();
-                entry.set_password(&key).map_err(|e| {
-                    CrateError::KeyStorage(format!("failed to store key in keystore: {e}"))
-                })?;
-                Ok(key)
-            }
-            // Any other failure must propagate — never fall through to regeneration.
-            Err(e) => Err(CrateError::KeyStorage(format!("keystore read failed: {e}"))),
+    match entry.get_password() {
+      Ok(key) => {
+        let key = key.trim().to_string();
+        if key.is_empty() {
+          // A present-but-empty item is corruption, not a first launch.
+          return Err(CrateError::KeyStorage(
+            "keystore returned an empty key; refusing to overwrite".to_string(),
+          ));
         }
+        Ok(key)
+      }
+      Err(KeyringError::NoEntry) => {
+        // First launch: generate a key and store it in the Keystore.
+        let key = generate_key();
+        entry
+          .set_password(&key)
+          .map_err(|e| CrateError::KeyStorage(format!("failed to store key in keystore: {e}")))?;
+        Ok(key)
+      }
+      // Any other failure must propagate — never fall through to regeneration.
+      Err(e) => Err(CrateError::KeyStorage(format!("keystore read failed: {e}"))),
     }
+  }
 }
 
 /// Initialize the android-keyring credential builder once (idempotent).
@@ -70,13 +70,13 @@ impl KeyProvider for AndroidKeystoreProvider {
 /// runs. Since `Database::new` runs exactly once per process, the `Once` guard's
 /// "only the first call sees the error" semantics are sufficient here.
 fn ensure_credential_builder() -> Result<()> {
-    let mut init_result: Result<()> = Ok(());
-    INIT.call_once(|| {
-        if let Err(e) = android_keyring::set_android_keyring_credential_builder() {
-            init_result = Err(CrateError::KeyStorage(format!(
-                "failed to initialize android keyring: {e}"
-            )));
-        }
-    });
-    init_result
+  let mut init_result: Result<()> = Ok(());
+  INIT.call_once(|| {
+    if let Err(e) = android_keyring::set_android_keyring_credential_builder() {
+      init_result = Err(CrateError::KeyStorage(format!(
+        "failed to initialize android keyring: {e}"
+      )));
+    }
+  });
+  init_result
 }

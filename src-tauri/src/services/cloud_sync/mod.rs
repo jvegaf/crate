@@ -30,16 +30,14 @@ mod tests;
 /// Encodes everything outside the RFC 3986 unreserved set (so `/` → `%2F`). Shared
 /// by the auth flow and the Firebase REST layer to avoid pulling in the `url` crate.
 pub(crate) fn percent_encode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for &b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
-            }
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
+  let mut out = String::with_capacity(s.len());
+  for &b in s.as_bytes() {
+    match b {
+      b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+      _ => out.push_str(&format!("%{b:02X}")),
     }
-    out
+  }
+  out
 }
 
 /// Settings keys that sync across devices (LWW per key, stamped in `sync_state`
@@ -47,15 +45,15 @@ pub(crate) fn percent_encode(s: &str) -> String {
 /// `has_completed_onboarding`, `has_completed_wizard`, `ignored_device_ids`, all
 /// backup bookkeeping, and all cloud-sync state itself.
 pub const SYNCED_SETTING_KEYS: &[&str] = &[
-    "theme",
-    "accent_color",
-    "language",
-    "date_format",
-    "key_notation_format",
-    "auto_analyze_on_import",
+  "theme",
+  "accent_color",
+  "language",
+  "date_format",
+  "key_notation_format",
+  "auto_analyze_on_import",
 ];
 
 /// Whether a settings key participates in cloud sync.
 pub fn is_synced_setting(key: &str) -> bool {
-    SYNCED_SETTING_KEYS.contains(&key)
+  SYNCED_SETTING_KEYS.contains(&key)
 }

@@ -1,7 +1,8 @@
-import { writable, derived } from 'svelte/store'
+import { writable, derived, get } from 'svelte/store'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { AnalysisResult, AnalysisStatus, TrackAnalysisEvent } from '$shared/types'
 import * as analysisApi from '$shared/api/analysis'
+import { keyNotationFormat } from '$shared/stores/settings'
 import { libraryStore } from './library'
 
 // =============================================================================
@@ -84,6 +85,8 @@ function createAnalysisStore() {
 		 * Analyze tracks for BPM and key detection.
 		 * `force` bypasses the backend skip guard, so tracks that already have BPM/key are
 		 * re-analyzed; the default (false) skips them.
+		 * The user's preferred key notation is forwarded so the backend persists the detected key
+		 * in that format; it applies to both force re-analysis and auto-analysis.
 		 */
 		async analyzeTracks(trackIds: string[], force: boolean = false): Promise<void> {
 			// Mark tracks as pending
@@ -105,7 +108,7 @@ function createAnalysisStore() {
 				await this.startListening()
 
 				// Call backend - returns immediately, results come via events
-				await analysisApi.analyzeTracks(trackIds, force)
+				await analysisApi.analyzeTracks(trackIds, { force, keyNotationFormat: get(keyNotationFormat) })
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : 'Analysis failed'
 

@@ -9,7 +9,6 @@
 	import { WizardTour } from '$lib/components/wizard'
 	import { onMount } from 'svelte'
 	import { get } from 'svelte/store'
-	// @ts-expect-error — PUBLIC_APP_VERSION is set dynamically by vite.config.ts
 	import { PUBLIC_APP_VERSION } from '$env/static/public'
 	import { isDev } from '$lib/stores/app'
 	import { settingsStore, hasCompletedOnboarding, hasCompletedWizard } from '$shared/stores/settings'
@@ -18,7 +17,7 @@
 	import { initializeI18n, translate } from '$shared/i18n'
 	import { Sidebar, Toolbar } from '$lib/components/layout'
 	import { Player } from '$lib/components/player'
-	import { ResizeHandle, Icon, Text } from '$lib/components/common'
+	import { ResizeHandle, Text } from '$lib/components/common'
 	import {
 		playlistsStore,
 		tagsStore,
@@ -205,7 +204,7 @@
 		uiLayoutStore.setSidebarWidth(sidebarWidth + delta)
 	}
 
-	function handlePlaylistItemClick(playlist: Playlist, newSelectedIds: Set<string>, isModifierClick: boolean) {
+	function handlePlaylistItemClick(_playlist: Playlist, newSelectedIds: Set<string>, _isModifierClick: boolean) {
 		uiLayoutStore.setSelectedTreeIds(newSelectedIds)
 	}
 

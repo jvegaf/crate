@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "더 오래된 CDJ용 레거시 형식",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "OPUS-QUAD, OMNIS-DUO, XDJ-AZ용"
+			"exportFormatDeviceLibraryPlusDescription": "OPUS-QUAD, OMNIS-DUO, XDJ-AZ용",
+			"cancel": "취소",
+			"ok": "확인",
+			"recalcKeysTitle": "톤 재계산",
+			"recalcKeysDesc": "라이브러리의 모든 트랙 톤을 현재 선택된 형식으로 변환합니다. 분석은 다시 실행되지 않습니다.",
+			"recalcAction": "모두 변환",
+			"recalcProgress": "변환 중… ({count} 완료)",
+			"recalcConfirm": "모든 트랙의 톤을 현재 형식으로 변환하시겠습니까?",
+			"recalcComplete": "{count}개 트랙 변환 완료",
+			"recalcError": "톤 변환에 실패했습니다."
 		},
 		"discovery": {
 			"metadata": "메타데이터",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "라이브러리에서 제거",
 		"relocate": "재배치...",
 		"analyze": "분석",
-		"stopAnalysis": "분석 중지"
+		"stopAnalysis": "분석 중지",
+		"cancel": "취소",
+		"ok": "확인"
 	},
 	"modals": {
 		"createPlaylist": {

@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "Formato legado para CDJs mais antigos",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "Para OPUS-QUAD, OMNIS-DUO, XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "Para OPUS-QUAD, OMNIS-DUO, XDJ-AZ",
+			"cancel": "Cancelar",
+			"ok": "OK",
+			"recalcKeysTitle": "Recalcular tonalidades",
+			"recalcKeysDesc": "Converta a tonalidade de todas as faixas da sua biblioteca para o formato selecionado. Sem nova análise.",
+			"recalcAction": "Converter tudo",
+			"recalcProgress": "Convertendo… ({count} pronto)",
+			"recalcConfirm": "Converter as tonalidades de todas as faixas para o formato atual?",
+			"recalcComplete": "{count} faixa(s) convertida(s)",
+			"recalcError": "Falha na conversão de tonalidade."
 		},
 		"discovery": {
 			"metadata": "Metadados",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "Remover da biblioteca",
 		"relocate": "Realocar...",
 		"analyze": "Analisar",
-		"stopAnalysis": "Parar análise"
+		"stopAnalysis": "Parar análise",
+		"cancel": "Cancelar",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {

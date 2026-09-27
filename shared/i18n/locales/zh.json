@@ -115,7 +115,16 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "用于较旧 CDJ 的旧版格式",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "适用于 OPUS-QUAD、OMNIS-DUO、XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "适用于 OPUS-QUAD、OMNIS-DUO、XDJ-AZ",
+			"cancel": "取消",
+			"ok": "确定",
+			"recalcKeysTitle": "重新计算调性",
+			"recalcKeysDesc": "将图书馆中所有曲目的调性转换为所选格式。不重新执行分析。",
+			"recalcAction": "全部转换",
+			"recalcProgress": "正在转换…（{count} 完成）",
+			"recalcConfirm": "将所有曲目的调性转换为当前格式？",
+			"recalcComplete": "已转换 {count} 首曲目",
+			"recalcError": "调性转换失败。"
 		},
 		"discovery": {
 			"metadata": "元数据",
@@ -464,7 +473,9 @@
 		"removeFromLibrary": "从曲库移除",
 		"relocate": "重新定位...",
 		"analyze": "分析",
-		"stopAnalysis": "停止分析"
+		"stopAnalysis": "停止分析",
+		"cancel": "取消",
+		"ok": "确定"
 	},
 	"modals": {
 		"createPlaylist": {

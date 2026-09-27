@@ -27,33 +27,33 @@ const GC_MAX_TOTAL: usize = 10_000;
 /// queue entries processed. Best-effort: a failed blob delete is logged but still
 /// acked so the queue drains.
 pub async fn gc_sweep(backend: &Arc<dyn CloudBackend>, session: &AuthSession) -> Result<usize> {
-    let store = backend.manifest();
-    let blobs = backend.blobs();
-    let mut processed = 0usize;
+  let store = backend.manifest();
+  let blobs = backend.blobs();
+  let mut processed = 0usize;
 
-    loop {
-        // Re-evaluate `now` each round so entries that come due mid-sweep are caught.
-        let due = store
-            .dequeue_gc(session, SystemTime::now(), GC_BATCH)
-            .await?;
-        if due.is_empty() {
-            break;
-        }
-        for (id, entry) in due {
-            // Tolerate an already-deleted blob — still ack so the entry doesn't strand.
-            if let Err(e) = blobs.delete(session, &entry.object_key).await {
-                log::warn!(
-                    "cloud_sync: gc blob delete failed ({}): {e}",
-                    entry.object_key
-                );
-            }
-            store.ack_gc(session, id).await?;
-            processed += 1;
-            if processed >= GC_MAX_TOTAL {
-                log::warn!("cloud_sync: gc sweep hit cap of {GC_MAX_TOTAL}, stopping early");
-                return Ok(processed);
-            }
-        }
+  loop {
+    // Re-evaluate `now` each round so entries that come due mid-sweep are caught.
+    let due = store
+      .dequeue_gc(session, SystemTime::now(), GC_BATCH)
+      .await?;
+    if due.is_empty() {
+      break;
     }
-    Ok(processed)
+    for (id, entry) in due {
+      // Tolerate an already-deleted blob — still ack so the entry doesn't strand.
+      if let Err(e) = blobs.delete(session, &entry.object_key).await {
+        log::warn!(
+          "cloud_sync: gc blob delete failed ({}): {e}",
+          entry.object_key
+        );
+      }
+      store.ack_gc(session, id).await?;
+      processed += 1;
+      if processed >= GC_MAX_TOTAL {
+        log::warn!("cloud_sync: gc sweep hit cap of {GC_MAX_TOTAL}, stopping early");
+        return Ok(processed);
+      }
+    }
+  }
+  Ok(processed)
 }

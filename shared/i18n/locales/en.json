@@ -98,6 +98,13 @@
 			"keyNotationCamelot": "Camelot",
 			"keyNotationStandard": "Standard",
 			"keyNotationDescription": "Choose how musical keys are displayed.",
+			"recalcKeysTitle": "Recalculate Keys",
+			"recalcKeysDesc": "Convert every track key in your library to the currently selected notation. This does not re-run analysis.",
+			"recalcAction": "Convert All Keys",
+			"recalcProgress": "Converting… ({count} done)",
+			"recalcConfirm": "Convert all track keys to the current format?",
+			"recalcComplete": "Converted {count} track(s)",
+			"recalcError": "Key conversion failed.",
 			"autoAnalyzeOnImport": "Auto-analyze on import",
 			"autoAnalyzeOnImportDescription": "Automatically analyze BPM and key when importing tracks.",
 			"sync": "Sync",
@@ -464,7 +471,9 @@
 		"removeFromLibrary": "Remove from Library",
 		"relocate": "Relocate...",
 		"analyze": "Analyze",
-		"stopAnalysis": "Stop analysis"
+		"stopAnalysis": "Stop analysis",
+		"cancel": "Cancel",
+		"ok": "OK"
 	},
 	"modals": {
 		"createPlaylist": {
