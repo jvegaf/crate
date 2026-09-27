@@ -207,6 +207,10 @@ fn track_was_deleted(_track_id: &str) -> bool {
 }
 
 #[cfg(test)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
 mod tests {
   use super::*;
 
@@ -323,5 +327,104 @@ mod tests {
     assert!(diff.tracks_to_add.is_empty());
     assert!(diff.tracks_to_update.is_empty());
     assert!(diff.tracks_to_remove.is_empty());
+  }
+
+  #[test]
+  fn shared_fixture_tracks_are_all_added_to_an_empty_device() {
+    let library = test_utils::fixture_tracks();
+
+    let diff = SyncDiff::calculate(&library, &[], TrackRemovalStrategy::Conservative);
+
+    assert_eq!(diff.tracks_to_add.len(), library.len());
+    assert_eq!(diff.tracks_to_copy_count(), library.len());
+    assert!(diff.tracks_to_update.is_empty());
+    assert!(diff.tracks_to_remove.is_empty());
+  }
+
+  /// Both sides edited the same track independently. Only the library copy is
+  /// authoritative, so the conflicting hashes must collapse into a single update — not an
+  /// add, and never a duplicate entry.
+  #[test]
+  fn conflicting_edits_to_the_same_field_resolve_to_one_update() {
+    let library = vec![test_utils::fixture_track(
+      "1",
+      "Edited In Library",
+      "library-hash",
+    )];
+    let device = vec![make_device_track(
+      "1",
+      "Artist/Test Album/1.mp3",
+      "device-hash",
+    )];
+
+    let diff = SyncDiff::calculate(&library, &device, TrackRemovalStrategy::Conservative);
+
+    assert!(diff.tracks_to_add.is_empty());
+    assert_eq!(diff.tracks_to_update.len(), 1);
+    assert_eq!(diff.tracks_to_update[0].0.id, "1");
+    assert_eq!(
+      diff.tracks_to_update[0].0.file_hash.as_deref(),
+      Some("library-hash")
+    );
+    assert!(diff.tracks_to_remove.is_empty());
+    assert!(diff.has_changes());
+  }
+
+  /// Guards against an accidental O(n^2) regression in the diff lookup. The bound is
+  /// deliberately loose: it is a complexity canary, not a machine-speed benchmark.
+  #[test]
+  fn large_sync_diff_stays_within_performance_bounds() {
+    const COUNT: usize = 5_000;
+    let library: Vec<Track> = (0..COUNT)
+      .map(|i| {
+        test_utils::fixture_track(
+          &format!("track-{i}"),
+          &format!("Track {i}"),
+          &format!("hash-{i}"),
+        )
+      })
+      .collect();
+
+    let started = std::time::Instant::now();
+    let diff = SyncDiff::calculate(&library, &[], TrackRemovalStrategy::Conservative);
+    let elapsed = started.elapsed();
+
+    assert_eq!(diff.tracks_to_add.len(), COUNT);
+    assert_eq!(diff.tracks_to_copy_count(), COUNT);
+    assert!(diff.tracks_to_update.is_empty());
+    assert!(
+      elapsed < std::time::Duration::from_secs(10),
+      "calculating a {COUNT}-track diff took {elapsed:?}"
+    );
+  }
+
+  /// Device entries whose ids share a nested-looking prefix are still matched by exact id:
+  /// only the entries absent from the library are removed, however deep the chain.
+  #[test]
+  fn orphan_detection_keeps_known_members_of_a_nested_chain() {
+    let library = vec![
+      test_utils::fixture_track("set/part-1", "Part 1", "h1"),
+      test_utils::fixture_track("set/part-2", "Part 2", "h2"),
+    ];
+    let device = vec![
+      make_device_track("set/part-1", "Artist/Album/part1.mp3", "h1"),
+      make_device_track("set/part-2", "Artist/Album/part2.mp3", "h2"),
+      make_device_track("set/part-3", "Artist/Album/part3.mp3", "h3"),
+      make_device_track("set/part-3/child", "Artist/Album/child.mp3", "h4"),
+    ];
+
+    let diff = SyncDiff::calculate(&library, &device, TrackRemovalStrategy::RemoveOrphaned);
+
+    assert!(diff.tracks_to_add.is_empty());
+    assert!(diff.tracks_to_update.is_empty());
+    let mut removed = diff.tracks_to_remove.clone();
+    removed.sort();
+    assert_eq!(
+      removed,
+      vec![
+        "Artist/Album/child.mp3".to_string(),
+        "Artist/Album/part3.mp3".to_string(),
+      ]
+    );
   }
 }

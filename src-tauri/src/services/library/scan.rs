@@ -208,6 +208,10 @@ impl LibraryService {
 }
 
 #[cfg(test)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
 mod tests {
   use super::*;
   use std::io::Write;
@@ -218,12 +222,7 @@ mod tests {
 
   /// Fresh in-memory device with the real schema applied and FKs enforced.
   fn test_conn() -> Connection {
-    let conn = Connection::open_in_memory().unwrap();
-    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-    for sql in crate::db::schema::get_migrations() {
-      conn.execute_batch(sql).unwrap();
-    }
-    conn
+    test_utils::make_memory_db()
   }
 
   /// Unique temp directory; callers remove it with `remove_dir_all`.
@@ -384,6 +383,120 @@ mod tests {
     assert_eq!(seen.last().unwrap().current, result.scanned_count);
     assert_eq!(seen.last().unwrap().total, result.scanned_count);
     assert!(seen.iter().all(|p| p.current_file.is_some()));
+
+    std::fs::remove_dir_all(&tmp).ok();
+  }
+
+  #[test]
+  fn scan_of_empty_directory_imports_nothing() {
+    let (service, tmp, _root) = service_with_root();
+
+    let result = service.scan_music_library_folder().unwrap();
+
+    assert_eq!(result.scanned_count, 0);
+    assert_eq!(result.imported_count, 0);
+    assert_eq!(result.skipped_existing_count, 0);
+    assert_eq!(result.failed_count, 0);
+    assert!(result.imported_track_ids.is_empty());
+    assert!(result.errors.is_empty());
+
+    std::fs::remove_dir_all(&tmp).ok();
+  }
+
+  /// The walker is configured with `follow_links(false)`: a symlinked file must not be
+  /// counted or imported, and a symlinked directory must not be descended into. This is
+  /// what keeps a scan inside the configured root and immune to symlink cycles.
+  #[cfg(unix)]
+  #[test]
+  fn scan_skips_symlinked_files_and_directories() {
+    use std::os::unix::fs::symlink;
+
+    let (service, tmp, root) = service_with_root();
+
+    // Real file: the only thing that should be imported.
+    write_wav(&root.join("real.wav"), 1, 512);
+    // Symlink to a real file inside the root: skipped, not double-imported.
+    symlink(root.join("real.wav"), root.join("alias.wav")).unwrap();
+
+    // Symlinked directory pointing outside the root: never traversed.
+    let outside = tmp.join("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    write_wav(&outside.join("linked.wav"), 2, 512);
+    symlink(&outside, root.join("linked-dir")).unwrap();
+
+    let result = service.scan_music_library_folder().unwrap();
+
+    assert_eq!(result.scanned_count, 1);
+    assert_eq!(result.imported_count, 1);
+    assert_eq!(result.skipped_existing_count, 0);
+    assert_eq!(result.failed_count, 0);
+    assert!(result.errors.is_empty());
+
+    std::fs::remove_dir_all(&tmp).ok();
+  }
+
+  /// A file that hashes fine but fails metadata parsing is a per-file error: the valid
+  /// files in the same run still import, and the failure leaves no partial row behind.
+  #[test]
+  fn failed_file_does_not_corrupt_surrounding_imports() {
+    let (service, tmp, root) = service_with_root();
+    let valid = 3;
+    for i in 0..valid {
+      write_wav(&root.join(format!("good-{i}.wav")), i as u8 + 10, 512);
+    }
+    // Supported extension, undecodable payload: hashing succeeds, parsing fails.
+    std::fs::write(root.join("broken.wav"), b"this is not a wav file").unwrap();
+
+    let first = service.scan_music_library_folder().unwrap();
+
+    assert_eq!(first.scanned_count, valid + 1);
+    assert_eq!(first.imported_count, valid);
+    assert_eq!(first.imported_track_ids.len(), valid);
+    assert_eq!(first.failed_count, 1);
+    assert_eq!(first.errors.len(), 1);
+    assert!(first.errors[0].contains("broken.wav"));
+
+    // A rescan must not import anything new and must fail on the same file again: the
+    // earlier failure did not leave a partial track row to collide with.
+    let second = service.scan_music_library_folder().unwrap();
+
+    assert_eq!(second.scanned_count, valid + 1);
+    assert_eq!(second.imported_count, 0);
+    assert_eq!(second.skipped_existing_count, valid);
+    assert_eq!(second.failed_count, 1);
+
+    std::fs::remove_dir_all(&tmp).ok();
+  }
+
+  /// Progress is emitted once per supported audio file (including ones that fail) and the
+  /// totals are fixed up front; non-audio files never appear in the counter at all.
+  #[test]
+  fn progress_totals_include_failures_but_not_unsupported_files() {
+    let (service, tmp, root) = service_with_root();
+    let valid = 3;
+    for i in 0..valid {
+      write_wav(&root.join(format!("good-{i}.wav")), i as u8 + 10, 512);
+    }
+    std::fs::write(root.join("broken.wav"), b"this is not a wav file").unwrap();
+    std::fs::write(root.join("notes.txt"), b"not audio").unwrap();
+
+    let mut seen: Vec<LibraryScanProgress> = Vec::new();
+    let result = service
+      .scan_music_library_folder_with_progress(|progress| seen.push(progress.clone()))
+      .unwrap();
+
+    let expected_total = valid + 1;
+    assert_eq!(result.scanned_count, expected_total);
+    assert_eq!(seen.len(), expected_total);
+    assert!(seen.iter().all(|p| p.total == expected_total));
+    assert_eq!(
+      seen.iter().map(|p| p.current).collect::<Vec<_>>(),
+      (1..=expected_total).collect::<Vec<_>>()
+    );
+    let last = seen.last().unwrap();
+    assert_eq!(last.current, expected_total);
+    assert_eq!(last.imported_count, valid);
+    assert_eq!(last.failed_count, 1);
 
     std::fs::remove_dir_all(&tmp).ok();
   }

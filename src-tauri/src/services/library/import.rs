@@ -420,6 +420,10 @@ impl LibraryService {
 }
 
 #[cfg(test)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
 mod tests {
   use super::*;
   use lofty::tag::TagType;
@@ -428,7 +432,7 @@ mod tests {
   /// in-memory connection and a throwaway path are enough.
   fn service() -> LibraryService {
     LibraryService::new(
-      Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+      Arc::new(Mutex::new(test_utils::make_memory_db())),
       PathBuf::from("/tmp"),
     )
   }
@@ -455,5 +459,65 @@ mod tests {
 
     assert_eq!(service().extract_bpm(&tag), None);
     assert_eq!(service().extract_key(&tag), None);
+  }
+
+  #[test]
+  fn tag_with_other_fields_but_no_bpm_or_key_yields_none() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.insert_text(ItemKey::TrackTitle, "Some Title".to_string());
+    tag.insert_text(ItemKey::TrackArtist, "Some Artist".to_string());
+
+    assert_eq!(service().extract_bpm(&tag), None);
+    assert_eq!(service().extract_key(&tag), None);
+  }
+
+  #[test]
+  fn extract_bpm_accepts_leading_zeros() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.insert_text(ItemKey::IntegerBpm, "0120".to_string());
+
+    assert_eq!(service().extract_bpm(&tag), Some(120.0));
+  }
+
+  #[test]
+  fn extract_bpm_accepts_whitespace_and_decimals() {
+    for (raw, expected) in [(" 128 ", 128.0), ("127.5", 127.5), ("0", 0.0)] {
+      let mut tag = Tag::new(TagType::Id3v2);
+      tag.insert_text(ItemKey::IntegerBpm, raw.to_string());
+
+      assert_eq!(service().extract_bpm(&tag), Some(expected), "raw = {raw:?}");
+    }
+  }
+
+  #[test]
+  fn malformed_bpm_tag_is_ignored_instead_of_panicking() {
+    for raw in ["", "  ", "not-a-number", "120 bpm", "1.2.3", "--8"] {
+      let mut tag = Tag::new(TagType::Id3v2);
+      tag.insert_text(ItemKey::IntegerBpm, raw.to_string());
+
+      assert_eq!(service().extract_bpm(&tag), None, "raw = {raw:?}");
+    }
+  }
+
+  #[test]
+  fn extract_key_supports_common_musical_formats() {
+    for raw in ["8m", "Dm", "Bmaj", "C#min", "Dbm", "1d"] {
+      let mut tag = Tag::new(TagType::Id3v2);
+      tag.insert_text(ItemKey::InitialKey, raw.to_string());
+
+      assert_eq!(
+        service().extract_key(&tag),
+        Some(raw.to_string()),
+        "raw = {raw:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn extract_key_trims_surrounding_whitespace_only() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.insert_text(ItemKey::InitialKey, "  Dbm  ".to_string());
+
+    assert_eq!(service().extract_key(&tag), Some("Dbm".to_string()));
   }
 }
