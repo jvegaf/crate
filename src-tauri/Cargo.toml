@@ -129,3 +129,10 @@ security-framework = "3.7"
 keyring = { version = "3.6", default-features = false }
 android-keyring = { version = "0.2", features = ["ndk-context"] }
 
+# Test-only helpers. No `[workspace]` table is needed: this crate has no parent Cargo
+# workspace, so Cargo already treats `src-tauri/` as its own workspace root.
+[dev-dependencies]
+tempfile = "3"
+serial_test = "3"
+wiremock = "0.6"
+
