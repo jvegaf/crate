@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Tonacja",
 			"time": "Czas",
-			"tags": "Tagi"
+			"tags": "Tagi",
+			"rating": "Ocena"
 		},
 		"track": "ścieżka",
 		"tracks": "ścieżek",

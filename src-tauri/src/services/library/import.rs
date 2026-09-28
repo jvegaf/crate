@@ -3,9 +3,10 @@ use std::io::BufReader;
 
 use lofty::config::{ParseOptions, ParsingMode};
 use lofty::file::{AudioFile, TaggedFile};
+use lofty::id3::v2::{Frame, Id3v2Tag};
 use lofty::prelude::*;
 use lofty::probe::Probe;
-use lofty::tag::Tag;
+use lofty::tag::{Tag, TagType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::probe::Hint;
 
@@ -83,6 +84,9 @@ impl LibraryService {
 
         // Try to get key
         track.key = self.extract_key(tag);
+
+        // Try to get the rating from an ID3v2 POPM frame
+        track.rating = self.extract_rating(tag);
       }
 
       // Extract album artwork
@@ -156,6 +160,7 @@ impl LibraryService {
         track.genre = tag.genre().map(|s| s.to_string());
         track.bpm = self.extract_bpm(tag);
         track.key = self.extract_key(tag);
+        track.rating = self.extract_rating(tag);
       }
 
       // Extract album artwork
@@ -417,6 +422,49 @@ impl LibraryService {
       .get_string(&ItemKey::InitialKey)
       .map(|s| s.trim().to_string())
   }
+
+  /// Extract Crate's 0-5 star rating from ID3v2 `POPM` frames.
+  ///
+  /// Only ID3v2 carries a popularimeter, so every other format yields 0. The
+  /// first POPM frame with a nonzero rating wins, which is how most players
+  /// pick a single rating out of the per-email POPM entries. An all-zero or
+  /// absent POPM yields 0, Crate's "unrated" value.
+  fn extract_rating(&self, tag: &Tag) -> i32 {
+    if tag.tag_type() != TagType::Id3v2 {
+      return 0;
+    }
+
+    // The generic `Tag` does not expose typed POPM frames, but it keeps the
+    // original ID3v2 tag as a companion; converting back gives access to the
+    // parsed `Frame::Popularimeter` values instead of raw bytes under
+    // `ItemKey::Popularimeter`.
+    let id3v2: Id3v2Tag = tag.clone().into();
+
+    id3v2
+      .into_iter()
+      .filter_map(|frame| match frame {
+        Frame::Popularimeter(popm) => Some(popm.rating),
+        _ => None,
+      })
+      .find(|rating| *rating != 0)
+      .map(popm_rating_to_stars)
+      .unwrap_or(0)
+  }
+}
+
+/// Map a raw ID3v2 `POPM` rating (0-255) to Crate's 0-5 star scale.
+///
+/// Boundaries follow the de-facto `POPM` star mapping used by players:
+/// <https://en.wikipedia.org/wiki/ID3#ID3v2_star_rating_tag_issue>.
+fn popm_rating_to_stars(raw: u8) -> i32 {
+  match raw {
+    0 => 0,
+    1..=31 => 1,
+    32..=95 => 2,
+    96..=159 => 3,
+    160..=223 => 4,
+    224..=255 => 5,
+  }
 }
 
 #[cfg(test)]
@@ -426,6 +474,7 @@ mod test_utils;
 #[cfg(test)]
 mod tests {
   use super::*;
+  use lofty::id3::v2::PopularimeterFrame;
   use lofty::tag::TagType;
 
   /// The tag path needs no database state and no real artwork directory, so an
@@ -521,5 +570,88 @@ mod tests {
     tag.insert_text(ItemKey::InitialKey, "  Dbm  ".to_string());
 
     assert_eq!(service().extract_key(&tag), Some("Dbm".to_string()));
+  }
+
+  /// Build a generic `Tag` that carries ID3v2 `POPM` frames, mirroring how lofty
+  /// hands back an ID3v2 tag: the typed frames live in the companion tag.
+  fn tag_with_popm(ratings: &[u8]) -> Tag {
+    let mut id3v2 = Id3v2Tag::new();
+    for (index, rating) in ratings.iter().enumerate() {
+      id3v2.insert(Frame::Popularimeter(PopularimeterFrame::new(
+        format!("user{index}@example.com"),
+        *rating,
+        0,
+      )));
+    }
+
+    Tag::from(id3v2)
+  }
+
+  #[test]
+  fn popm_rating_boundaries_map_to_expected_stars() {
+    for (raw, expected) in [
+      (0u8, 0),
+      (1, 1),
+      (31, 1),
+      (32, 2),
+      (95, 2),
+      (96, 3),
+      (159, 3),
+      (160, 4),
+      (223, 4),
+      (224, 5),
+      (255, 5),
+    ] {
+      assert_eq!(popm_rating_to_stars(raw), expected, "raw = {raw}");
+    }
+  }
+
+  #[test]
+  fn extract_rating_maps_single_popm_rating() {
+    for (raw, expected) in [(1u8, 1), (96, 3), (255, 5)] {
+      assert_eq!(
+        service().extract_rating(&tag_with_popm(&[raw])),
+        expected,
+        "raw = {raw}"
+      );
+    }
+  }
+
+  #[test]
+  fn extract_rating_uses_first_nonzero_popm_frame() {
+    let tag = tag_with_popm(&[0, 200, 32]);
+
+    assert_eq!(service().extract_rating(&tag), 4);
+  }
+
+  #[test]
+  fn extract_rating_finds_popm_among_other_id3v2_items() {
+    let mut tag = tag_with_popm(&[128]);
+    tag.insert_text(ItemKey::TrackTitle, "Some Title".to_string());
+    tag.insert_text(ItemKey::IntegerBpm, "128".to_string());
+
+    assert_eq!(service().extract_rating(&tag), 3);
+  }
+
+  #[test]
+  fn extract_rating_returns_zero_when_all_popm_frames_are_zero() {
+    let tag = tag_with_popm(&[0, 0]);
+
+    assert_eq!(service().extract_rating(&tag), 0);
+  }
+
+  #[test]
+  fn extract_rating_returns_zero_without_popm_frame() {
+    let tag = Tag::new(TagType::Id3v2);
+
+    assert_eq!(service().extract_rating(&tag), 0);
+  }
+
+  #[test]
+  fn extract_rating_ignores_non_id3v2_tags() {
+    let mut tag = Tag::new(TagType::VorbisComments);
+    tag.insert_text(ItemKey::TrackTitle, "Some Title".to_string());
+
+    assert_eq!(service().extract_rating(&tag), 0);
   }
 }

@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Tonart",
 			"time": "Zeit",
-			"tags": "Tags"
+			"tags": "Tags",
+			"rating": "Bewertung"
 		},
 		"track": "Track",
 		"tracks": "Tracks",

@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Toonsoort",
 			"time": "Tijd",
-			"tags": "Tags"
+			"tags": "Tags",
+			"rating": "Beoordeling"
 		},
 		"track": "track",
 		"tracks": "tracks",

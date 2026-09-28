@@ -283,7 +283,8 @@
 			"bpm": "BPM",
 			"key": "Tono",
 			"time": "Tiempo",
-			"tags": "Etiquetas"
+			"tags": "Etiquetas",
+			"rating": "Calificación"
 		},
 		"track": "pista",
 		"tracks": "pistas",

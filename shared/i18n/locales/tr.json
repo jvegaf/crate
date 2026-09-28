@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Anahtar",
 			"time": "Süre",
-			"tags": "Etiketler"
+			"tags": "Etiketler",
+			"rating": "Değerlendirme"
 		},
 		"track": "şarkı",
 		"tracks": "şarkı",

@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "调性",
 			"time": "时长",
-			"tags": "标签"
+			"tags": "标签",
+			"rating": "评分"
 		},
 		"track": "曲目",
 		"tracks": "曲目",

@@ -283,7 +283,8 @@
 			"bpm": "BPM",
 			"key": "Key",
 			"time": "Time",
-			"tags": "Tags"
+			"tags": "Tags",
+			"rating": "Rating"
 		},
 		"track": "track",
 		"tracks": "tracks",

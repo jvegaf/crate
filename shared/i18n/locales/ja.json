@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "キー",
 			"time": "時間",
-			"tags": "タグ"
+			"tags": "タグ",
+			"rating": "評価"
 		},
 		"track": "曲",
 		"tracks": "曲",

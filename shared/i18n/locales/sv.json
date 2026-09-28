@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Tonart",
 			"time": "Tid",
-			"tags": "Taggar"
+			"tags": "Taggar",
+			"rating": "Betyg"
 		},
 		"track": "spår",
 		"tracks": "spår",

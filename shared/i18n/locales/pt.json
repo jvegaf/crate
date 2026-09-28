@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Tom",
 			"time": "Tempo",
-			"tags": "Tags"
+			"tags": "Tags",
+			"rating": "Classificação"
 		},
 		"track": "faixa",
 		"tracks": "faixas",

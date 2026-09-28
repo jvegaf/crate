@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "키",
 			"time": "시간",
-			"tags": "태그"
+			"tags": "태그",
+			"rating": "평가"
 		},
 		"track": "트랙",
 		"tracks": "트랙",

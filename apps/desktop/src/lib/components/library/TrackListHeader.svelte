@@ -36,11 +36,12 @@
 		{ field: 'key', labelKey: 'library.columns.key', align: 'left' },
 		{ field: 'duration_ms', labelKey: 'library.columns.time', align: 'left' },
 		{ field: 'tags', labelKey: 'library.columns.tags', align: 'left' },
+		{ field: null, labelKey: 'library.columns.rating', align: 'left' },
 	]
 </script>
 
 <div
-	class="sticky top-0 z-10 grid grid-cols-[24px_40px_1fr_1fr_80px_60px_80px_1fr] justify-items-start gap-2 border-b border-stroke bg-surface-1/50 px-3 py-2 text-xs font-medium tracking-wider text-text-tertiary uppercase backdrop-blur-sm"
+	class="sticky top-0 z-10 grid grid-cols-[24px_40px_1fr_1fr_80px_60px_80px_1fr_60px] justify-items-start gap-2 border-b border-stroke bg-surface-1/50 px-3 py-2 text-xs font-medium tracking-wider text-text-tertiary uppercase backdrop-blur-sm"
 >
 	{#each columns as column, index (index)}
 		{#if column.field}
@@ -61,6 +62,10 @@
 					</span>
 				{/if}
 			</button>
+		{:else if column.labelKey}
+			<div class="w-full text-left">
+				{$translate(column.labelKey)}
+			</div>
 		{:else}
 			<div></div>
 		{/if}

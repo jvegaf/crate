@@ -100,6 +100,7 @@
 	}
 
 	const isMissing = $derived($missingTrackIds.has(track.id))
+	const ratingStars = [1, 2, 3, 4, 5]
 </script>
 
 <div
@@ -107,7 +108,7 @@
 	tabindex="0"
 	data-track-row
 	data-track-id={track.id}
-	class="relative grid cursor-pointer grid-cols-[24px_40px_1fr_1fr_80px_60px_80px_1fr] items-center gap-2 border-b border-stroke-subtle px-3 py-1 text-sm transition-colors select-none {selected
+	class="relative grid cursor-pointer grid-cols-[24px_40px_1fr_1fr_80px_60px_80px_1fr_60px] items-center gap-2 border-b border-stroke-subtle px-3 py-1 text-sm transition-colors select-none {selected
 		? 'bg-brand-muted'
 		: 'hover:bg-surface-2/50'} {playing ? 'text-brand-primary' : 'text-text-secondary'} {isMissing
 		? 'bg-red-500/5'
@@ -221,6 +222,13 @@
 		{#if track.tags.length > 3}
 			<Text variant="caption">+{track.tags.length - 3}</Text>
 		{/if}
+	</div>
+
+	<!-- Rating -->
+	<div role="img" aria-label={`${track.rating}/5`} class="flex items-center gap-0.5 text-base leading-none">
+		{#each ratingStars as star (star)}
+			<span aria-hidden="true" class={track.rating >= star ? 'text-warning' : 'text-text-tertiary/50'}>★</span>
+		{/each}
 	</div>
 </div>
 

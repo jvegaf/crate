@@ -285,7 +285,8 @@
 			"bpm": "BPM",
 			"key": "Ton",
 			"time": "Timp",
-			"tags": "Etichete"
+			"tags": "Etichete",
+			"rating": "Evaluare"
 		},
 		"track": "melodie",
 		"tracks": "melodii",
