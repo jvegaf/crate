@@ -65,15 +65,19 @@ describe('formatBpm', () => {
 })
 
 describe('formatBitrate', () => {
-	it('converts bits per second to rounded kilobits per second', () => {
-		expect(formatBitrate(320_000)).toBe('320 kbps')
-		expect(formatBitrate(128_000)).toBe('128 kbps')
-		expect(formatBitrate(44_100)).toBe('44 kbps')
+	it('formats stored kilobits per second without unit conversion', () => {
+		expect(formatBitrate(320)).toBe('320 kbps')
+		expect(formatBitrate(128)).toBe('128 kbps')
+		expect(formatBitrate(1411)).toBe('1411 kbps')
 	})
 
-	it('formats zero, sub-kbps positive values, and null', () => {
-		expect(formatBitrate(0)).toBe('0 kbps')
-		expect(formatBitrate(499)).toBe('< 1 kbps')
+	it('rounds fractional stored kilobits per second', () => {
+		expect(formatBitrate(319.6)).toBe('320 kbps')
+	})
+
+	it('returns a dash for null and non-positive kbps placeholders', () => {
 		expect(formatBitrate(null)).toBe('-')
+		expect(formatBitrate(0)).toBe('-')
+		expect(formatBitrate(-5)).toBe('-')
 	})
 })

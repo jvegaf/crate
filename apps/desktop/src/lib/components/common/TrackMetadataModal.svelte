@@ -8,7 +8,7 @@
 	import { get } from 'svelte/store'
 	import { translate } from '$shared/i18n'
 	import type { EmbeddedArtwork, Tag, TagCategory, Track, TrackMetadataPatch } from '$shared/types'
-	import { withNativeDialog } from '$shared/utils'
+	import { formatBitrate, withNativeDialog } from '$shared/utils'
 	import AlbumArt from './AlbumArt.svelte'
 	import Button from './Button.svelte'
 	import IconButton from './IconButton.svelte'
@@ -272,7 +272,7 @@
 	const readOnlyProperties = $derived([
 		{ key: 'duration', value: formatDuration(track.duration_ms) },
 		{ key: 'format', value: track.format },
-		{ key: 'bitrate', value: track.bitrate === null ? $translate('common.unknown') : `${track.bitrate} kbps` },
+		{ key: 'bitrate', value: formatBitrate(track.bitrate) },
 		{
 			key: 'sampleRate',
 			value: track.sample_rate === null ? $translate('common.unknown') : `${track.sample_rate} Hz`,

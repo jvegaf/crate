@@ -315,7 +315,49 @@ impl LibraryService {
     };
 
     let sample_rate = params.sample_rate.map(|s| s as i32);
-    let bitrate = params.bits_per_sample.map(|b| b as i32);
+    let bitrate = match params.codec {
+      symphonia::core::codecs::CODEC_TYPE_PCM_S32LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S32LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S32BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S32BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S24LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S24LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S24BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S24BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S16LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S16LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S16BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S16BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S8
+      | symphonia::core::codecs::CODEC_TYPE_PCM_S8_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U32LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U32LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U32BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U32BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U24LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U24LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U24BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U24BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U16LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U16LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U16BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U16BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U8
+      | symphonia::core::codecs::CODEC_TYPE_PCM_U8_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F32LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F32LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F32BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F32BE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F64LE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F64LE_PLANAR
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F64BE
+      | symphonia::core::codecs::CODEC_TYPE_PCM_F64BE_PLANAR => pcm_bitrate_kbps(
+        params.sample_rate,
+        params.channels.map(|channels| channels.count()),
+        params.bits_per_sample,
+      ),
+      _ => None,
+    };
 
     Ok((duration_ms, sample_rate, bitrate))
   }
@@ -450,6 +492,21 @@ impl LibraryService {
       .map(popm_rating_to_stars)
       .unwrap_or(0)
   }
+}
+
+pub(crate) fn pcm_bitrate_kbps(
+  sample_rate: Option<u32>,
+  channels: Option<usize>,
+  bits_per_sample: Option<u32>,
+) -> Option<i32> {
+  let bits_per_second = u128::from(sample_rate?)
+    .checked_mul(channels? as u128)?
+    .checked_mul(u128::from(bits_per_sample?))?;
+  let rounded_kbps = bits_per_second.checked_add(500)? / 1000;
+
+  i32::try_from(rounded_kbps)
+    .ok()
+    .filter(|bitrate| *bitrate > 0)
 }
 
 /// Map a raw ID3v2 `POPM` rating (0-255) to Crate's 0-5 star scale.
@@ -653,5 +710,33 @@ mod tests {
     tag.insert_text(ItemKey::TrackTitle, "Some Title".to_string());
 
     assert_eq!(service().extract_rating(&tag), 0);
+  }
+
+  #[test]
+  fn pcm_bitrate_kbps_matches_uncompressed_audio_rates() {
+    assert_eq!(
+      pcm_bitrate_kbps(Some(44_100), Some(2), Some(16)),
+      Some(1411)
+    );
+    assert_eq!(
+      pcm_bitrate_kbps(Some(48_000), Some(2), Some(24)),
+      Some(2304)
+    );
+    assert_eq!(pcm_bitrate_kbps(Some(44_100), Some(1), Some(16)), Some(706));
+  }
+
+  #[test]
+  fn pcm_bitrate_kbps_returns_none_for_missing_inputs() {
+    assert_eq!(pcm_bitrate_kbps(None, Some(2), Some(16)), None);
+    assert_eq!(pcm_bitrate_kbps(Some(44_100), None, Some(16)), None);
+    assert_eq!(pcm_bitrate_kbps(Some(44_100), Some(2), None), None);
+  }
+
+  #[test]
+  fn pcm_bitrate_kbps_returns_none_for_zero_inputs_or_rounded_result() {
+    assert_eq!(pcm_bitrate_kbps(Some(0), Some(2), Some(16)), None);
+    assert_eq!(pcm_bitrate_kbps(Some(44_100), Some(0), Some(16)), None);
+    assert_eq!(pcm_bitrate_kbps(Some(44_100), Some(2), Some(0)), None);
+    assert_eq!(pcm_bitrate_kbps(Some(1), Some(1), Some(1)), None);
   }
 }

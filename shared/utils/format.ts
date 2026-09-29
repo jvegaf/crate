@@ -223,13 +223,11 @@ export function formatRelativeDate(dateStr: string, t: TranslateFn): string {
 }
 
 /**
- * Format bitrate for display
+ * Format bitrate for display. The database stores kbps from lofty's audio_bitrate, so callers must not convert units.
  */
 export function formatBitrate(bitrate: number | null): string {
-	if (bitrate === null) return '-'
-	const kbps = Math.round(bitrate / 1000)
-	if (bitrate > 0 && kbps === 0) return '< 1 kbps'
-	return `${kbps} kbps`
+	if (bitrate === null || bitrate <= 0) return '-'
+	return `${Math.round(bitrate)} kbps`
 }
 
 /**
