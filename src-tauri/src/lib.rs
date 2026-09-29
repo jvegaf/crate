@@ -140,6 +140,8 @@ pub fn run() {
       #[cfg(feature = "desktop")]
       commands::library::update_track,
       #[cfg(feature = "desktop")]
+      commands::library::update_track_metadata,
+      #[cfg(feature = "desktop")]
       commands::library::delete_tracks,
       #[cfg(feature = "desktop")]
       commands::library::search_tracks,

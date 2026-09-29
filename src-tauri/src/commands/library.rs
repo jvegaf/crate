@@ -5,7 +5,7 @@ use tauri::{Emitter, State};
 use crate::error::{CrateError, Result};
 use crate::models::{
   DuplicateResolution, FileMatchResult, ImportResult, ImportResultWithDuplicates, Track,
-  TrackFilter, TrackUpdate,
+  TrackFilter, TrackMetadataPatch, TrackUpdate,
 };
 use crate::services::library::{LibraryFolderScanResult, RescanResult};
 use crate::services::LibraryService;
@@ -39,6 +39,15 @@ pub async fn update_track(
   library: State<'_, LibraryService>,
 ) -> Result<Track> {
   library.update_track(&id, update)
+}
+
+#[tauri::command]
+pub async fn update_track_metadata(
+  id: String,
+  patch: TrackMetadataPatch,
+  library: State<'_, LibraryService>,
+) -> Result<Track> {
+  library.update_track_metadata(&id, patch)
 }
 
 #[tauri::command]

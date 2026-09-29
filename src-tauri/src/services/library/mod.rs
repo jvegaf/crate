@@ -1,6 +1,7 @@
 mod artwork;
 mod duplicates;
 mod import;
+mod metadata_update;
 mod query;
 mod relocation;
 mod scan;
@@ -14,7 +15,7 @@ use rusqlite::Connection;
 use crate::error::{CrateError, Result};
 use crate::models::{
   DuplicateResolution, DuplicateTrack, FileMatchResult, ImportResult, ImportResultWithDuplicates,
-  Tag, Track, TrackFilter, TrackUpdate,
+  MetadataField, Tag, Track, TrackFilter, TrackMetadataPatch, TrackUpdate,
 };
 use crate::services::file_tags::FileTagsService;
 use crate::services::hash::compute_audio_hash;
