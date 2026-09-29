@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "Trackinfo",
 		"tracksCount": "{count} tracks",
+		"information": "Informatie",
+		"additional": "Aanvullend",
+		"tags": "Tags",
+		"addTags": "Tags toevoegen",
+		"searchTags": "Tags zoeken",
+		"createTag": "\"{name}\" maken",
+		"noTagsYet": "Geen tags",
 		"title": "Titel",
 		"artist": "Artiest",
 		"album": "Album",

@@ -693,6 +693,13 @@
 	"editor": {
 		"trackInfo": "Información de la pista",
 		"tracksCount": "{count} pistas",
+		"information": "Información",
+		"additional": "Adicional",
+		"tags": "Etiquetas",
+		"addTags": "Añadir etiquetas",
+		"searchTags": "Buscar etiquetas",
+		"createTag": "Crear «{name}»",
+		"noTagsYet": "Sin etiquetas",
 		"title": "Título",
 		"artist": "Artista",
 		"album": "Álbum",

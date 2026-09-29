@@ -754,6 +754,13 @@
 	"editor": {
 		"trackInfo": "Track Info",
 		"tracksCount": "{count} Tracks",
+		"information": "Information",
+		"additional": "Additional",
+		"tags": "Tags",
+		"addTags": "Add tags",
+		"searchTags": "Search tags",
+		"createTag": "Create \"{name}\"",
+		"noTagsYet": "No tags",
 		"title": "Title",
 		"artist": "Artist",
 		"album": "Album",

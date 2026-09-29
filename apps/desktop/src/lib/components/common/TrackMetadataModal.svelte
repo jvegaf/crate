@@ -12,6 +12,7 @@
 	import AlbumArt from './AlbumArt.svelte'
 	import Button from './Button.svelte'
 	import Modal from './Modal.svelte'
+	import Text from './Text.svelte'
 
 	type SaveResult = { errors: string[] }
 	type EditableField =
@@ -312,10 +313,39 @@
 			</div>
 		{/if}
 
-		<section class="space-y-3">
-			<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.details')}</h3>
+		<section class="space-y-4 border-t border-stroke pt-5">
+			<Text size="xs" weight="semibold" color="secondary" as="h3">
+				{$translate('editor.information')}
+			</Text>
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-				{#each nullableFields as field (field)}
+				{#each nullableFields.filter( (field) => ['title', 'artist', 'album', 'year', 'label'].includes(field) ) as field (field)}
+					<label class="space-y-1 text-sm text-text-secondary">
+						<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
+						<div class="flex gap-2">
+							<input
+								class="min-w-0 flex-1 rounded-md border border-stroke bg-surface-0 px-3 py-2 text-text-primary outline-none focus:border-brand-primary"
+								type={field === 'year' || field === 'bpm' ? 'number' : 'text'}
+								step={field === 'bpm' ? 'any' : '1'}
+								value={fieldValue(field)}
+								oninput={(event) => setField(field, event.currentTarget.value)}
+							/>
+							{#if nullableFields.includes(field)}
+								<Button variant="secondary" size="sm" disabled={saving} onclick={() => clearField(field)}>
+									{$translate('modals.trackMetadata.clearField')}
+								</Button>
+							{/if}
+						</div>
+					</label>
+				{/each}
+			</div>
+		</section>
+
+		<section class="space-y-4 border-t border-stroke pt-5">
+			<Text size="xs" weight="semibold" color="secondary" as="h3">
+				{$translate('editor.additional')}
+			</Text>
+			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+				{#each nullableFields.filter( (field) => ['bpm', 'key', 'genre', 'catalog_number'].includes(field) ) as field (field)}
 					<label class="space-y-1 text-sm text-text-secondary">
 						<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
 						<div class="flex gap-2">
@@ -382,39 +412,39 @@
 
 			<div class="space-y-3">
 				<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.crateArtwork')}</h3>
-				<div class="flex items-center gap-3">
-					<AlbumArt artworkPath={track.artwork_path} size="sm" />
-					<div class="min-w-0 flex-1 text-sm text-text-secondary">
-						<p>{$translate('modals.trackMetadata.crateArtworkHint')}</p>
-						{#if crateArtwork.type === 'set'}
-							<p class="truncate text-xs">{crateArtwork.filePath}</p>
-						{:else if crateArtwork.type === 'clear'}
-							<p class="text-xs">{$translate('modals.trackMetadata.artworkWillClear')}</p>
-						{/if}
-					</div>
+				<div class="w-40 shrink-0">
+					<AlbumArt size="lg" artworkPath={track.artwork_path} />
 				</div>
-				<div class="flex flex-wrap gap-2">
-					<Button variant="secondary" size="sm" disabled={saving} onclick={handleSelectCrateArtwork}>
-						{$translate('modals.trackMetadata.chooseArtwork')}
-					</Button>
-					<Button
-						variant="secondary"
-						size="sm"
-						disabled={saving || (track.artwork_path === null && crateArtwork.type !== 'set')}
-						onclick={() => (crateArtwork = { type: 'clear' })}
-					>
-						{$translate('modals.trackMetadata.clearArtwork')}
-					</Button>
-					{#if crateArtwork.type !== 'unchanged'}
+				<div class="min-w-0 text-sm text-text-secondary">
+					<p>{$translate('modals.trackMetadata.crateArtworkHint')}</p>
+					{#if crateArtwork.type === 'set'}
+						<p class="truncate text-xs">{crateArtwork.filePath}</p>
+					{:else if crateArtwork.type === 'clear'}
+						<p class="text-xs">{$translate('modals.trackMetadata.artworkWillClear')}</p>
+					{/if}
+					<div class="flex flex-wrap gap-2">
+						<Button variant="secondary" size="sm" disabled={saving} onclick={handleSelectCrateArtwork}>
+							{$translate('modals.trackMetadata.chooseArtwork')}
+						</Button>
 						<Button
 							variant="secondary"
 							size="sm"
-							disabled={saving}
-							onclick={() => (crateArtwork = { type: 'unchanged' })}
+							disabled={saving || (track.artwork_path === null && crateArtwork.type !== 'set')}
+							onclick={() => (crateArtwork = { type: 'clear' })}
 						>
-							{$translate('modals.trackMetadata.undoArtworkChange')}
+							{$translate('modals.trackMetadata.clearArtwork')}
 						</Button>
-					{/if}
+						{#if crateArtwork.type !== 'unchanged'}
+							<Button
+								variant="secondary"
+								size="sm"
+								disabled={saving}
+								onclick={() => (crateArtwork = { type: 'unchanged' })}
+							>
+								{$translate('modals.trackMetadata.undoArtworkChange')}
+							</Button>
+						{/if}
+					</div>
 				</div>
 			</div>
 		</section>

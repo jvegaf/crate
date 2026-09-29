@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "Informacje o ścieżce",
 		"tracksCount": "{count} ścieżek",
+		"information": "Informacje",
+		"additional": "Dodatkowe",
+		"tags": "Tagi",
+		"addTags": "Dodaj tagi",
+		"searchTags": "Szukaj tagów",
+		"createTag": "Utwórz „{name}”",
+		"noTagsYet": "Brak tagów",
 		"title": "Tytuł",
 		"artist": "Artysta",
 		"album": "Album",

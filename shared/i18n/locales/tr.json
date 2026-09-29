@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "Şarkı Bilgileri",
 		"tracksCount": "{count} Şarkı",
+		"information": "Bilgiler",
+		"additional": "Ek bilgiler",
+		"tags": "Etiketler",
+		"addTags": "Etiket ekle",
+		"searchTags": "Etiket ara",
+		"createTag": "\"{name}\" oluştur",
+		"noTagsYet": "Etiket yok",
 		"title": "Başlık",
 		"artist": "Sanatçı",
 		"album": "Albüm",

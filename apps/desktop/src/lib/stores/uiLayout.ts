@@ -40,7 +40,7 @@ interface UILayoutState {
 const initialState: UILayoutState = {
 	sidebarWidth: getStoredNumber('sidebarWidth', 240),
 	rightSidebarVisible: getStoredBoolean('rightSidebarVisible', false),
-	rightSidebarWidth: getStoredNumber('rightSidebarWidth', 320),
+	rightSidebarWidth: getStoredNumber('rightSidebarWidth', 440),
 	activeModal: null,
 	contextMenuOpen: false,
 	contextMenuPosition: { x: 0, y: 0 },
@@ -103,7 +103,7 @@ function createUILayoutStore() {
 		 * Set right sidebar width
 		 */
 		setRightSidebarWidth(width: number) {
-			const clampedWidth = Math.max(280, Math.min(500, width))
+			const clampedWidth = Math.max(280, Math.min(640, width))
 			setStoredNumber('rightSidebarWidth', clampedWidth)
 			update((state) => ({ ...state, rightSidebarWidth: clampedWidth }))
 		},

@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "트랙 정보",
 		"tracksCount": "{count}개의 트랙",
+		"information": "정보",
+		"additional": "추가 정보",
+		"tags": "태그",
+		"addTags": "태그 추가",
+		"searchTags": "태그 검색",
+		"createTag": "\"{name}\" 만들기",
+		"noTagsYet": "태그 없음",
 		"title": "제목",
 		"artist": "아티스트",
 		"album": "앨범",

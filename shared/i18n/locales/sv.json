@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "Spårinfo",
 		"tracksCount": "{count} spår",
+		"information": "Information",
+		"additional": "Ytterligare",
+		"tags": "Taggar",
+		"addTags": "Lägg till taggar",
+		"searchTags": "Sök taggar",
+		"createTag": "Skapa ”{name}”",
+		"noTagsYet": "Inga taggar",
 		"title": "Titel",
 		"artist": "Artist",
 		"album": "Album",

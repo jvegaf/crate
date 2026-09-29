@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "曲目信息",
 		"tracksCount": "{count} 首曲目",
+		"information": "信息",
+		"additional": "附加信息",
+		"tags": "标签",
+		"addTags": "添加标签",
+		"searchTags": "搜索标签",
+		"createTag": "创建“{name}”",
+		"noTagsYet": "无标签",
 		"title": "标题",
 		"artist": "艺术家",
 		"album": "专辑",

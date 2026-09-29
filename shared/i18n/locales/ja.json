@@ -696,6 +696,13 @@
 	"editor": {
 		"trackInfo": "トラック情報",
 		"tracksCount": "{count}曲のトラック",
+		"information": "情報",
+		"additional": "追加情報",
+		"tags": "タグ",
+		"addTags": "タグを追加",
+		"searchTags": "タグを検索",
+		"createTag": "「{name}」を作成",
+		"noTagsYet": "タグなし",
 		"title": "タイトル",
 		"artist": "アーティスト",
 		"album": "アルバム",

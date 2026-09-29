@@ -5,13 +5,16 @@
 	import { uiLayoutStore } from '$lib/stores/uiLayout'
 	import { computeBulkTrackInfo } from '$shared/utils'
 	import * as libraryApi from '$shared/api/library'
+	import { assignTags, removeTags } from '$shared/api/tags'
 	import type { Track, TrackUpdate } from '$shared/types'
-	import Icon from '$lib/components/common/Icon.svelte'
 	import IconButton from '$lib/components/common/IconButton.svelte'
 	import Text from '$lib/components/common/Text.svelte'
 	import Tooltip from '$lib/components/common/Tooltip.svelte'
+	import Button from '$lib/components/common/Button.svelte'
+	import TagChip from '$lib/components/tags/TagChip.svelte'
 	import EditorField from './EditorField.svelte'
 	import EditorArtwork from './EditorArtwork.svelte'
+	import EditorTagPicker from './EditorTagPicker.svelte'
 	import { translate } from '$shared/i18n'
 	import { get } from 'svelte/store'
 
@@ -24,6 +27,11 @@
 
 	// Compute bulk info from selected tracks
 	let bulkInfo = $derived(computeBulkTrackInfo(selectedTracks))
+	let selectedTagUnion = $derived([
+		...new Map(selectedTracks.flatMap((track) => track.tags).map((tag) => [tag.id, tag])).values(),
+	])
+	let tagPickerOpen = $state(false)
+	let tagOperationInFlight = $state(false)
 
 	// Resolved artwork path when multiple tracks share identical artwork
 	let resolvedArtworkPath = $state<string | null>(null)
@@ -179,6 +187,37 @@
 		}
 	}
 
+	async function applyTagOp(operation: 'assign' | 'remove', tagId: string) {
+		if (tagOperationInFlight) return
+		const ids = selectedTracks.map((track) => track.id)
+		if (ids.length === 0) return
+
+		tagOperationInFlight = true
+		let changed = false
+		try {
+			if (operation === 'assign') await assignTags(ids, [tagId])
+			else await removeTags(ids, [tagId])
+			changed = true
+
+			try {
+				const refreshed = await Promise.all(ids.map((id) => libraryApi.getTrack(id)))
+				libraryStore.updateTracksInState(refreshed)
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error)
+				toastStore.error(`${get(translate)('modals.trackMetadata.errors.refresh')}: ${message}`)
+			}
+		} catch (error) {
+			console.error(`Failed to ${operation} tag:`, error)
+			const messageKey =
+				operation === 'assign' ? 'modals.trackMetadata.errors.addTags' : 'modals.trackMetadata.errors.removeTags'
+			const message = error instanceof Error ? error.message : String(error)
+			toastStore.error(`${get(translate)(messageKey)}: ${message}`)
+		} finally {
+			if (changed) syncStore.notifyTrackChanges(ids)
+			tagOperationInFlight = false
+		}
+	}
+
 	function handleClose() {
 		uiLayoutStore.setRightSidebarVisible(false)
 	}
@@ -210,46 +249,81 @@
 			onReextract={handleArtworkReextract}
 		/>
 
-		<!-- Divider -->
-		<div class="border-t border-stroke"></div>
-
-		<!-- Fields section -->
-		<div class="space-y-4">
-			<EditorField
-				label={$translate('editor.title')}
-				value={formData.title ?? bulkInfo.title.value}
-				mixed={bulkInfo.title.mixed && formData.title === undefined}
-				onchange={handleFieldChange('title')}
-				onsubmit={handleSave}
-				onblur={handleSave}
-			/>
-			<EditorField
-				label={$translate('editor.artist')}
-				value={formData.artist ?? bulkInfo.artist.value}
-				mixed={bulkInfo.artist.mixed && formData.artist === undefined}
-				onchange={handleFieldChange('artist')}
-				onsubmit={handleSave}
-				onblur={handleSave}
-			/>
-			<EditorField
-				label={$translate('editor.album')}
-				value={formData.album ?? bulkInfo.album.value}
-				mixed={bulkInfo.album.mixed && formData.album === undefined}
-				onchange={handleFieldChange('album')}
-				onsubmit={handleSave}
-				onblur={handleSave}
-			/>
-
-			<div class="grid grid-cols-2 gap-3">
+		<section class="space-y-4 border-t border-stroke pt-5">
+			<Text size="xs" weight="semibold" color="secondary" as="h3">
+				{$translate('editor.information')}
+			</Text>
+			<div class="space-y-4">
 				<EditorField
-					label={$translate('editor.year')}
-					type="number"
-					value={formData.year ?? bulkInfo.year.value}
-					mixed={bulkInfo.year.mixed && formData.year === undefined}
-					onchange={handleFieldChange('year')}
+					label={$translate('editor.title')}
+					value={formData.title ?? bulkInfo.title.value}
+					mixed={bulkInfo.title.mixed && formData.title === undefined}
+					onchange={handleFieldChange('title')}
 					onsubmit={handleSave}
 					onblur={handleSave}
 				/>
+				<EditorField
+					label={$translate('editor.artist')}
+					value={formData.artist ?? bulkInfo.artist.value}
+					mixed={bulkInfo.artist.mixed && formData.artist === undefined}
+					onchange={handleFieldChange('artist')}
+					onsubmit={handleSave}
+					onblur={handleSave}
+				/>
+				<EditorField
+					label={$translate('editor.album')}
+					value={formData.album ?? bulkInfo.album.value}
+					mixed={bulkInfo.album.mixed && formData.album === undefined}
+					onchange={handleFieldChange('album')}
+					onsubmit={handleSave}
+					onblur={handleSave}
+				/>
+				<div class="grid grid-cols-2 gap-3">
+					<EditorField
+						label={$translate('editor.year')}
+						type="number"
+						value={formData.year ?? bulkInfo.year.value}
+						mixed={bulkInfo.year.mixed && formData.year === undefined}
+						onchange={handleFieldChange('year')}
+						onsubmit={handleSave}
+						onblur={handleSave}
+					/>
+					<EditorField
+						label={$translate('editor.label')}
+						value={formData.label ?? bulkInfo.label.value}
+						mixed={bulkInfo.label.mixed && formData.label === undefined}
+						onchange={handleFieldChange('label')}
+						onsubmit={handleSave}
+						onblur={handleSave}
+					/>
+				</div>
+			</div>
+		</section>
+
+		<section class="space-y-4 border-t border-stroke pt-5">
+			<Text size="xs" weight="semibold" color="secondary" as="h3">
+				{$translate('editor.additional')}
+			</Text>
+			<div class="space-y-4">
+				<div class="grid grid-cols-2 gap-3">
+					<EditorField
+						label={$translate('editor.bpm')}
+						type="number"
+						value={formData.bpm ?? bulkInfo.bpm.value}
+						mixed={bulkInfo.bpm.mixed && formData.bpm === undefined}
+						onchange={handleFieldChange('bpm')}
+						onsubmit={handleSave}
+						onblur={handleSave}
+					/>
+					<EditorField
+						label={$translate('editor.key')}
+						value={formData.key ?? bulkInfo.key.value}
+						mixed={bulkInfo.key.mixed && formData.key === undefined}
+						onchange={handleFieldChange('key')}
+						onsubmit={handleSave}
+						onblur={handleSave}
+					/>
+				</div>
 				<EditorField
 					label={$translate('editor.genre')}
 					value={formData.genre ?? bulkInfo.genre.value}
@@ -259,35 +333,40 @@
 					onblur={handleSave}
 				/>
 			</div>
+		</section>
 
-			<EditorField
-				label={$translate('editor.label')}
-				value={formData.label ?? bulkInfo.label.value}
-				mixed={bulkInfo.label.mixed && formData.label === undefined}
-				onchange={handleFieldChange('label')}
-				onsubmit={handleSave}
-				onblur={handleSave}
-			/>
-
-			<div class="grid grid-cols-2 gap-3">
-				<EditorField
-					label={$translate('editor.bpm')}
-					type="number"
-					value={formData.bpm ?? bulkInfo.bpm.value}
-					mixed={bulkInfo.bpm.mixed && formData.bpm === undefined}
-					onchange={handleFieldChange('bpm')}
-					onsubmit={handleSave}
-					onblur={handleSave}
-				/>
-				<EditorField
-					label={$translate('editor.key')}
-					value={formData.key ?? bulkInfo.key.value}
-					mixed={bulkInfo.key.mixed && formData.key === undefined}
-					onchange={handleFieldChange('key')}
-					onsubmit={handleSave}
-					onblur={handleSave}
-				/>
+		<section class="space-y-4 border-t border-stroke pt-5">
+			<Text size="xs" weight="semibold" color="secondary" as="h3">
+				{$translate('editor.tags')}
+			</Text>
+			{#if selectedTagUnion.length > 0}
+				<div class="flex flex-wrap gap-1.5">
+					{#each selectedTagUnion as tag (tag.id)}
+						<TagChip {tag} size="sm" removable={!tagOperationInFlight} onremove={() => applyTagOp('remove', tag.id)} />
+					{/each}
+				</div>
+			{:else}
+				<Text size="xs" color="secondary">{$translate('editor.noTagsYet')}</Text>
+			{/if}
+			<div class="relative inline-block">
+				<Button
+					variant="secondary"
+					size="sm"
+					disabled={tagOperationInFlight}
+					onclick={() => (tagPickerOpen = !tagPickerOpen)}
+				>
+					{$translate('editor.addTags')}
+				</Button>
+				{#if tagPickerOpen}
+					<EditorTagPicker
+						selectedTagIds={selectedTagUnion.map((tag) => tag.id)}
+						disabled={tagOperationInFlight}
+						onAssign={(tagId) => applyTagOp('assign', tagId)}
+						onUnassign={(tagId) => applyTagOp('remove', tagId)}
+						onClose={() => (tagPickerOpen = false)}
+					/>
+				{/if}
 			</div>
-		</div>
+		</section>
 	</div>
 </div>

@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "Інформація про доріжку",
 		"tracksCount": "{count} доріжок",
+		"information": "Інформація",
+		"additional": "Додатково",
+		"tags": "Теги",
+		"addTags": "Додати теги",
+		"searchTags": "Пошук тегів",
+		"createTag": "Створити «{name}»",
+		"noTagsYet": "Немає тегів",
 		"title": "Назва",
 		"artist": "Виконавець",
 		"album": "Альбом",

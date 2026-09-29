@@ -695,6 +695,13 @@
 	"editor": {
 		"trackInfo": "Info Melodie",
 		"tracksCount": "{count} Melodii",
+		"information": "Informații",
+		"additional": "Suplimentar",
+		"tags": "Etichete",
+		"addTags": "Adaugă etichete",
+		"searchTags": "Caută etichete",
+		"createTag": "Creează „{name}”",
+		"noTagsYet": "Fără etichete",
 		"title": "Titlu",
 		"artist": "Artist",
 		"album": "Album",
