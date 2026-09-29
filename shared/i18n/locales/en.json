@@ -579,7 +579,7 @@
 				"catalogNumber": "Catalog Number",
 				"bpm": "BPM",
 				"key": "Key",
-				"rating": "Rating (0–5; clear sets to 0)"
+				"rating": "Rating"
 			},
 			"readOnly": {
 				"duration": "Duration",
