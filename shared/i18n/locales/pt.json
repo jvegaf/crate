@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "Nenhuma categoria de tag ainda"
 	},
 	"contextMenu": {
+		"findTrackTags": "Buscar tags da faixa",
 		"viewInFinder": "Ver no Finder",
 		"viewInExplorer": "Ver no Explorador",
 		"viewInFileManager": "Ver no gerenciador de arquivos",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Falha ao definir capa",
 		"failedToRemoveArtwork": "Falha ao remover capa",
 		"noArtworkInFile": "Nenhuma capa encontrada no arquivo de áudio"
+	},
+	"tagger": {
+		"title": "Buscar tags da faixa",
+		"searching": "Pesquisando provedores…",
+		"enriching": "Carregando detalhes da faixa…",
+		"noResults": "Nenhum candidato obteve pontuação suficiente.",
+		"providerErrors": "Não foi possível contatar alguns provedores",
+		"selectHint": "Escolha a correspondência correta e depois aplique-a",
+		"apply": "Aplicar tags",
+		"applying": "Aplicando…",
+		"score": "Correspondência",
+		"toast": {
+			"applied": "Tags da faixa aplicadas",
+			"searchFailed": "Falha ao buscar as tags da faixa",
+			"extendFailed": "Falha ao carregar os detalhes da faixa",
+			"applyFailed": "Falha ao aplicar as tags da faixa"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Não é possível soltar uma pasta dentro de si mesma",

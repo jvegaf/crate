@@ -472,6 +472,7 @@
 		"noTagCategoriesYet": "Brak kategorii tagów"
 	},
 	"contextMenu": {
+		"findTrackTags": "Znajdź tagi utworu",
 		"viewInFinder": "Pokaż w Finderze",
 		"viewInExplorer": "Pokaż w Eksploratorze",
 		"viewInFileManager": "Pokaż w menedżerze plików",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Nie udało się ustawić grafiki",
 		"failedToRemoveArtwork": "Nie udało się usunąć grafiki",
 		"noArtworkInFile": "Nie znaleziono grafiki w pliku audio"
+	},
+	"tagger": {
+		"title": "Znajdź tagi utworu",
+		"searching": "Wyszukiwanie dostawców…",
+		"enriching": "Wczytywanie szczegółów utworu…",
+		"noResults": "Żaden kandydat nie uzyskał wystarczająco wysokiego wyniku.",
+		"providerErrors": "Nie udało się połączyć z niektórymi dostawcami",
+		"selectHint": "Wybierz prawidłowe dopasowanie, a następnie je zastosuj",
+		"apply": "Zastosuj tagi",
+		"applying": "Stosowanie…",
+		"score": "Dopasowanie",
+		"toast": {
+			"applied": "Tagi utworu zastosowane",
+			"searchFailed": "Nie udało się wyszukać tagów utworu",
+			"extendFailed": "Nie udało się wczytać szczegółów utworu",
+			"applyFailed": "Nie udało się zastosować tagów utworu"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Nie można upuszczać folderu na siebie",

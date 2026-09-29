@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "Aucune catégorie de tag pour le moment"
 	},
 	"contextMenu": {
+		"findTrackTags": "Rechercher les tags de la piste",
 		"viewInFinder": "Afficher dans le Finder",
 		"viewInExplorer": "Afficher dans l'Explorateur",
 		"viewInFileManager": "Afficher dans le gestionnaire de fichiers",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Échec de la définition de la pochette",
 		"failedToRemoveArtwork": "Échec de la suppression de la pochette",
 		"noArtworkInFile": "Aucune pochette trouvée dans le fichier audio"
+	},
+	"tagger": {
+		"title": "Rechercher les tags de la piste",
+		"searching": "Recherche des fournisseurs…",
+		"enriching": "Chargement des détails de la piste…",
+		"noResults": "Aucun candidat n'a obtenu un score suffisamment élevé.",
+		"providerErrors": "Certains fournisseurs n'ont pas pu être contactés",
+		"selectHint": "Sélectionnez la bonne correspondance, puis appliquez-la",
+		"apply": "Appliquer les tags",
+		"applying": "Application…",
+		"score": "Correspondance",
+		"toast": {
+			"applied": "Tags de la piste appliqués",
+			"searchFailed": "Échec de la recherche des tags de la piste",
+			"extendFailed": "Échec du chargement des détails de la piste",
+			"applyFailed": "Échec de l'application des tags de la piste"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Impossible de déposer un dossier dans lui-même",

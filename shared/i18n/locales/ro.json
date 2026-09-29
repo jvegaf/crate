@@ -472,6 +472,7 @@
 		"noTagCategoriesYet": "Nicio categorie de etichete deocamdată"
 	},
 	"contextMenu": {
+		"findTrackTags": "Găsește etichete pentru melodie",
 		"viewInFinder": "Arată în Finder",
 		"viewInExplorer": "Arată în Explorer",
 		"viewInFileManager": "Arată în File Manager",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Eșec la setarea ilustrației",
 		"failedToRemoveArtwork": "Eșec la eliminarea ilustrației",
 		"noArtworkInFile": "Nicio ilustrație găsită în fișierul audio"
+	},
+	"tagger": {
+		"title": "Găsește etichete pentru melodie",
+		"searching": "Se caută furnizorii…",
+		"enriching": "Se încarcă detaliile melodiei…",
+		"noResults": "Niciun candidat nu a obținut un punctaj suficient de mare.",
+		"providerErrors": "Unii furnizori nu au putut fi contactați",
+		"selectHint": "Alege potrivirea corectă, apoi aplică-o",
+		"apply": "Aplică etichetele",
+		"applying": "Se aplică…",
+		"score": "Potrivire",
+		"toast": {
+			"applied": "Etichetele melodiei au fost aplicate",
+			"searchFailed": "Căutarea etichetelor melodiei a eșuat",
+			"extendFailed": "Încărcarea detaliilor melodiei a eșuat",
+			"applyFailed": "Aplicarea etichetelor melodiei a eșuat"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Nu puteți muta un folder în el însuși",

@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "Noch keine Tag-Kategorien"
 	},
 	"contextMenu": {
+		"findTrackTags": "Track-Tags finden",
 		"viewInFinder": "Im Finder anzeigen",
 		"viewInExplorer": "Im Explorer anzeigen",
 		"viewInFileManager": "Im Dateimanager anzeigen",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Artwork konnte nicht festgelegt werden",
 		"failedToRemoveArtwork": "Artwork konnte nicht entfernt werden",
 		"noArtworkInFile": "Kein Artwork in Audiodatei gefunden"
+	},
+	"tagger": {
+		"title": "Track-Tags finden",
+		"searching": "Anbieter werden durchsucht…",
+		"enriching": "Track-Details werden geladen…",
+		"noResults": "Kein Kandidat hat eine ausreichend hohe Bewertung erzielt.",
+		"providerErrors": "Einige Anbieter waren nicht erreichbar",
+		"selectHint": "Wählen Sie den richtigen Treffer aus und wenden Sie ihn an",
+		"apply": "Tags anwenden",
+		"applying": "Wird angewendet…",
+		"score": "Übereinstimmung",
+		"toast": {
+			"applied": "Track-Tags angewendet",
+			"searchFailed": "Track-Tags konnten nicht gesucht werden",
+			"extendFailed": "Track-Details konnten nicht geladen werden",
+			"applyFailed": "Track-Tags konnten nicht angewendet werden"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Ein Ordner kann nicht in sich selbst gezogen werden",

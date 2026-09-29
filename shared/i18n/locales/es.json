@@ -471,6 +471,7 @@
 		"noTagCategoriesYet": "Sin categorías de etiquetas aún"
 	},
 	"contextMenu": {
+		"findTrackTags": "Buscar etiquetas de la pista",
 		"viewInFinder": "Ver en Finder",
 		"viewInExplorer": "Ver en Explorador",
 		"viewInFileManager": "Ver en gestor de archivos",
@@ -626,6 +627,23 @@
 		"failedToSetArtwork": "Error al establecer la carátula",
 		"failedToRemoveArtwork": "Error al quitar la carátula",
 		"noArtworkInFile": "No se encontró carátula en el archivo de audio"
+	},
+	"tagger": {
+		"title": "Buscar etiquetas de la pista",
+		"searching": "Buscando proveedores…",
+		"enriching": "Cargando detalles de la pista…",
+		"noResults": "Ningún candidato obtuvo una puntuación lo bastante alta.",
+		"providerErrors": "No se pudo conectar con algunos proveedores",
+		"selectHint": "Elige la coincidencia correcta y luego aplícala",
+		"apply": "Aplicar etiquetas",
+		"applying": "Aplicando…",
+		"score": "Coincidencia",
+		"toast": {
+			"applied": "Etiquetas de la pista aplicadas",
+			"searchFailed": "No se pudieron buscar las etiquetas de la pista",
+			"extendFailed": "No se pudieron cargar los detalles de la pista",
+			"applyFailed": "No se pudieron aplicar las etiquetas de la pista"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "No se puede soltar una carpeta dentro de sí misma",

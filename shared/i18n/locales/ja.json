@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "まだタグカテゴリがありません"
 	},
 	"contextMenu": {
+		"findTrackTags": "トラックのタグを検索",
 		"viewInFinder": "Finderで表示",
 		"viewInExplorer": "エクスプローラーで表示",
 		"viewInFileManager": "ファイルマネージャーで表示",
@@ -629,6 +630,23 @@
 		"failedToSetArtwork": "アートワークの設定に失敗しました",
 		"failedToRemoveArtwork": "アートワークの削除に失敗しました",
 		"noArtworkInFile": "オーディオファイルにアートワークが見つかりません"
+	},
+	"tagger": {
+		"title": "トラックのタグを検索",
+		"searching": "プロバイダーを検索中…",
+		"enriching": "トラックの詳細を読み込み中…",
+		"noResults": "十分なスコアの候補が見つかりませんでした。",
+		"providerErrors": "一部のプロバイダーに接続できませんでした",
+		"selectHint": "正しい一致を選択して適用してください",
+		"apply": "タグを適用",
+		"applying": "適用中…",
+		"score": "一致",
+		"toast": {
+			"applied": "トラックのタグを適用しました",
+			"searchFailed": "トラックのタグを検索できませんでした",
+			"extendFailed": "トラックの詳細を読み込めませんでした",
+			"applyFailed": "トラックのタグを適用できませんでした"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "フォルダを自分自身にドロップすることはできません",

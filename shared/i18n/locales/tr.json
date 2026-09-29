@@ -472,6 +472,7 @@
 		"noTagCategoriesYet": "Henüz etiket kategorisi yok"
 	},
 	"contextMenu": {
+		"findTrackTags": "Parça etiketlerini bul",
 		"viewInFinder": "Finder'da Göster",
 		"viewInExplorer": "Explorer'da Göster",
 		"viewInFileManager": "Dosya Yöneticisinde Göster",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Kapak sanatı ayarlanamadı",
 		"failedToRemoveArtwork": "Kapak sanatı kaldırılamadı",
 		"noArtworkInFile": "Ses dosyasında kapak sanatı bulunamadı"
+	},
+	"tagger": {
+		"title": "Parça etiketlerini bul",
+		"searching": "Sağlayıcılar aranıyor…",
+		"enriching": "Parça ayrıntıları yükleniyor…",
+		"noResults": "Yeterince yüksek puan alan bir aday yok.",
+		"providerErrors": "Bazı sağlayıcılara ulaşılamadı",
+		"selectHint": "Doğru eşleşmeyi seçin ve ardından uygulayın",
+		"apply": "Etiketleri uygula",
+		"applying": "Uygulanıyor…",
+		"score": "Eşleşme",
+		"toast": {
+			"applied": "Parça etiketleri uygulandı",
+			"searchFailed": "Parça etiketleri aranamadı",
+			"extendFailed": "Parça ayrıntıları yüklenemedi",
+			"applyFailed": "Parça etiketleri uygulanamadı"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Klasör kendisine sürüklenemez",

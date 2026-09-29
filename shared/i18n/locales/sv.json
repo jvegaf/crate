@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "Inga taggkategorier än"
 	},
 	"contextMenu": {
+		"findTrackTags": "Hitta spårtaggar",
 		"viewInFinder": "Visa i Finder",
 		"viewInExplorer": "Visa i Utforskaren",
 		"viewInFileManager": "Visa i filhanteraren",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Kunde inte ställa in omslag",
 		"failedToRemoveArtwork": "Kunde inte ta bort omslag",
 		"noArtworkInFile": "Inget omslag hittades i ljudfilen"
+	},
+	"tagger": {
+		"title": "Hitta spårtaggar",
+		"searching": "Söker bland leverantörer…",
+		"enriching": "Laddar spårinformation…",
+		"noResults": "Ingen kandidat fick en tillräckligt hög poäng.",
+		"providerErrors": "Vissa leverantörer kunde inte nås",
+		"selectHint": "Välj rätt träff och tillämpa den sedan",
+		"apply": "Tillämpa taggar",
+		"applying": "Tillämpar…",
+		"score": "Matchning",
+		"toast": {
+			"applied": "Spårtaggar tillämpade",
+			"searchFailed": "Det gick inte att söka efter spårtaggar",
+			"extendFailed": "Det gick inte att ladda spårinformationen",
+			"applyFailed": "Det gick inte att tillämpa spårtaggar"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Kan inte släppa en mapp i sig själv",

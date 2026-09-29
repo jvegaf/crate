@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "Nessuna categoria di tag per ora"
 	},
 	"contextMenu": {
+		"findTrackTags": "Trova tag della traccia",
 		"viewInFinder": "Visualizza nel Finder",
 		"viewInExplorer": "Visualizza in Esplora risorse",
 		"viewInFileManager": "Visualizza nel gestore file",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Impossibile impostare la copertina",
 		"failedToRemoveArtwork": "Impossibile rimuovere la copertina",
 		"noArtworkInFile": "Nessuna copertina trovata nel file audio"
+	},
+	"tagger": {
+		"title": "Trova tag della traccia",
+		"searching": "Ricerca tra i fornitori…",
+		"enriching": "Caricamento dei dettagli della traccia…",
+		"noResults": "Nessun candidato ha ottenuto un punteggio sufficientemente alto.",
+		"providerErrors": "Alcuni fornitori non sono stati raggiungibili",
+		"selectHint": "Scegli la corrispondenza corretta, poi applicala",
+		"apply": "Applica tag",
+		"applying": "Applicazione…",
+		"score": "Corrispondenza",
+		"toast": {
+			"applied": "Tag della traccia applicati",
+			"searchFailed": "Impossibile cercare i tag della traccia",
+			"extendFailed": "Impossibile caricare i dettagli della traccia",
+			"applyFailed": "Impossibile applicare i tag della traccia"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Impossibile trascinare una cartella dentro sé stessa",

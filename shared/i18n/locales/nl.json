@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "Nog geen tagcategorieën"
 	},
 	"contextMenu": {
+		"findTrackTags": "Tracktags zoeken",
 		"viewInFinder": "Bekijken in Finder",
 		"viewInExplorer": "Bekijken in Verkenner",
 		"viewInFileManager": "Bekijken in Bestandsbeheer",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "Artwork instellen mislukt",
 		"failedToRemoveArtwork": "Artwork verwijderen mislukt",
 		"noArtworkInFile": "Geen artwork gevonden in audiobestand"
+	},
+	"tagger": {
+		"title": "Tracktags zoeken",
+		"searching": "Providers worden doorzocht…",
+		"enriching": "Trackdetails laden…",
+		"noResults": "Geen enkele kandidaat scoorde hoog genoeg.",
+		"providerErrors": "Sommige providers konden niet worden bereikt",
+		"selectHint": "Kies de juiste overeenkomst en pas deze toe",
+		"apply": "Tags toepassen",
+		"applying": "Toepassen…",
+		"score": "Overeenkomst",
+		"toast": {
+			"applied": "Tracktags toegepast",
+			"searchFailed": "Zoeken naar tracktags mislukt",
+			"extendFailed": "Trackdetails laden mislukt",
+			"applyFailed": "Tracktags toepassen mislukt"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Kan een map niet in zichzelf slepen",

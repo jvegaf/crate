@@ -473,6 +473,7 @@
 		"noTagCategoriesYet": "暂无标签分类"
 	},
 	"contextMenu": {
+		"findTrackTags": "查找曲目标签",
 		"viewInFinder": "在访达中显示",
 		"viewInExplorer": "在资源管理器中显示",
 		"viewInFileManager": "在文件管理器中显示",
@@ -628,6 +629,23 @@
 		"failedToSetArtwork": "设置封面失败",
 		"failedToRemoveArtwork": "移除封面失败",
 		"noArtworkInFile": "音频文件中未找到封面"
+	},
+	"tagger": {
+		"title": "查找曲目标签",
+		"searching": "正在搜索提供商…",
+		"enriching": "正在加载曲目详情…",
+		"noResults": "没有评分足够高的候选。",
+		"providerErrors": "部分提供商无法访问",
+		"selectHint": "选择正确的匹配，然后应用",
+		"apply": "应用标签",
+		"applying": "正在应用…",
+		"score": "匹配",
+		"toast": {
+			"applied": "曲目标签已应用",
+			"searchFailed": "搜索曲目标签失败",
+			"extendFailed": "加载曲目详情失败",
+			"applyFailed": "应用曲目标签失败"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "无法将文件夹拖放到自身内部",
