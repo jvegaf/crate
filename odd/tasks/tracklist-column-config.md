@@ -126,12 +126,19 @@ remembered when re-enabled.
 - Per-playlist or per-view layouts.
 - Cloud-syncing the column preference.
 - ~~The `import.rs:318` symphonia fallback storing `bits_per_sample` as bitrate — separate defect,
-  file an issue instead of fixing here.~~ **Fixed after all** in `1b667d0` on explicit user request.
-  Repairing the rows already imported through that path is still excluded, and for a concrete reason:
-  `bitrate` is a cloud-synced column (`cloud_sync/pipeline/merge/writers.rs:109`) and a plain
-  migration `UPDATE` leaves the row's `_hlc` at the never-stamped sentinel, so the remote value wins
-  the next merge and silently reverts the fix. A real repair needs a stamped, dirty-bucket-aware
-  pass.
+  file an issue instead of fixing here.~~ **Fixed** in `1b667d0`, and the already-imported rows are
+  repaired by **migration 8** (`schema.rs`), which NULLs `tracks.bitrate` below 96 kbps.
+  The user lifted the earlier data-safety constraint explicitly ("todavía no está en producción…
+  podes cambiar lo que sea necesario"), which is what made a plain migration acceptable: the
+  objection was never the UPDATE itself but that an unstamped row keeps the never-stamped sentinel
+  `_hlc`, so a cloud peer's bad value wins the next merge. In pre-production that is irrelevant, and
+  the repair is still correct on its own terms.
+  - Threshold 96: every value the bug could write is a bit depth (8/12/16/20/24/32) and 96 kbps is
+    the lowest bitrate still plausible for music in a DJ library, so 96/128/320/1411 survive intact.
+  - NULL renders as `-` (unknown), which is honest. The true value comes back on re-import — the
+    stored columns cannot reconstruct it, because channel count and bit depth are not in the schema.
+  - Idempotent and append-only: it is the 8th entry, no existing entry was modified, and a second
+    run matches zero rows (`conn.changes() == 0` asserted).
 
 ## Verification plan
 
@@ -155,6 +162,13 @@ remembered when re-enabled.
   cannot be matched by range — the explicit codec-constant list in
   `read_audio_properties_symphonia` is verbose because the API forces it. PCM constants live in
   `0x100..=0x125`; `ALAW`/`MULAW` are deliberately excluded.
+- **Legacy bad rows — NOW REPAIRED, superseding the earlier "open" note below.** Migration 8 clears
+  them (see Explicit exclusions). Gates on the committed tree: `cargo test --features desktop`
+  **244 passed / 0 failed** (was 243), clippy `-D warnings` clean, `cargo check --release --features
+  desktop` clean, `rustfmt --check` clean on both touched files, `git diff --check` clean, vitest
+  still 44/44. The new test simulates a database at version 7, inserts bitrates 8/16/24/32/95/96/128
+  /320/1411 plus a NULL, and asserts each boundary, the version bump, and idempotency by re-running
+  the SQL and checking `changes() == 0`. RED first: `left: Some(8), right: None`.
 - **A re-scan does not repair existing rows:** `rescan_skips_every_existing_file`
   (`services/library/scan.rs:315`) proves scan never re-reads properties for files already in the
   library. Legacy fallback rows keep their bit-depth value until a stamped repair pass or a
@@ -308,6 +322,7 @@ pushed, no PR opened). Base was `f003473`.
 | `1fc71dc` feat(i18n): add tracklist column and column-menu labels | W7 i18n | 15 files, +150 |
 | `14632bb` feat(tracklist): render, pick and reorder columns from the saved layout | W4 + W5 + W6 + docs | 6 files, +471/−151 |
 | `1b667d0` fix(tracklist): report bitrate in the unit the library stores | bitrate defects | 4 files, +102/−15 |
+| `81813aa` fix(db): clear bit-depth values written into tracks.bitrate | legacy-row repair | 2 files, +93/−0 |
 
 Ordering is deliberate: i18n lands **before** the UI because `$translate` renders the raw key when a
 message is missing, so no commit ever shows a user a `library.columns.*` string.
@@ -339,3 +354,8 @@ human-confirmed; the drag edge cases in step 8 remain unconfirmed.
 
 Also worth a human glance now that the unit is settled: enable the Bitrate column and confirm a
 known MP3 reads `128`/`320 kbps` rather than `< 1 kbps`, and that a WAV reads `1411 kbps`.
+
+Migration 8 applies on the next app launch (migrations run at startup, version-gated), so after
+starting Crate once the previously corrupted rows should read `-` instead of `8`/`16`/`24 kbps`.
+A genuine value returns only after re-importing those files: the schema stores neither channel count
+nor bit depth, so the correct bitrate cannot be reconstructed from what is in the database.
