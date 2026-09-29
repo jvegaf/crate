@@ -25,6 +25,7 @@ use lofty::probe::Probe;
 use lofty::tag::Tag;
 
 use crate::error::{CrateError, Result};
+use crate::models::{EmbeddedArtwork, MetadataField, TrackMetadataPatch};
 
 // =============================================================================
 // Service struct (must be Clone for Tauri State sharing)
@@ -98,6 +99,7 @@ impl FileTagsService {
   ///
   /// Each parameter controls whether that field is written (`Some`) or left unchanged (`None`).
   /// If all parameters are `None` the function is a no-op.
+  #[allow(clippy::too_many_arguments)]
   pub fn write_track_meta(
     &self,
     path: &Path,
@@ -170,6 +172,226 @@ impl FileTagsService {
       })?;
 
     Ok(())
+  }
+
+  /// Apply explicit unchanged/set/clear metadata fields to an audio file.
+  ///
+  /// This method is intended for a staged copy. The caller replaces the original only after
+  /// every requested embedded field has been written successfully.
+  pub fn write_metadata_patch(&self, path: &Path, patch: &TrackMetadataPatch) -> Result<()> {
+    let mut tagged_file = lofty::read_from_path(path).map_err(|e| {
+      CrateError::FileTags(format!(
+        "Failed to read audio file for metadata update: {}: {e}",
+        path.display()
+      ))
+    })?;
+
+    let tag_type = tagged_file.primary_tag_type();
+    if tagged_file.tag(tag_type).is_none() {
+      tagged_file.insert_tag(Tag::new(tag_type));
+    }
+    let tag = tagged_file.tag_mut(tag_type).ok_or_else(|| {
+      CrateError::FileTags(format!(
+        "Audio format has no writable primary tag: {}",
+        path.display()
+      ))
+    })?;
+
+    Self::apply_text_field(tag, ItemKey::TrackTitle, &patch.title)?;
+    Self::apply_text_field(tag, ItemKey::TrackArtist, &patch.artist)?;
+    Self::apply_text_field(tag, ItemKey::AlbumTitle, &patch.album)?;
+    Self::apply_year_field(tag, &patch.year)?;
+    Self::apply_text_field(tag, ItemKey::Genre, &patch.genre)?;
+    Self::apply_text_field(tag, ItemKey::Label, &patch.label)?;
+    Self::apply_text_field(tag, ItemKey::CatalogNumber, &patch.catalog_number)?;
+    match &patch.bpm {
+      MetadataField::Unchanged => {}
+      MetadataField::Set(value) => {
+        if !tag.insert_text(ItemKey::IntegerBpm, format!("{value:.1}")) {
+          return Err(CrateError::FileTags(
+            "Audio tag format does not support BPM metadata".to_string(),
+          ));
+        }
+      }
+      MetadataField::Clear => tag.remove_key(&ItemKey::IntegerBpm),
+    }
+    Self::apply_text_field(tag, ItemKey::InitialKey, &patch.key)?;
+    Self::apply_artwork_field(tag, &patch.embedded_artwork)?;
+
+    tagged_file
+      .save_to_path(path, WriteOptions::default())
+      .map_err(|e| {
+        CrateError::FileTags(format!(
+          "Audio format does not support the requested metadata write at {}: {e}",
+          path.display()
+        ))
+      })?;
+
+    Self::verify_metadata_patch(path, patch)
+  }
+
+  fn apply_text_field(tag: &mut Tag, key: ItemKey, field: &MetadataField<String>) -> Result<()> {
+    match field {
+      MetadataField::Unchanged => {}
+      MetadataField::Set(value) => {
+        if !tag.insert_text(key.clone(), value.clone()) {
+          return Err(CrateError::FileTags(format!(
+            "Audio tag format does not support metadata key {key:?}"
+          )));
+        }
+      }
+      MetadataField::Clear => {
+        tag.remove_key(&key);
+      }
+    }
+    Ok(())
+  }
+
+  fn apply_year_field(tag: &mut Tag, field: &MetadataField<i32>) -> Result<()> {
+    match field {
+      MetadataField::Unchanged => {}
+      MetadataField::Set(value) => {
+        let year = u32::try_from(*value).map_err(|_| {
+          CrateError::FileTags(format!("Year must be a non-negative integer: {value}"))
+        })?;
+        tag.set_year(year);
+      }
+      MetadataField::Clear => tag.remove_key(&ItemKey::Year),
+    }
+    Ok(())
+  }
+
+  fn verify_metadata_patch(path: &Path, patch: &TrackMetadataPatch) -> Result<()> {
+    let tagged_file = lofty::read_from_path(path).map_err(|error| {
+      CrateError::FileTags(format!(
+        "Could not verify staged audio metadata at {}: {error}",
+        path.display()
+      ))
+    })?;
+    let tag = tagged_file
+      .primary_tag()
+      .or_else(|| tagged_file.first_tag());
+    Self::verify_text_field(tag, ItemKey::TrackTitle, &patch.title)?;
+    Self::verify_text_field(tag, ItemKey::TrackArtist, &patch.artist)?;
+    Self::verify_text_field(tag, ItemKey::AlbumTitle, &patch.album)?;
+    Self::verify_text_field(tag, ItemKey::Genre, &patch.genre)?;
+    Self::verify_text_field(tag, ItemKey::Label, &patch.label)?;
+    Self::verify_text_field(tag, ItemKey::CatalogNumber, &patch.catalog_number)?;
+    Self::verify_year_field(tag, &patch.year)?;
+    Self::verify_bpm_field(tag, &patch.bpm)?;
+    Self::verify_text_field(tag, ItemKey::InitialKey, &patch.key)?;
+    Self::verify_artwork_field(tag, &patch.embedded_artwork)
+  }
+
+  fn verify_text_field(
+    tag: Option<&Tag>,
+    key: ItemKey,
+    field: &MetadataField<String>,
+  ) -> Result<()> {
+    let expected = match field {
+      MetadataField::Unchanged => return Ok(()),
+      MetadataField::Set(value) => Some(value.as_str()),
+      MetadataField::Clear => None,
+    };
+    let actual = tag.and_then(|tag| tag.get_string(&key));
+    if actual != expected {
+      return Err(CrateError::FileTags(format!(
+        "Audio tag write for {key:?} was not retained by the file format"
+      )));
+    }
+    Ok(())
+  }
+
+  fn verify_year_field(tag: Option<&Tag>, field: &MetadataField<i32>) -> Result<()> {
+    let expected = match field {
+      MetadataField::Unchanged => return Ok(()),
+      MetadataField::Set(value) => Some(*value),
+      MetadataField::Clear => None,
+    };
+    let actual = tag.and_then(Tag::year).map(|year| year as i32);
+    if actual != expected {
+      return Err(CrateError::FileTags(
+        "Audio tag write for year was not retained by the file format".to_string(),
+      ));
+    }
+    Ok(())
+  }
+
+  fn verify_bpm_field(tag: Option<&Tag>, field: &MetadataField<f64>) -> Result<()> {
+    match field {
+      MetadataField::Unchanged => Ok(()),
+      MetadataField::Clear if Self::extract_bpm(tag).is_none() => Ok(()),
+      MetadataField::Set(expected)
+        if Self::extract_bpm(tag).is_some_and(|actual| (actual - expected).abs() < 0.051) =>
+      {
+        Ok(())
+      }
+      _ => Err(CrateError::FileTags(
+        "Audio tag write for BPM was not retained by the file format".to_string(),
+      )),
+    }
+  }
+
+  fn verify_artwork_field(tag: Option<&Tag>, field: &MetadataField<EmbeddedArtwork>) -> Result<()> {
+    match field {
+      MetadataField::Unchanged => Ok(()),
+      MetadataField::Clear if tag.is_none_or(|tag| tag.pictures().is_empty()) => Ok(()),
+      MetadataField::Set(expected)
+        if tag.is_some_and(|tag| {
+          tag.pictures().iter().any(|picture| {
+            picture.pic_type() == lofty::picture::PictureType::CoverFront
+              && picture.data() == expected.data
+          })
+        }) =>
+      {
+        Ok(())
+      }
+      _ => Err(CrateError::FileTags(
+        "Audio artwork write was not retained by the file format".to_string(),
+      )),
+    }
+  }
+
+  fn apply_artwork_field(tag: &mut Tag, field: &MetadataField<EmbeddedArtwork>) -> Result<()> {
+    match field {
+      MetadataField::Unchanged => Ok(()),
+      MetadataField::Clear => {
+        while !tag.pictures().is_empty() {
+          tag.remove_picture(tag.pictures().len() - 1);
+        }
+        Ok(())
+      }
+      MetadataField::Set(artwork) => {
+        let mime_type = lofty::picture::MimeType::from_str(&artwork.mime_type);
+        if matches!(mime_type, lofty::picture::MimeType::Unknown(_)) {
+          return Err(CrateError::FileTags(format!(
+            "Unsupported embedded artwork MIME type: {}",
+            artwork.mime_type
+          )));
+        }
+        let decoded_format = image::guess_format(&artwork.data)
+          .map_err(|e| CrateError::FileTags(format!("Invalid embedded artwork image: {e}")))?;
+        if image::ImageFormat::from_mime_type(&artwork.mime_type) != Some(decoded_format) {
+          return Err(CrateError::FileTags(format!(
+            "Embedded artwork MIME type {} does not match decoded image format {}",
+            artwork.mime_type,
+            decoded_format.extensions_str().join("/")
+          )));
+        }
+        image::load_from_memory(&artwork.data)
+          .map_err(|e| CrateError::FileTags(format!("Invalid embedded artwork image: {e}")))?;
+        while !tag.pictures().is_empty() {
+          tag.remove_picture(tag.pictures().len() - 1);
+        }
+        tag.push_picture(lofty::picture::Picture::new_unchecked(
+          lofty::picture::PictureType::CoverFront,
+          Some(mime_type),
+          None,
+          artwork.data.clone(),
+        ));
+        Ok(())
+      }
+    }
   }
 
   /// Convenience shortcut used by the analysis pipeline to persist just BPM + key.

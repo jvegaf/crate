@@ -125,6 +125,100 @@ pub struct TrackUpdate {
   pub rating: Option<i32>,
 }
 
+/// A field-level metadata patch. Missing fields remain unchanged; JSON `null` clears;
+/// any non-null value replaces the current value.
+#[cfg(feature = "desktop")]
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum MetadataField<T> {
+  #[default]
+  Unchanged,
+  Set(T),
+  Clear,
+}
+
+#[cfg(feature = "desktop")]
+impl<'de, T> Deserialize<'de> for MetadataField<T>
+where
+  T: Deserialize<'de>,
+{
+  fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    struct FieldVisitor<T>(std::marker::PhantomData<T>);
+
+    impl<'de, T> serde::de::Visitor<'de> for FieldVisitor<T>
+    where
+      T: Deserialize<'de>,
+    {
+      type Value = MetadataField<T>;
+
+      fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a metadata value or null")
+      }
+
+      fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+      where
+        E: serde::de::Error,
+      {
+        Ok(MetadataField::Clear)
+      }
+
+      fn visit_unit<E>(self) -> std::result::Result<Self::Value, E>
+      where
+        E: serde::de::Error,
+      {
+        Ok(MetadataField::Clear)
+      }
+
+      fn visit_some<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+      where
+        D: serde::Deserializer<'de>,
+      {
+        T::deserialize(deserializer).map(MetadataField::Set)
+      }
+    }
+
+    deserializer.deserialize_option(FieldVisitor(std::marker::PhantomData))
+  }
+}
+
+/// Single-track metadata patch. `rating` remains library-owned; text/audio fields and artwork
+/// are also embedded into the audio file when supplied.
+#[cfg(feature = "desktop")]
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct TrackMetadataPatch {
+  #[serde(default)]
+  pub title: MetadataField<String>,
+  #[serde(default)]
+  pub artist: MetadataField<String>,
+  #[serde(default)]
+  pub album: MetadataField<String>,
+  #[serde(default)]
+  pub year: MetadataField<i32>,
+  #[serde(default)]
+  pub genre: MetadataField<String>,
+  #[serde(default)]
+  pub label: MetadataField<String>,
+  #[serde(default)]
+  pub catalog_number: MetadataField<String>,
+  #[serde(default)]
+  pub bpm: MetadataField<f64>,
+  #[serde(default)]
+  pub key: MetadataField<String>,
+  #[serde(default)]
+  pub rating: MetadataField<i32>,
+  #[serde(default)]
+  pub embedded_artwork: MetadataField<EmbeddedArtwork>,
+}
+
+#[cfg(feature = "desktop")]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct EmbeddedArtwork {
+  pub mime_type: String,
+  pub data: Vec<u8>,
+}
+
 #[cfg(feature = "desktop")]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportResult {
@@ -184,4 +278,19 @@ pub enum DuplicateResolution {
   UpdatePath { new_path: String },
   /// Replace: fresh import keeping only playlist memberships
   Replace { new_path: String, new_hash: String },
+}
+
+#[cfg(all(test, feature = "desktop"))]
+mod metadata_patch_tests {
+  use super::{MetadataField, TrackMetadataPatch};
+
+  #[test]
+  fn omitted_set_and_null_fields_have_distinct_patch_states() {
+    let patch: TrackMetadataPatch =
+      serde_json::from_str(r#"{"artist":"Artist","title":null}"#).unwrap();
+
+    assert_eq!(patch.title, MetadataField::Clear);
+    assert_eq!(patch.artist, MetadataField::Set("Artist".to_string()));
+    assert_eq!(patch.album, MetadataField::Unchanged);
+  }
 }
