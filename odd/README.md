@@ -32,6 +32,10 @@ A feature moves `pending` → `in progress` → `done` as it lands.
 | Agent harness bootstrap | Done | [`tasks/agent-harness-bootstrap.md`](tasks/agent-harness-bootstrap.md) |
 | Contributor documentation | Done | [`tasks/contributor-docs.md`](tasks/contributor-docs.md) |
 | Analysis skip + force re-analysis | In progress | [`tasks/analysis-skip-stubs-and-force.md`](tasks/analysis-skip-stubs-and-force.md) |
+| Tracklist column configuration | Done (manual UI check owed) | [`tasks/tracklist-column-config.md`](tasks/tracklist-column-config.md) |
+
+> The table above is itself stale: `odd/tasks/` currently holds 12 feature files and only 3 were
+> indexed before the tracklist entry was added. Reconciling the index is an open follow-up.
 
 Update this table whenever a feature is added or closes. It is the front door — if it is stale, the
 record may as well not exist.
