@@ -66,7 +66,7 @@ impl PrefetchTracker {
 
 use services::{
   discovery::n_transform::NsigSolverState, BackupService, DiscoveryService, FollowService,
-  PlaylistService, SettingsService, TagService,
+  PlaylistService, SettingsService, TagService, TaggerService,
 };
 // Desktop-only services and their backing crates are excluded from the mobile build.
 #[cfg(feature = "desktop")]
@@ -324,6 +324,8 @@ pub fn run() {
       commands::discovery::cancel_scan_page,
       commands::discovery::skip_enrichment,
       commands::discovery::fetch_source_avatar,
+      // Tagger commands (shared, not feature-gated)
+      commands::tagger::search_track_tags,
       // Follow commands
       commands::follow::follow_source,
       commands::follow::follow_from_entity,
@@ -414,6 +416,7 @@ pub fn run() {
       let backup_service = BackupService::new(conn.clone());
       let discovery_service = DiscoveryService::new(conn.clone(), app_data_dir.clone());
       let follow_service = FollowService::new(conn.clone(), app_data_dir.clone());
+      let tagger_service = TaggerService::new().map_err(|e| e.to_string())?;
 
       // Load saved audio device setting (desktop-only: no rodio playback on mobile)
       #[cfg(feature = "desktop")]
@@ -463,6 +466,7 @@ pub fn run() {
       app.manage(analysis_service);
       app.manage(discovery_service);
       app.manage(follow_service);
+      app.manage(tagger_service);
       // Background watch loop: poll followed sources on the configured cadence.
       // No-ops (and makes no network requests) when nothing is followed.
       crate::services::follow::watch::start_watching(

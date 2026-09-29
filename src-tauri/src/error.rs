@@ -54,6 +54,9 @@ pub enum CrateError {
   #[error("Discovery error: {0}")]
   Discovery(String),
 
+  #[error("Tagger error: {0}")]
+  Tagger(String),
+
   #[error("Backup error: {0}")]
   Backup(String),
 

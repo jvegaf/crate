@@ -30,6 +30,7 @@ pub mod playlist;
 pub mod settings;
 pub mod smart_rules;
 pub mod tag;
+pub mod tagger;
 
 #[cfg(feature = "desktop")]
 pub use analysis::AnalysisService;
@@ -56,3 +57,4 @@ pub use media_controls::MediaControlsService;
 pub use playlist::PlaylistService;
 pub use settings::SettingsService;
 pub use tag::TagService;
+pub use tagger::TaggerService;

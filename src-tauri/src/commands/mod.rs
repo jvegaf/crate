@@ -23,3 +23,4 @@ pub mod settings;
 #[cfg(feature = "desktop")]
 pub mod sync;
 pub mod tag;
+pub mod tagger;

@@ -14,6 +14,7 @@ pub mod playlist;
 pub mod settings;
 pub mod smart_rules;
 pub mod tag;
+pub mod tagger;
 pub mod track;
 
 #[allow(unused_imports)]
@@ -31,4 +32,5 @@ pub use playlist::*;
 pub use settings::*;
 pub use smart_rules::*;
 pub use tag::*;
+pub use tagger::*;
 pub use track::*;
