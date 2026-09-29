@@ -344,6 +344,11 @@ feature commit (AGENTS.md §2):
 | `f446671` | docs(odd): record the bitrate unit correction and the legacy-row constraint |
 | `0046a4f` | docs(odd): reconcile the feature index with the tree it describes |
 | `e147e50` | docs(odd): record the bitrate data repair lifting the earlier no-migration decision |
+| `aba4405`, `c35f65d`, and this one | docs(odd): self-referential bookkeeping |
+
+The last row is deliberately open-ended: a commit that enumerates commits cannot contain its own
+hash, so the trailing `docs(odd)` bookkeeping is named rather than listed. `git log --oneline
+f003473..HEAD` is the ground truth; this table is a readable index of it.
 
 odd/tasks/tracklist-column-config.md` and `odd/README.md` were committed separately as
 `a78023f chore(odd): record tracklist column feature tracking` — `odd/` is versioned on this
