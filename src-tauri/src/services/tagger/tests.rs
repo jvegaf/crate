@@ -1,5 +1,7 @@
-use super::bandcamp::parse_bandcamp_autocomplete;
-use super::beatport::parse_beatport_search;
+use super::bandcamp::{
+  enrich_bandcamp_candidate, parse_bandcamp_autocomplete, parse_iso8601_duration,
+};
+use super::beatport::{enrich_beatport_candidate, parse_beatport_search};
 use super::scoring::{
   duration_score, hybrid_text_similarity, levenshtein_similarity, normalize_string,
   rank_candidates, ScoringWeights, UnifiedScorer, DEFAULT_WEIGHTS,
@@ -136,6 +138,156 @@ fn bandcamp_parses_autocomplete() {
     first.artwork_url.as_deref(),
     Some("https://f4.bcbits.com/img/a123_16.jpg")
   );
+}
+
+#[test]
+fn iso8601_duration_to_milliseconds() {
+  assert_eq!(parse_iso8601_duration("PT5M41S"), Some(341_000));
+  assert_eq!(parse_iso8601_duration("PT1H2M3S"), Some(3_723_000));
+  assert_eq!(parse_iso8601_duration("PT45S"), Some(45_000));
+  assert_eq!(parse_iso8601_duration("P1DT2H"), Some(93_600_000));
+  assert_eq!(parse_iso8601_duration("not-a-duration"), None);
+}
+
+const BANDCAMP_TRACK_HTML: &str = r#"<!DOCTYPE html>
+<html>
+<head>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"MusicRecording","name":"Your Mind","byArtist":{"@type":"MusicGroup","name":"Adam Beyer"},"inAlbum":{"@type":"MusicAlbum","name":"Your Mind EP"},"datePublished":"2019-05-03","duration":"PT5M41S","image":"https://f4.bcbits.com/img/a123_16.jpg","url":"https://adambeyer.bandcamp.com/track/your-mind"}
+</script>
+</head>
+<body>
+<div id="trackInfo" data-tralbum="{&quot;album_release_date&quot;:&quot;2019-05-03&quot;,&quot;genre&quot;:&quot;Techno&quot;,&quot;label&quot;:&quot;Drumcode&quot;}">
+</div>
+</body>
+</html>"#;
+
+#[test]
+fn bandcamp_extend_fills_detail_and_preserves_identity() {
+  let candidate = TagCandidate {
+    provider: "bandcamp".to_string(),
+    title: "Your Mind".to_string(),
+    artists: vec!["Adam Beyer".to_string()],
+    album: Some("Your Mind EP".to_string()),
+    url: "https://adambeyer.bandcamp.com/track/your-mind".to_string(),
+    provider_track_id: Some("123".to_string()),
+    provider_release_id: Some("456".to_string()),
+    ..Default::default()
+  };
+
+  let enriched = enrich_bandcamp_candidate(&candidate, BANDCAMP_TRACK_HTML);
+
+  // Identity and URL always come from the input candidate.
+  assert_eq!(enriched.provider, "bandcamp");
+  assert_eq!(enriched.provider_track_id.as_deref(), Some("123"));
+  assert_eq!(enriched.provider_release_id.as_deref(), Some("456"));
+  assert_eq!(
+    enriched.url,
+    "https://adambeyer.bandcamp.com/track/your-mind"
+  );
+
+  // The search payload left these empty; the page detail fills them.
+  assert_eq!(enriched.label.as_deref(), Some("Drumcode"));
+  assert_eq!(enriched.genre.as_deref(), Some("Techno"));
+  assert_eq!(enriched.release_date.as_deref(), Some("2019-05-03"));
+  assert_eq!(enriched.duration_ms, Some(341_000));
+  assert_eq!(
+    enriched.artwork_url.as_deref(),
+    Some("https://f4.bcbits.com/img/a123_16.jpg")
+  );
+  assert_eq!(enriched.album.as_deref(), Some("Your Mind EP"));
+  assert_eq!(enriched.artists, vec!["Adam Beyer".to_string()]);
+
+  // A field the page does not expose stays absent rather than guessed.
+  assert_eq!(enriched.bpm, None);
+  assert_eq!(enriched.key, None);
+}
+
+const BEATPORT_TRACK_DETAIL_BODY: &str = r#"{"id":123456,"name":"Your Mind","mix_name":"Original Mix","slug":"your-mind","bpm":128,"length_ms":405000,"isrc":"GBABC1234567","catalog_number":"DC123","new_release_date":"2019-05-03","key":{"name":"G Minor"},"genre":{"name":"Techno"},"release":{"id":999,"name":"Your Mind EP","image":{"uri":"https://images.beatport.com/your-mind.jpg"},"label":{"name":"Drumcode"}},"artists":[{"name":"Adam Beyer"}]}"#;
+
+#[test]
+fn beatport_extend_fills_detail_and_preserves_identity() {
+  let candidate = TagCandidate {
+    provider: "beatport".to_string(),
+    title: "Your Mind".to_string(),
+    artists: vec!["Adam Beyer".to_string()],
+    url: "https://www.beatport.com/track/your-mind/123456".to_string(),
+    provider_track_id: Some("123456".to_string()),
+    provider_release_id: Some("999".to_string()),
+    // Not present in the detail payload: the merge must not clear it.
+    track_number: Some(5),
+    ..Default::default()
+  };
+
+  let enriched = enrich_beatport_candidate(&candidate, BEATPORT_TRACK_DETAIL_BODY);
+
+  // Identity and URL always come from the input candidate.
+  assert_eq!(enriched.provider, "beatport");
+  assert_eq!(enriched.provider_track_id.as_deref(), Some("123456"));
+  assert_eq!(enriched.provider_release_id.as_deref(), Some("999"));
+  assert_eq!(
+    enriched.url,
+    "https://www.beatport.com/track/your-mind/123456"
+  );
+
+  // The detail payload fills the search gaps.
+  assert_eq!(enriched.title, "Your Mind");
+  assert_eq!(enriched.version.as_deref(), Some("Original Mix"));
+  assert_eq!(enriched.album.as_deref(), Some("Your Mind EP"));
+  assert_eq!(enriched.label.as_deref(), Some("Drumcode"));
+  assert_eq!(enriched.genre.as_deref(), Some("Techno"));
+  assert_eq!(enriched.release_date.as_deref(), Some("2019-05-03"));
+  assert_eq!(enriched.duration_ms, Some(405_000));
+  assert_eq!(enriched.bpm, Some(128.0));
+  assert_eq!(enriched.key.as_deref(), Some("Gm"));
+  assert_eq!(enriched.isrc.as_deref(), Some("GBABC1234567"));
+  assert_eq!(enriched.catalog_number.as_deref(), Some("DC123"));
+  assert_eq!(
+    enriched.artwork_url.as_deref(),
+    Some("https://images.beatport.com/your-mind.jpg")
+  );
+
+  // A field only the search candidate had is preserved.
+  assert_eq!(enriched.track_number, Some(5));
+}
+
+#[tokio::test]
+async fn extend_candidate_unknown_provider_fails_before_network() {
+  let service = TaggerService::new().unwrap();
+  let candidate = TagCandidate {
+    provider: "nope".to_string(),
+    ..Default::default()
+  };
+
+  let result = service.extend_candidate(&candidate).await;
+
+  assert!(result.is_err());
+  let message = result.unwrap_err().to_string();
+  assert!(message.contains("nope"), "unexpected message: {message}");
+}
+
+#[cfg(feature = "desktop")]
+#[tokio::test]
+async fn extend_candidate_traxsource_returns_the_candidate_unchanged() {
+  let service = TaggerService::new().unwrap();
+  let candidate = TagCandidate {
+    provider: "traxsource".to_string(),
+    title: "Your Mind".to_string(),
+    artists: vec!["Adam Beyer".to_string()],
+    url: "https://www.traxsource.com/track/12345/your-mind".to_string(),
+    provider_track_id: Some("12345".to_string()),
+    ..Default::default()
+  };
+
+  let extended = service.extend_candidate(&candidate).await.unwrap();
+
+  assert_eq!(extended.provider, "traxsource");
+  assert_eq!(extended.title, "Your Mind");
+  assert_eq!(extended.artists, vec!["Adam Beyer".to_string()]);
+  assert_eq!(extended.url, candidate.url);
+  assert_eq!(extended.provider_track_id.as_deref(), Some("12345"));
+  assert_eq!(extended.label, None);
+  assert_eq!(extended.duration_ms, None);
 }
 
 fn live_query() -> TagSearchQuery {

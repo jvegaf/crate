@@ -16,6 +16,9 @@ const OAUTH_TOKEN_URL: &str = "https://account.beatport.com/o/token/";
 /// Beatport v4 catalog search endpoint.
 const API_SEARCH_URL: &str = "https://api.beatport.com/v4/catalog/search/";
 
+/// Beatport v4 single-track detail endpoint (append `{id}/`).
+const API_TRACK_URL: &str = "https://api.beatport.com/v4/catalog/tracks";
+
 /// Public OAuth credentials for Beatport's embed app — the same ones onetagger
 /// ships. They are not secrets in the security sense (Beatport hands them to
 /// browser clients); the v4 API simply requires them to mint a token.
@@ -143,6 +146,52 @@ impl TaggerProvider for BeatportProvider {
     candidates.truncate(limit);
     Ok(candidates)
   }
+
+  /// Fetch the authoritative per-ID track detail and merge it over the search
+  /// candidate.
+  ///
+  /// The v4 track object is richer than the search payload (artwork, release
+  /// detail). An empty `provider_track_id` returns the candidate unchanged; a
+  /// detail payload that does not parse also returns it unchanged rather than
+  /// guessing.
+  async fn extend(
+    &self,
+    client: &reqwest::Client,
+    candidate: &TagCandidate,
+  ) -> Result<TagCandidate> {
+    let Some(track_id) = candidate
+      .provider_track_id
+      .as_deref()
+      .map(str::trim)
+      .filter(|id| !id.is_empty())
+    else {
+      return Ok(candidate.clone());
+    };
+
+    let token = self.access_token(client).await?;
+
+    let response = client
+      .get(format!("{API_TRACK_URL}/{track_id}/"))
+      .bearer_auth(&token)
+      .header(reqwest::header::ACCEPT, "application/json")
+      .send()
+      .await
+      .map_err(|e| CrateError::Tagger(format!("Beatport detail request failed: {e}")))?;
+
+    if !response.status().is_success() {
+      let status = response.status();
+      return Err(CrateError::Tagger(format!(
+        "Beatport detail returned HTTP {status}"
+      )));
+    }
+
+    let body = response
+      .text()
+      .await
+      .map_err(|e| CrateError::Tagger(format!("Beatport detail read failed: {e}")))?;
+
+    Ok(enrich_beatport_candidate(candidate, &body))
+  }
 }
 
 #[derive(Debug, Deserialize)]
@@ -214,11 +263,79 @@ pub(super) fn parse_beatport_search(body: &str) -> Vec<TagCandidate> {
   response
     .tracks
     .into_iter()
-    .filter_map(parse_track)
+    .filter_map(|track| parse_track(track, None))
     .collect()
 }
 
-fn parse_track(track: ApiTrack) -> Option<TagCandidate> {
+/// Enrich a Beatport candidate from a v4 **single-track** detail payload.
+///
+/// The detail object is one track (not the search envelope). Fields the detail
+/// does not carry fall back to the search candidate, and the candidate's
+/// provider identity and URL are always preserved. A malformed payload returns
+/// the candidate unchanged instead of guessing.
+pub(super) fn enrich_beatport_candidate(candidate: &TagCandidate, body: &str) -> TagCandidate {
+  let parsed = serde_json::from_str::<ApiTrack>(body)
+    .ok()
+    .and_then(|track| parse_track(track, candidate.provider_release_id.as_deref()));
+
+  match parsed {
+    Some(parsed) => merge_candidate(candidate, parsed),
+    None => candidate.clone(),
+  }
+}
+
+/// Merge a parsed detail candidate over the input candidate.
+///
+/// A non-empty parsed value wins; otherwise the input value is kept, so the
+/// detail never clears a field the search already populated. `provider`,
+/// `provider_track_id`, `provider_release_id` and a non-empty `url` always come
+/// from the input.
+fn merge_candidate(input: &TagCandidate, parsed: TagCandidate) -> TagCandidate {
+  TagCandidate {
+    provider: input.provider.clone(),
+    title: if parsed.title.trim().is_empty() {
+      input.title.clone()
+    } else {
+      parsed.title
+    },
+    version: parsed.version.or_else(|| input.version.clone()),
+    artists: if parsed.artists.is_empty() {
+      input.artists.clone()
+    } else {
+      parsed.artists
+    },
+    album: parsed.album.or_else(|| input.album.clone()),
+    label: parsed.label.or_else(|| input.label.clone()),
+    catalog_number: parsed
+      .catalog_number
+      .or_else(|| input.catalog_number.clone()),
+    genre: parsed.genre.or_else(|| input.genre.clone()),
+    release_date: parsed.release_date.or_else(|| input.release_date.clone()),
+    bpm: parsed.bpm.or(input.bpm),
+    key: parsed.key.or_else(|| input.key.clone()),
+    duration_ms: parsed.duration_ms.or(input.duration_ms),
+    isrc: parsed.isrc.or_else(|| input.isrc.clone()),
+    track_number: parsed.track_number.or(input.track_number),
+    artwork_url: parsed.artwork_url.or_else(|| input.artwork_url.clone()),
+    url: if input.url.trim().is_empty() {
+      parsed.url
+    } else {
+      input.url.clone()
+    },
+    provider_track_id: input.provider_track_id.clone().or(parsed.provider_track_id),
+    provider_release_id: input
+      .provider_release_id
+      .clone()
+      .or(parsed.provider_release_id),
+  }
+}
+
+/// Parse one Beatport v4 track object.
+///
+/// `release_id_fallback` supplies the release id when the track payload does not
+/// embed one (the search path passes `None`); the detail path passes the
+/// candidate's own `provider_release_id` so a missing release id is not lost.
+fn parse_track(track: ApiTrack, release_id_fallback: Option<&str>) -> Option<TagCandidate> {
   let title = track.name?;
 
   let version = track
@@ -245,7 +362,7 @@ fn parse_track(track: ApiTrack) -> Option<TagCandidate> {
     .or(track.publish_date)
     .map(|date| date.chars().take(10).collect::<String>());
 
-  let (album, label, provider_release_id, artwork_url) = match track.release {
+  let (album, label, mut provider_release_id, artwork_url) = match track.release {
     Some(release) => (
       release.name,
       release.label.and_then(|label| label.name),
@@ -254,6 +371,9 @@ fn parse_track(track: ApiTrack) -> Option<TagCandidate> {
     ),
     None => (None, None, None, None),
   };
+  if provider_release_id.is_none() {
+    provider_release_id = release_id_fallback.map(str::to_string);
+  }
 
   let provider_track_id = track.id.as_ref().and_then(value_to_string);
   let url = match (track.slug.as_deref(), provider_track_id.as_deref()) {

@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::error::Result;
-use crate::models::{ProviderSearchResult, RankedSearchResult, TagSearchQuery};
+use crate::models::{ProviderSearchResult, RankedSearchResult, TagCandidate, TagSearchQuery};
 use crate::services::TaggerService;
 
 /// Search every metadata provider (Beatport, TraxSource, Bandcamp) for candidate
@@ -50,4 +50,16 @@ pub async fn search_ranked_track_tags(
       max_candidates,
     )
     .await
+}
+
+/// Enrich one provider candidate with its per-ID detail (label, release date,
+/// duration, artwork) before the user applies it. The provider is taken from the
+/// candidate itself, so the request cannot disagree with it; an unknown provider
+/// is an error.
+#[tauri::command]
+pub async fn extend_track_tag(
+  candidate: TagCandidate,
+  tagger: State<'_, TaggerService>,
+) -> Result<TagCandidate> {
+  tagger.extend_candidate(&candidate).await
 }

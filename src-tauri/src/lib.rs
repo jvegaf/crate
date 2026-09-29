@@ -327,6 +327,7 @@ pub fn run() {
       // Tagger commands (shared, not feature-gated)
       commands::tagger::search_track_tags,
       commands::tagger::search_ranked_track_tags,
+      commands::tagger::extend_track_tag,
       // Follow commands
       commands::follow::follow_source,
       commands::follow::follow_from_entity,

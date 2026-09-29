@@ -1,9 +1,9 @@
-//! Automatic song tagger — metadata **search** providers (Beatport, TraxSource, Bandcamp).
+//! Automatic song tagger — metadata providers (Beatport, TraxSource, Bandcamp).
 //!
-//! This slice is search-only: it returns candidate tracks for an artist + title.
-//! Matching/scoring and per-ID enrichment (`extend`) are deferred. Network-only
-//! and mostly mobile-safe: Beatport and Bandcamp run everywhere, TraxSource is
-//! desktop-only because it shells out to the system `curl` binary.
+//! A search returns candidate tracks for an artist + title; `extend` enriches one
+//! chosen candidate with its per-ID detail. Network-only and mostly mobile-safe:
+//! Beatport and Bandcamp run everywhere, TraxSource is desktop-only because it
+//! shells out to the system `curl` binary.
 
 mod bandcamp;
 mod beatport;
@@ -20,7 +20,7 @@ use traxsource::TraxSourceProvider;
 
 use async_trait::async_trait;
 
-use crate::error::Result;
+use crate::error::{CrateError, Result};
 use crate::models::{
   ProviderError, ProviderSearchResult, RankedSearchResult, ScoredTagCandidate, TagCandidate,
   TagSearchQuery,
@@ -119,6 +119,25 @@ impl TaggerService {
       max_candidates,
     ))
   }
+
+  /// Enrich one candidate with its per-ID detail, dispatching on
+  /// `candidate.provider`. An unknown provider is a [`CrateError::Tagger`].
+  ///
+  /// The provider id is the sole routing key, so the request cannot enrich a
+  /// candidate through the wrong provider. On mobile the desktop-gated
+  /// TraxSource provider is absent and `"traxsource"` is therefore unknown — an
+  /// error, not a panic.
+  pub async fn extend_candidate(&self, candidate: &TagCandidate) -> Result<TagCandidate> {
+    let provider = self
+      .providers
+      .iter()
+      .find(|provider| provider.id() == candidate.provider.as_str())
+      .ok_or_else(|| {
+        CrateError::Tagger(format!("Unknown tagger provider: {}", candidate.provider))
+      })?;
+
+    provider.extend(&self.client, candidate).await
+  }
 }
 
 /// Aggregate raw provider results into the ranked best-N answer.
@@ -183,4 +202,15 @@ pub(super) trait TaggerProvider: Send + Sync {
     query: &TagSearchQuery,
     limit: usize,
   ) -> Result<Vec<TagCandidate>>;
+
+  /// Enrich one candidate by its provider id. The default returns the candidate
+  /// unchanged: providers override this only where their search payload actually
+  /// leaves fields empty.
+  async fn extend(
+    &self,
+    _client: &reqwest::Client,
+    candidate: &TagCandidate,
+  ) -> Result<TagCandidate> {
+    Ok(candidate.clone())
+  }
 }
