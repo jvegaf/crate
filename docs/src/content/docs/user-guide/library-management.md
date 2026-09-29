@@ -97,6 +97,36 @@ Crate uses BLAKE3 hashing to verify file integrity. Each track's hash is stored 
 
 Each track in your library has properties you can view and edit:
 
+### Customizing the Tracklist Columns
+
+The tracklist shows the columns you need, in the order you want them. Your layout is saved with your other preferences, so it is still there the next time you open Crate. It applies to the library and to every playlist.
+
+**Choose which columns are visible.** Right-click anywhere on the column header row. The menu lists every column, with a check mark next to the ones currently shown. Click an entry to show or hide it — the menu stays open so you can adjust several columns in a row. Title cannot be hidden: a tracklist without titles is not readable, so that entry is greyed out. Choose **Reset to default columns** at the bottom of the menu to go back to the original layout.
+
+| Column | What it shows | Shown by default |
+|--------|---------------|------------------|
+| Color | Your track color marker | Yes |
+| Artwork | Album art thumbnail | Yes |
+| Title | Track name (falls back to the file name) | Yes, always |
+| Artist | Performer | Yes |
+| BPM | Tempo | Yes |
+| Key | Musical key, in your chosen notation | Yes |
+| Time | Duration | Yes |
+| Tags | Assigned tags, up to three plus a count | Yes |
+| Rating | Star rating | Yes |
+| Album | Album name | No |
+| Label | Record label | No |
+| Origin | Name of the folder that holds the file | No |
+| Bitrate | Audio quality, in kbps | No |
+| Year | Release year | No |
+| Date Added | When the track entered your library | No |
+
+**Change the order.** Drag a column header left or right. While you drag, a thin vertical marker shows where the column will land: drop on the left half of a header to place the column before it, on the right half to place it after. The other columns shift to make room.
+
+**Widths adjust automatically.** You cannot set a width, and you do not need to: the table always fills the space it has. Compact columns (color, artwork, duration, BPM, key, bitrate, year, date added, rating) keep a fixed width, while text columns (title, artist, album, label, origin, tags) share whatever space is left. Hiding a wide text column therefore gives that room back to the others instead of leaving a gap on the right.
+
+The Origin column is the name of the folder the audio file sits in, not the whole path — useful when you organised your collection in folders before importing it. Hover the cell to see the full name if it is cut off.
+
 ### Viewable Properties
 
 | Property | Description |

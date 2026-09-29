@@ -108,7 +108,7 @@
 		if (item.action) {
 			item.action()
 		}
-		onClose()
+		if (!item.keepOpen) onClose()
 	}
 
 	function handleItemMouseEnter(item: ContextMenuItem, depth: number) {
