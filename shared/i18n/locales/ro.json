@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Titlu",
 			"artist": "Artist",
+			"album": "Album",
+			"label": "Label",
+			"origin": "Origine",
 			"bpm": "BPM",
 			"key": "Ton",
 			"time": "Timp",
+			"bitrate": "Bitrate",
+			"year": "An",
+			"dateAdded": "Adăugat la",
 			"tags": "Etichete",
 			"rating": "Evaluare"
+		},
+		"columnMenu": {
+			"reset": "Resetează coloanele la valorile implicite",
+			"alwaysVisible": "Întotdeauna vizibil"
 		},
 		"track": "melodie",
 		"tracks": "melodii",

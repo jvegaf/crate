@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Titre",
 			"artist": "Artiste",
+			"album": "Album",
+			"label": "Label",
+			"origin": "Origine",
 			"bpm": "BPM",
 			"key": "Tonalité",
 			"time": "Durée",
+			"bitrate": "Débit",
+			"year": "Année",
+			"dateAdded": "Date d’ajout",
 			"tags": "Tags",
 			"rating": "Note"
+		},
+		"columnMenu": {
+			"reset": "Rétablir les colonnes par défaut",
+			"alwaysVisible": "Toujours visible"
 		},
 		"track": "piste",
 		"tracks": "pistes",

@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "제목",
 			"artist": "아티스트",
+			"album": "앨범",
+			"label": "레이블",
+			"origin": "폴더",
 			"bpm": "BPM",
 			"key": "키",
 			"time": "시간",
+			"bitrate": "비트레이트",
+			"year": "연도",
+			"dateAdded": "추가일",
 			"tags": "태그",
 			"rating": "평가"
+		},
+		"columnMenu": {
+			"reset": "기본 열로 재설정",
+			"alwaysVisible": "항상 표시"
 		},
 		"track": "트랙",
 		"tracks": "트랙",

@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Titel",
 			"artist": "Artist",
+			"album": "Album",
+			"label": "Skivbolag",
+			"origin": "Ursprung",
 			"bpm": "BPM",
 			"key": "Tonart",
 			"time": "Tid",
+			"bitrate": "Bithastighet",
+			"year": "År",
+			"dateAdded": "Tillagd",
 			"tags": "Taggar",
 			"rating": "Betyg"
+		},
+		"columnMenu": {
+			"reset": "Återställ standardkolumner",
+			"alwaysVisible": "Alltid synlig"
 		},
 		"track": "spår",
 		"tracks": "spår",

@@ -280,11 +280,21 @@
 		"columns": {
 			"title": "Title",
 			"artist": "Artist",
+			"album": "Album",
+			"label": "Label",
+			"origin": "Origin",
 			"bpm": "BPM",
 			"key": "Key",
 			"time": "Time",
+			"bitrate": "Bitrate",
+			"year": "Year",
+			"dateAdded": "Date Added",
 			"tags": "Tags",
 			"rating": "Rating"
+		},
+		"columnMenu": {
+			"reset": "Reset to default columns",
+			"alwaysVisible": "Always visible"
 		},
 		"track": "track",
 		"tracks": "tracks",

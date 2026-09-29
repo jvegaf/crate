@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "タイトル",
 			"artist": "アーティスト",
+			"album": "アルバム",
+			"label": "レーベル",
+			"origin": "フォルダー",
 			"bpm": "BPM",
 			"key": "キー",
 			"time": "時間",
+			"bitrate": "ビットレート",
+			"year": "年",
+			"dateAdded": "追加日",
 			"tags": "タグ",
 			"rating": "評価"
+		},
+		"columnMenu": {
+			"reset": "列を既定値に戻す",
+			"alwaysVisible": "常に表示"
 		},
 		"track": "曲",
 		"tracks": "曲",

@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Titel",
 			"artist": "Artiest",
+			"album": "Album",
+			"label": "Label",
+			"origin": "Map",
 			"bpm": "BPM",
 			"key": "Toonsoort",
 			"time": "Tijd",
+			"bitrate": "Bitrate",
+			"year": "Jaar",
+			"dateAdded": "Toegevoegd op",
 			"tags": "Tags",
 			"rating": "Beoordeling"
+		},
+		"columnMenu": {
+			"reset": "Standaardkolommen herstellen",
+			"alwaysVisible": "Altijd zichtbaar"
 		},
 		"track": "track",
 		"tracks": "tracks",

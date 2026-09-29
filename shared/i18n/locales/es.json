@@ -280,11 +280,21 @@
 		"columns": {
 			"title": "Título",
 			"artist": "Artista",
+			"album": "Álbum",
+			"label": "Sello",
+			"origin": "Origen",
 			"bpm": "BPM",
 			"key": "Tono",
 			"time": "Tiempo",
+			"bitrate": "Bitrate",
+			"year": "Año",
+			"dateAdded": "Añadido",
 			"tags": "Etiquetas",
 			"rating": "Calificación"
+		},
+		"columnMenu": {
+			"reset": "Restablecer columnas predeterminadas",
+			"alwaysVisible": "Siempre visible"
 		},
 		"track": "pista",
 		"tracks": "pistas",

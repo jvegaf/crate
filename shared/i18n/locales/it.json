@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Titolo",
 			"artist": "Artista",
+			"album": "Album",
+			"label": "Etichetta",
+			"origin": "Origine",
 			"bpm": "BPM",
 			"key": "Tonalità",
 			"time": "Tempo",
+			"bitrate": "Bitrate",
+			"year": "Anno",
+			"dateAdded": "Aggiunto il",
 			"tags": "Tag",
 			"rating": "Valutazione"
+		},
+		"columnMenu": {
+			"reset": "Ripristina colonne predefinite",
+			"alwaysVisible": "Sempre visibile"
 		},
 		"track": "traccia",
 		"tracks": "tracce",

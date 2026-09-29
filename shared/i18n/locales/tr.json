@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Başlık",
 			"artist": "Sanatçı",
+			"album": "Albüm",
+			"label": "Label",
+			"origin": "Kaynak",
 			"bpm": "BPM",
 			"key": "Anahtar",
 			"time": "Süre",
+			"bitrate": "Bitrate",
+			"year": "Yıl",
+			"dateAdded": "Eklenme tarihi",
 			"tags": "Etiketler",
 			"rating": "Değerlendirme"
+		},
+		"columnMenu": {
+			"reset": "Varsayılan sütunlara sıfırla",
+			"alwaysVisible": "Her zaman görünür"
 		},
 		"track": "şarkı",
 		"tracks": "şarkı",

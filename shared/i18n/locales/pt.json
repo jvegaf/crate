@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "Título",
 			"artist": "Artista",
+			"album": "Álbum",
+			"label": "Selo",
+			"origin": "Origem",
 			"bpm": "BPM",
 			"key": "Tom",
 			"time": "Tempo",
+			"bitrate": "Bitrate",
+			"year": "Ano",
+			"dateAdded": "Adicionado em",
 			"tags": "Tags",
 			"rating": "Classificação"
+		},
+		"columnMenu": {
+			"reset": "Redefinir colunas padrão",
+			"alwaysVisible": "Sempre visível"
 		},
 		"track": "faixa",
 		"tracks": "faixas",

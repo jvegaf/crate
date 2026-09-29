@@ -282,11 +282,21 @@
 		"columns": {
 			"title": "标题",
 			"artist": "艺术家",
+			"album": "专辑",
+			"label": "厂牌",
+			"origin": "来源",
 			"bpm": "BPM",
 			"key": "调性",
 			"time": "时长",
+			"bitrate": "比特率",
+			"year": "年份",
+			"dateAdded": "添加日期",
 			"tags": "标签",
 			"rating": "评分"
+		},
+		"columnMenu": {
+			"reset": "重置为默认列",
+			"alwaysVisible": "始终可见"
 		},
 		"track": "曲目",
 		"tracks": "曲目",
