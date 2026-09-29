@@ -389,5 +389,12 @@ ALTER TABLE discovery_releases ADD COLUMN source_page_url TEXT;
     r#"
 CREATE INDEX IF NOT EXISTS idx_tracks_file_hash ON tracks(file_hash);
 "#,
+    // Migration 8: Data repair, not a schema change. The Symphonia fallback stored
+    // bit depth (`bits_per_sample`) in the bitrate column; the producer was fixed in
+    // commit 1b667d0. Clearing values below 96 removes those corrupt depths while
+    // preserving plausible music bitrates. This is idempotent: a second run matches nothing.
+    r#"
+UPDATE tracks SET bitrate = NULL WHERE bitrate IS NOT NULL AND bitrate < 96;
+"#,
   ]
 }

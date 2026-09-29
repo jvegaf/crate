@@ -235,6 +235,92 @@ mod tests {
   }
 
   #[test]
+  fn repairs_bitrates_written_as_bit_depths() {
+    fn insert_track(conn: &Connection, suffix: usize, bitrate: Option<i64>) -> String {
+      let id = format!("bitrate-repair-{suffix}");
+      conn
+        .execute(
+          "INSERT INTO tracks (id, file_path, duration_ms, date_added, date_modified, bitrate) \
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+          rusqlite::params![
+            id,
+            format!("/music/bitrate-repair-{suffix}.mp3"),
+            180_000,
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+            bitrate,
+          ],
+        )
+        .unwrap();
+      id
+    }
+
+    let conn = open_mem();
+    let migrations = schema::get_migrations();
+    let migration_count = migrations.len();
+
+    // Simulate a database at the version immediately before the data-repair migration.
+    conn
+      .execute(
+        "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)",
+        [],
+      )
+      .unwrap();
+    for (idx, sql) in migrations.iter().take(migration_count - 1).enumerate() {
+      conn.execute_batch(sql).unwrap();
+      conn
+        .execute(
+          "INSERT INTO schema_version (version) VALUES (?1)",
+          [(idx as i32) + 1],
+        )
+        .unwrap();
+    }
+
+    let cases = [
+      (Some(8), None),
+      (Some(16), None),
+      (Some(24), None),
+      (Some(32), None),
+      (Some(95), None),
+      (Some(96), Some(96)),
+      (Some(128), Some(128)),
+      (Some(320), Some(320)),
+      (Some(1411), Some(1411)),
+      (None, None),
+    ];
+    let track_ids: Vec<String> = cases
+      .iter()
+      .enumerate()
+      .map(|(suffix, (bitrate, _))| insert_track(&conn, suffix, *bitrate))
+      .collect();
+
+    // Applying all migrations repairs corrupted values and bumps the schema version.
+    run_migrations(&conn).unwrap();
+    assert_eq!(version(&conn), schema::get_migrations().len() as i32);
+
+    for (id, (_, expected_bitrate)) in track_ids.iter().zip(cases) {
+      let actual_bitrate: Option<i64> = conn
+        .query_row("SELECT bitrate FROM tracks WHERE id = ?1", [id], |row| {
+          row.get(0)
+        })
+        .unwrap();
+      assert_eq!(actual_bitrate, expected_bitrate, "track {id}");
+    }
+
+    // Reapplying the SQL is an idempotent no-op: no rows match after repair.
+    conn.execute_batch(migrations.last().unwrap()).unwrap();
+    assert_eq!(conn.changes(), 0);
+    for (id, (_, expected_bitrate)) in track_ids.iter().zip(cases) {
+      let actual_bitrate: Option<i64> = conn
+        .query_row("SELECT bitrate FROM tracks WHERE id = ?1", [id], |row| {
+          row.get(0)
+        })
+        .unwrap();
+      assert_eq!(actual_bitrate, expected_bitrate, "track {id} after rerun");
+    }
+  }
+
+  #[test]
   fn existing_v2_database_upgrades_cleanly() {
     let conn = open_mem();
 
