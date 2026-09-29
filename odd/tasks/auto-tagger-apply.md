@@ -265,10 +265,23 @@ Known environment trap: `cargo fmt --check` reports three pre-existing 4-space f
 Slices S1–S4 are implemented, verified and committed on `dev`. Two things are NOT done and are
 recorded here rather than implied:
 
-1. **S1's native review never completed** (empty reviewer output three times, lineage
-   `review-c82f3ab6f25ba11c` left non-terminal).
+1. **S1's native review never completed.** Four attempts against lineage
+   `review-c82f3ab6f25ba11c`, all refused by the OpenCode reviewer transport: three returned
+   `opencode_task_output_empty` and the fourth `opencode_reviewer_result_refused`, each time after
+   the exact-lineage STATUS re-offered the same bound slot with an identical binding. Reviews #2 and
+   #3 in this same session completed normally, so the fault is in the runtime, not the contract, and
+   not in the candidate. The lineage is left **non-terminal**; it needs a maintainer-authorized
+   `gentle-ai review abandon` (or `review mode disable`) to be closed, and both are the maintainer's
+   call rather than something to fake from here. S1 is verified by tests but unreviewed.
 2. **Nothing was exercised against a running app.** The UI passes the type, lint and compile gates,
-   but the search → select → extend → apply flow has not been run by hand.
+   but the search → select → extend → apply flow has not been run by hand. Suggested manual pass:
+   `yarn dev`, select exactly one track, right-click → "Find track tags"; expect a searching state,
+   then up to five scored candidates; selecting a row should trigger "Loading track details…" and
+   then fill the Bandcamp-only fields (label, release date, duration); "Apply tags" should change
+   the track's metadata in the list. Negative cases worth exercising: with 2+ tracks selected the
+   menu entry must be disabled; TraxSource is expected to fail live (Cloudflare) and must appear in
+   the provider-error block without hiding the other providers' results; a track with no artist tag
+   caps every candidate at 70%.
 
 ## Orchestration gotcha (reused)
 
