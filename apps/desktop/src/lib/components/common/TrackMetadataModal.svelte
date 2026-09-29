@@ -11,6 +11,7 @@
 	import { withNativeDialog } from '$shared/utils'
 	import AlbumArt from './AlbumArt.svelte'
 	import Button from './Button.svelte'
+	import IconButton from './IconButton.svelte'
 	import Modal from './Modal.svelte'
 	import Text from './Text.svelte'
 
@@ -217,21 +218,12 @@
 		return { path: selected, artwork: { mime_type: mimeType, data: Array.from(bytes) } }
 	}
 
-	async function handleSelectCrateArtwork() {
-		validationError = null
-		try {
-			const selected = await chooseImage()
-			if (selected) crateArtwork = { type: 'set', filePath: selected.path }
-		} catch (error) {
-			validationError = error instanceof Error ? error.message : String(error)
-		}
-	}
-
-	async function handleSelectEmbeddedArtwork() {
+	async function handleSelectArtwork() {
 		validationError = null
 		try {
 			const selected = await chooseImage()
 			if (selected) {
+				crateArtwork = { type: 'set', filePath: selected.path }
 				embeddedArtwork = selected.artwork
 				embeddedArtworkCleared = false
 			}
@@ -313,180 +305,182 @@
 			</div>
 		{/if}
 
-		<section class="space-y-4 border-t border-stroke pt-5">
-			<Text size="xs" weight="semibold" color="secondary" as="h3">
-				{$translate('editor.information')}
-			</Text>
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-				{#each nullableFields.filter( (field) => ['title', 'artist', 'album', 'year', 'label'].includes(field) ) as field (field)}
-					<label class="space-y-1 text-sm text-text-secondary">
-						<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
-						<div class="flex gap-2">
-							<input
-								class="min-w-0 flex-1 rounded-md border border-stroke bg-surface-0 px-3 py-2 text-text-primary outline-none focus:border-brand-primary"
-								type={field === 'year' || field === 'bpm' ? 'number' : 'text'}
-								step={field === 'bpm' ? 'any' : '1'}
-								value={fieldValue(field)}
-								oninput={(event) => setField(field, event.currentTarget.value)}
-							/>
-							{#if nullableFields.includes(field)}
-								<Button variant="secondary" size="sm" disabled={saving} onclick={() => clearField(field)}>
-									{$translate('modals.trackMetadata.clearField')}
-								</Button>
-							{/if}
-						</div>
-					</label>
-				{/each}
-			</div>
-		</section>
-
-		<section class="space-y-4 border-t border-stroke pt-5">
-			<Text size="xs" weight="semibold" color="secondary" as="h3">
-				{$translate('editor.additional')}
-			</Text>
-			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-				{#each nullableFields.filter( (field) => ['bpm', 'key', 'genre', 'catalog_number'].includes(field) ) as field (field)}
-					<label class="space-y-1 text-sm text-text-secondary">
-						<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
-						<div class="flex gap-2">
-							<input
-								class="min-w-0 flex-1 rounded-md border border-stroke bg-surface-0 px-3 py-2 text-text-primary outline-none focus:border-brand-primary"
-								type={field === 'year' || field === 'bpm' ? 'number' : 'text'}
-								step={field === 'bpm' ? 'any' : '1'}
-								value={fieldValue(field)}
-								oninput={(event) => setField(field, event.currentTarget.value)}
-							/>
-							{#if nullableFields.includes(field)}
-								<Button variant="secondary" size="sm" disabled={saving} onclick={() => clearField(field)}>
-									{$translate('modals.trackMetadata.clearField')}
-								</Button>
-							{/if}
-						</div>
-					</label>
-				{/each}
-				<label class="space-y-1 text-sm text-text-secondary">
-					<span>{$translate('modals.trackMetadata.fields.rating')}</span>
-					<div class="flex gap-2">
-						<input
-							class="min-w-0 flex-1 rounded-md border border-stroke bg-surface-0 px-3 py-2 text-text-primary outline-none focus:border-brand-primary"
-							type="number"
-							min="0"
-							max="5"
-							step="1"
-							value={fieldValue('rating')}
-							oninput={(event) => setField('rating', event.currentTarget.value)}
-						/>
-						<Button variant="secondary" size="sm" disabled={saving} onclick={() => clearField('rating')}>
-							{$translate('modals.trackMetadata.clearField')}
-						</Button>
+		<div class="grid gap-6 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+			<div class="space-y-6">
+				<section class="space-y-4 border-t border-stroke pt-5">
+					<Text size="xs" weight="semibold" color="secondary" as="h3">
+						{$translate('modals.trackMetadata.artwork')}
+					</Text>
+					<div class="w-56 shrink-0">
+						<AlbumArt size="lg" artworkPath={track.artwork_path} />
 					</div>
-				</label>
-			</div>
-		</section>
-
-		<section class="grid grid-cols-1 gap-5 border-t border-stroke pt-5 md:grid-cols-2">
-			<div class="space-y-3">
-				<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.crateTags')}</h3>
-				{#if allTags.length === 0}
-					<p class="text-sm text-text-secondary">{$translate('modals.trackMetadata.noTags')}</p>
-				{:else}
-					<div class="max-h-40 space-y-2 overflow-y-auto rounded-md border border-stroke bg-surface-0 p-3">
-						{#each allTags as tag (tag.id)}
-							<label class="flex items-center gap-2 text-sm text-text-primary">
-								<input
-									type="checkbox"
-									checked={(selectedTagIds ?? track.tags.map((item) => item.id)).includes(tag.id)}
-									disabled={saving}
-									onchange={(event) => toggleTag(tag, event.currentTarget.checked)}
-								/>
-								<span>{tag.name}</span>
-								<span class="text-xs text-text-tertiary">
-									{tagCategories.find((category) => category.id === tag.category_id)?.name ?? ''}
-								</span>
-							</label>
-						{/each}
-					</div>
-				{/if}
-				<p class="text-xs text-text-secondary">{$translate('modals.trackMetadata.crateTagsHint')}</p>
-			</div>
-
-			<div class="space-y-3">
-				<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.crateArtwork')}</h3>
-				<div class="w-40 shrink-0">
-					<AlbumArt size="lg" artworkPath={track.artwork_path} />
-				</div>
-				<div class="min-w-0 text-sm text-text-secondary">
-					<p>{$translate('modals.trackMetadata.crateArtworkHint')}</p>
-					{#if crateArtwork.type === 'set'}
-						<p class="truncate text-xs">{crateArtwork.filePath}</p>
-					{:else if crateArtwork.type === 'clear'}
-						<p class="text-xs">{$translate('modals.trackMetadata.artworkWillClear')}</p>
-					{/if}
-					<div class="flex flex-wrap gap-2">
-						<Button variant="secondary" size="sm" disabled={saving} onclick={handleSelectCrateArtwork}>
-							{$translate('modals.trackMetadata.chooseArtwork')}
-						</Button>
-						<Button
-							variant="secondary"
-							size="sm"
-							disabled={saving || (track.artwork_path === null && crateArtwork.type !== 'set')}
-							onclick={() => (crateArtwork = { type: 'clear' })}
-						>
-							{$translate('modals.trackMetadata.clearArtwork')}
-						</Button>
-						{#if crateArtwork.type !== 'unchanged'}
+					<div class="space-y-3 text-sm text-text-secondary">
+						<p>{$translate('modals.trackMetadata.artworkHint')}</p>
+						{#if crateArtwork.type === 'set'}
+							<p class="truncate text-xs">{crateArtwork.filePath}</p>
+						{:else if crateArtwork.type === 'clear' || embeddedArtworkCleared}
+							<p class="text-xs">{$translate('modals.trackMetadata.artworkWillClear')}</p>
+						{/if}
+						{#if embeddedArtwork}
+							<p class="text-xs">{$translate('modals.trackMetadata.artworkReady')}</p>
+						{/if}
+						<div class="flex flex-wrap gap-2">
+							<Button variant="secondary" size="sm" disabled={saving} onclick={handleSelectArtwork}>
+								{$translate('modals.trackMetadata.chooseArtwork')}
+							</Button>
 							<Button
 								variant="secondary"
 								size="sm"
-								disabled={saving}
-								onclick={() => (crateArtwork = { type: 'unchanged' })}
+								disabled={saving || (track.artwork_path === null && crateArtwork.type !== 'set')}
+								onclick={() => {
+									crateArtwork = { type: 'clear' }
+									embeddedArtwork = null
+									embeddedArtworkCleared = true
+								}}
 							>
-								{$translate('modals.trackMetadata.undoArtworkChange')}
+								{$translate('modals.trackMetadata.clearArtwork')}
 							</Button>
+							{#if crateArtwork.type !== 'unchanged' || embeddedArtwork !== null || embeddedArtworkCleared}
+								<Button
+									variant="secondary"
+									size="sm"
+									disabled={saving}
+									onclick={() => {
+										crateArtwork = { type: 'unchanged' }
+										embeddedArtwork = null
+										embeddedArtworkCleared = false
+									}}
+								>
+									{$translate('modals.trackMetadata.undoArtworkChange')}
+								</Button>
+							{/if}
+						</div>
+					</div>
+				</section>
+
+				<section class="space-y-3 border-t border-stroke pt-5">
+					<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.crateTags')}</h3>
+					{#if allTags.length === 0}
+						<p class="text-sm text-text-secondary">{$translate('modals.trackMetadata.noTags')}</p>
+					{:else}
+						<div class="max-h-40 space-y-2 overflow-y-auto rounded-md border border-stroke bg-surface-0 p-3">
+							{#each allTags as tag (tag.id)}
+								<label class="flex items-center gap-2 text-sm text-text-primary">
+									<input
+										type="checkbox"
+										checked={(selectedTagIds ?? track.tags.map((item) => item.id)).includes(tag.id)}
+										disabled={saving}
+										onchange={(event) => toggleTag(tag, event.currentTarget.checked)}
+									/>
+									<span>{tag.name}</span>
+									<span class="text-xs text-text-tertiary">
+										{tagCategories.find((category) => category.id === tag.category_id)?.name ?? ''}
+									</span>
+								</label>
+							{/each}
+						</div>
+					{/if}
+					<p class="text-xs text-text-secondary">{$translate('modals.trackMetadata.crateTagsHint')}</p>
+				</section>
+			</div>
+
+			<section class="space-y-4 border-t border-stroke pt-5">
+				<Text size="xs" weight="semibold" color="secondary" as="h3">
+					{$translate('editor.information')}
+				</Text>
+				<div class="space-y-3">
+					{#each nullableFields.filter( (field) => ['title', 'artist', 'album', 'label', 'catalog_number'].includes(field) ) as field (field)}
+						<label class="block space-y-1 text-sm text-text-secondary">
+							<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
+							<div class="relative">
+								<input
+									class="w-full rounded-md border border-stroke bg-surface-0 px-3 py-2 pr-8 text-text-primary outline-none focus:border-brand-primary"
+									type="text"
+									value={fieldValue(field)}
+									oninput={(event) => setField(field, event.currentTarget.value)}
+								/>
+								{#if fieldValue(field) !== ''}
+									<IconButton
+										class="absolute top-1/2 right-1.5 -translate-y-1/2"
+										icon="x"
+										size="sm"
+										title={$translate('modals.trackMetadata.clearField')}
+										disabled={saving}
+										onclick={() => clearField(field)}
+									/>
+								{/if}
+							</div>
+						</label>
+					{/each}
+				</div>
+				<div class="grid grid-cols-3 gap-2">
+					{#each nullableFields.filter((field) => ['year', 'bpm', 'key'].includes(field)) as field (field)}
+						<label class="min-w-0 space-y-1 text-sm text-text-secondary">
+							<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
+							<div class="relative">
+								<input
+									class="w-full rounded-md border border-stroke bg-surface-0 px-3 py-2 pr-8 text-text-primary outline-none focus:border-brand-primary"
+									type={field === 'year' || field === 'bpm' ? 'number' : 'text'}
+									step={field === 'bpm' ? 'any' : '1'}
+									value={fieldValue(field)}
+									oninput={(event) => setField(field, event.currentTarget.value)}
+								/>
+								{#if fieldValue(field) !== ''}
+									<IconButton
+										class="absolute top-1/2 right-1.5 -translate-y-1/2"
+										icon="x"
+										size="sm"
+										title={$translate('modals.trackMetadata.clearField')}
+										disabled={saving}
+										onclick={() => clearField(field)}
+									/>
+								{/if}
+							</div>
+						</label>
+					{/each}
+				</div>
+				<label class="block space-y-1 text-sm text-text-secondary">
+					<span>{$translate(`modals.trackMetadata.fields.${fieldLabels.genre}`)}</span>
+					<div class="relative">
+						<input
+							class="w-full rounded-md border border-stroke bg-surface-0 px-3 py-2 pr-8 text-text-primary outline-none focus:border-brand-primary"
+							type="text"
+							value={fieldValue('genre')}
+							oninput={(event) => setField('genre', event.currentTarget.value)}
+						/>
+						{#if fieldValue('genre') !== ''}
+							<IconButton
+								class="absolute top-1/2 right-1.5 -translate-y-1/2"
+								icon="x"
+								size="sm"
+								title={$translate('modals.trackMetadata.clearField')}
+								disabled={saving}
+								onclick={() => clearField('genre')}
+							/>
 						{/if}
 					</div>
+				</label>
+				<div class="space-y-1 text-sm text-text-secondary">
+					<span>{$translate('modals.trackMetadata.fields.rating')}</span>
+					<div class="flex items-center gap-1 text-3xl leading-none">
+						{#each [1, 2, 3, 4, 5] as star (star)}
+							<button
+								type="button"
+								disabled={saving}
+								aria-label={`${star}/5`}
+								class={star <= Number(draft.rating ?? track.rating) ? 'text-warning' : 'text-text-tertiary/50'}
+								onclick={() => {
+									const current = Number(draft.rating ?? track.rating)
+									draft = { ...draft, rating: String(star === current ? 0 : star) }
+								}}
+							>
+								★
+							</button>
+						{/each}
+					</div>
 				</div>
-			</div>
-		</section>
-
-		<section class="space-y-3 border-t border-stroke pt-5">
-			<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.embeddedArtwork')}</h3>
-			<p class="text-sm text-text-secondary">{$translate('modals.trackMetadata.embeddedArtworkHint')}</p>
-			<div class="flex flex-wrap items-center gap-2">
-				<Button variant="secondary" size="sm" disabled={saving} onclick={handleSelectEmbeddedArtwork}>
-					{$translate('modals.trackMetadata.chooseArtwork')}
-				</Button>
-				<Button
-					variant="secondary"
-					size="sm"
-					disabled={saving}
-					onclick={() => {
-						embeddedArtwork = null
-						embeddedArtworkCleared = true
-					}}
-				>
-					{$translate('modals.trackMetadata.clearArtwork')}
-				</Button>
-				{#if embeddedArtwork}
-					<span class="text-xs text-text-secondary">{$translate('modals.trackMetadata.artworkReady')}</span>
-				{:else if embeddedArtworkCleared}
-					<span class="text-xs text-text-secondary">{$translate('modals.trackMetadata.artworkWillClear')}</span>
-				{/if}
-				{#if embeddedArtwork !== null || embeddedArtworkCleared}
-					<Button
-						variant="secondary"
-						size="sm"
-						disabled={saving}
-						onclick={() => {
-							embeddedArtwork = null
-							embeddedArtworkCleared = false
-						}}
-					>
-						{$translate('modals.trackMetadata.undoArtworkChange')}
-					</Button>
-				{/if}
-			</div>
-		</section>
+			</section>
+		</div>
 
 		<section class="space-y-3 border-t border-stroke pt-5">
 			<h3 class="text-sm font-semibold text-text-primary">{$translate('modals.trackMetadata.technicalDetails')}</h3>

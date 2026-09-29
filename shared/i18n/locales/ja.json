@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "アートワーク",
+			"artworkHint": "ライブラリのアートワークに適用され、画像を音声ファイルに埋め込みます。"
+		},
 		"createPlaylist": {
 			"title": "新しいプレイリスト",
 			"placeholder": "プレイリスト名"

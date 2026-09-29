@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Cover",
+			"artworkHint": "Wird auf das Bibliothekscover angewendet und das Bild in die Audiodatei eingebettet."
+		},
 		"createPlaylist": {
 			"title": "Neue Playlist",
 			"placeholder": "Playlist-Name"

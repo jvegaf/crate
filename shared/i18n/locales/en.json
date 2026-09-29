@@ -538,6 +538,8 @@
 		"trackMetadata": {
 			"title": "Track Metadata",
 			"details": "Metadata",
+			"artwork": "Artwork",
+			"artworkHint": "Applies to the library artwork and embeds the image in the audio file.",
 			"crateTags": "Crate Tags",
 			"crateTagsHint": "These library tags are managed by Crate and are not embedded in the audio file.",
 			"crateArtwork": "Crate Artwork",

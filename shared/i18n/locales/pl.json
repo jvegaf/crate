@@ -478,6 +478,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Okładka",
+			"artworkHint": "Zostanie zastosowana jako okładka w bibliotece, a obraz zostanie osadzony w pliku audio."
+		},
 		"createPlaylist": {
 			"title": "Nowa playlista",
 			"placeholder": "Nazwa playlisty"

@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Copertina",
+			"artworkHint": "Si applica alla copertina della libreria e incorpora l’immagine nel file audio."
+		},
 		"createPlaylist": {
 			"title": "Nuova playlist",
 			"placeholder": "Nome playlist"

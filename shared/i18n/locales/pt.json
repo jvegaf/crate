@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Capa",
+			"artworkHint": "Aplica-se à capa da biblioteca e incorpora a imagem no ficheiro de áudio."
+		},
 		"createPlaylist": {
 			"title": "Nova playlist",
 			"placeholder": "Nome da playlist"

@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Artwork",
+			"artworkHint": "Wordt toegepast op de bibliotheekafbeelding en de afbeelding wordt in het audiobestand ingesloten."
+		},
 		"createPlaylist": {
 			"title": "Nieuwe afspeellijst",
 			"placeholder": "Naam afspeellijst"

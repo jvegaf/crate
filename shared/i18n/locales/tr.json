@@ -478,6 +478,10 @@
 		"ok": "Tamam"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Kapak görseli",
+			"artworkHint": "Kitaplık kapak görseline uygulanır ve görseli ses dosyasına gömer."
+		},
 		"createPlaylist": {
 			"title": "Yeni Çalma Listesi",
 			"placeholder": "Çalma listesi adı"

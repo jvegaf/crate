@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Pochette",
+			"artworkHint": "S’applique à la pochette de la bibliothèque et intègre l’image au fichier audio."
+		},
 		"createPlaylist": {
 			"title": "Nouvelle playlist",
 			"placeholder": "Nom de la playlist"

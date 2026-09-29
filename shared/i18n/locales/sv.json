@@ -479,6 +479,10 @@
 		"ok": "OK"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "Omslag",
+			"artworkHint": "Används för bibliotekets omslagsbild och bäddar in bilden i ljudfilen."
+		},
 		"createPlaylist": {
 			"title": "Ny spellista",
 			"placeholder": "Spellistenamn"

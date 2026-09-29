@@ -479,6 +479,10 @@
 		"ok": "确定"
 	},
 	"modals": {
+		"trackMetadata": {
+			"artwork": "封面",
+			"artworkHint": "应用于曲库封面，并将图像嵌入音频文件。"
+		},
 		"createPlaylist": {
 			"title": "新建播放列表",
 			"placeholder": "播放列表名称"
