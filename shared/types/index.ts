@@ -166,6 +166,30 @@ export interface TrackUpdate {
 	rating?: number
 }
 
+/** Embedded audio artwork payload accepted by the desktop metadata patch command. */
+export interface EmbeddedArtwork {
+	mime_type: string
+	data: number[]
+}
+
+/**
+ * Single-track metadata patch. Omitted keys are unchanged; null explicitly clears nullable values.
+ * Rating uses 0 as its clear value, and embedded artwork is written into the audio file.
+ */
+export interface TrackMetadataPatch {
+	title?: string | null
+	artist?: string | null
+	album?: string | null
+	year?: number | null
+	genre?: string | null
+	label?: string | null
+	catalog_number?: string | null
+	bpm?: number | null
+	key?: string | null
+	rating?: number
+	embedded_artwork?: EmbeddedArtwork | null
+}
+
 export interface ImportResult {
 	tracks: Track[]
 	failed_count: number

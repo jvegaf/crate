@@ -12,6 +12,7 @@
 		ExportRequest,
 		SettingsPage,
 		ActiveView,
+		TrackMetadataPatch,
 	} from '$shared/types'
 
 	// Discriminated union for all modal states
@@ -39,6 +40,7 @@
 		| { type: 'tagInput' }
 		| { type: 'deviceInfo'; device: UsbDevice }
 		| { type: 'relocate'; track: Track }
+		| { type: 'trackMetadata'; track: Track }
 		| {
 				type: 'moveConflict'
 				movingItem: Playlist
@@ -89,10 +91,20 @@
 	import { DeviceInfoModal, ReformatDeviceModal } from '$lib/components/devices'
 	import { SettingsModal } from '$lib/components/settings'
 	import { RelocateTrackModal } from '$lib/components/library'
+	import TrackMetadataModal, { type CrateArtworkChange } from './TrackMetadataModal.svelte'
 	import { SmartPlaylistModal } from '$lib/components/playlists'
 	import { ExportModal, ExportFailureModal, QuickExportModal } from '$lib/components/export'
 	import { toastStore } from '$shared/stores/toast'
-	import { resolveDuplicate } from '$shared/api/library'
+	import {
+		deleteTrackArtwork,
+		getTrack,
+		resolveDuplicate,
+		setTrackArtwork,
+		updateTrackMetadata,
+	} from '$shared/api/library'
+	import { assignTags, removeTags } from '$shared/api/tags'
+	import { libraryStore } from '$lib/stores/library'
+	import { syncStore } from '$lib/stores/sync'
 	import { parseSmartRules } from '$shared/utils/smartRules'
 	import { translate } from '$shared/i18n'
 	import { get } from 'svelte/store'
@@ -302,6 +314,10 @@
 
 	export function openRelocateModal(track: Track) {
 		activeModal = { type: 'relocate', track }
+	}
+
+	export function openTrackMetadataModal(track: Track) {
+		activeModal = { type: 'trackMetadata', track }
 	}
 
 	export function openMoveConflictModal(movingItem: Playlist, existingItem: Playlist, targetParentId: string | null) {
@@ -713,6 +729,77 @@
 		}
 	}
 
+	async function handleTrackMetadataSave(
+		track: Track,
+		patch: TrackMetadataPatch,
+		tagIds: string[],
+		artwork: CrateArtworkChange
+	): Promise<{ errors: string[] }> {
+		const errors: string[] = []
+		let changed = false
+		const currentTagIds = track.tags.map((tag) => tag.id)
+		const tagsToRemove = currentTagIds.filter((id) => !tagIds.includes(id))
+		const tagsToAdd = tagIds.filter((id) => !currentTagIds.includes(id))
+
+		if (Object.keys(patch).length > 0) {
+			try {
+				await updateTrackMetadata(track.id, patch)
+				changed = true
+			} catch (error) {
+				errors.push(`${get(translate)('modals.trackMetadata.errors.metadata')}: ${errorMessage(error)}`)
+			}
+		}
+
+		if (tagsToRemove.length > 0) {
+			try {
+				await removeTags([track.id], tagsToRemove)
+				changed = true
+			} catch (error) {
+				errors.push(`${get(translate)('modals.trackMetadata.errors.removeTags')}: ${errorMessage(error)}`)
+			}
+		}
+		if (tagsToAdd.length > 0) {
+			try {
+				await assignTags([track.id], tagsToAdd)
+				changed = true
+			} catch (error) {
+				errors.push(`${get(translate)('modals.trackMetadata.errors.addTags')}: ${errorMessage(error)}`)
+			}
+		}
+
+		if (artwork.type === 'set') {
+			try {
+				await setTrackArtwork(track.id, artwork.filePath)
+				changed = true
+			} catch (error) {
+				errors.push(`${get(translate)('modals.trackMetadata.errors.crateArtwork')}: ${errorMessage(error)}`)
+			}
+		} else if (artwork.type === 'clear') {
+			try {
+				await deleteTrackArtwork(track.id)
+				changed = true
+			} catch (error) {
+				errors.push(`${get(translate)('modals.trackMetadata.errors.crateArtwork')}: ${errorMessage(error)}`)
+			}
+		}
+
+		if (changed) {
+			try {
+				const updatedTrack = await getTrack(track.id)
+				libraryStore.updateTracksInState([updatedTrack])
+			} catch (error) {
+				errors.push(`${get(translate)('modals.trackMetadata.errors.refresh')}: ${errorMessage(error)}`)
+			}
+			syncStore.notifyTrackChanges([track.id])
+		}
+
+		return { errors }
+	}
+
+	function errorMessage(error: unknown): string {
+		return error instanceof Error ? error.message : String(error)
+	}
+
 	// Device handlers
 	async function handleReformatDeviceSubmit(volumeName: string) {
 		if (activeModal.type === 'reformatDevice') {
@@ -974,6 +1061,11 @@
 <!-- Relocate Track Modal -->
 {#if activeModal.type === 'relocate'}
 	<RelocateTrackModal open={true} track={activeModal.track} onClose={closeAll} onRelocate={handleRelocateComplete} />
+{/if}
+
+<!-- Single-track Metadata Modal -->
+{#if activeModal.type === 'trackMetadata'}
+	<TrackMetadataModal track={activeModal.track} {tagCategories} onClose={closeAll} onSave={handleTrackMetadataSave} />
 {/if}
 
 <!-- Move Conflict Modal -->

@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import type {
 	DuplicateResolution,
 	FileMatchResult,
+	TrackMetadataPatch,
 	ImportResult,
 	ImportResultWithDuplicates,
 	LibraryFolderScanResult,
@@ -37,6 +38,11 @@ export async function getTrack(id: string): Promise<Track> {
  */
 export async function updateTrack(id: string, update: TrackUpdate): Promise<Track> {
 	return invoke<Track>('update_track', { id, update })
+}
+
+/** Update a single track while omitting unchanged metadata fields. */
+export async function updateTrackMetadata(id: string, patch: TrackMetadataPatch): Promise<Track> {
+	return invoke<Track>('update_track_metadata', { id, patch })
 }
 
 /**
