@@ -23,9 +23,12 @@ header cells. Both are persisted in the application settings, so the layout surv
   (`shared/utils/drag.ts`, `DRAG_THRESHOLD`, `TrackRow.svelte:63-92`). Reorder must follow that.
 - `ColumnConfig` (`shared/types/index.ts:437`) is dead code, referenced nowhere. It is replaced by
   the new model rather than left behind.
-- Bitrate is stored in **bps** (`lofty` `audio_bitrate()`, `import.rs:68`), but
-  `formatBitrate` (`shared/utils/format.ts:228`) prints the raw number as "kbps". Fixing it is part
-  of this feature because the Bitrate column exposes the bug.
+- Bitrate is stored in **kbps**, not bps: lofty 0.22.4 documents `audio_bitrate()` as kbps and
+  computes it that way (`(bytes_per_second * 8) / 1000` for WAV,
+  bits-per-millisecond for MP3), and this repo's own export fixture uses `bitrate: Some(320)`
+  (`services/export/sync_diff.rs:232`). The original `formatBitrate` printing the stored number was
+  therefore **already correct**; the real defect was only the symphonia fallback storing bit depth
+  (see Explicit exclusions / Evidence log).
 
 ## Accepted decisions (user)
 
@@ -76,7 +79,8 @@ remembered when re-enabled.
   `normalizeTracklistColumns` (drop unknown ids, append missing defs, force title visible),
   `resolveTracklistLayout` → visible defs + `grid-template-columns` string.
   `shared/utils/sorting.ts`: sort values for label/bitrate/origin (origin via new
-  `getTrackOriginFolder` in `shared/utils/format.ts`) and `formatBitrate` bps→kbps fix.
+  `getTrackOriginFolder` in `shared/utils/format.ts`). The `formatBitrate` "fix" written here was
+  based on a wrong unit premise and was reverted in `1b667d0`.
   Tests in `shared/utils/tracklistColumns.test.ts` + extend `format.test.ts`.
   Check: `npx vitest run`.
 
@@ -121,8 +125,13 @@ remembered when re-enabled.
 - Discovery list columns.
 - Per-playlist or per-view layouts.
 - Cloud-syncing the column preference.
-- The `import.rs:318` symphonia fallback storing `bits_per_sample` as bitrate — separate defect,
-  file an issue instead of fixing here.
+- ~~The `import.rs:318` symphonia fallback storing `bits_per_sample` as bitrate — separate defect,
+  file an issue instead of fixing here.~~ **Fixed after all** in `1b667d0` on explicit user request.
+  Repairing the rows already imported through that path is still excluded, and for a concrete reason:
+  `bitrate` is a cloud-synced column (`cloud_sync/pipeline/merge/writers.rs:109`) and a plain
+  migration `UPDATE` leaves the row's `_hlc` at the never-stamped sentinel, so the remote value wins
+  the next merge and silently reverts the fix. A real repair needs a stamped, dirty-bucket-aware
+  pass.
 
 ## Verification plan
 
@@ -131,6 +140,25 @@ remembered when re-enabled.
 - `yarn check:svelte` + `yarn check:svelte:mobile` + `yarn lint:check` + `yarn format:check` at close.
 - Manual smoke in `yarn dev`: toggle, drag, restart, verify persistence.
 - Review candidate is one work-unit commit, not the accumulated branch.
+
+- **Bitrate unit — my initial premise was WRONG, and it shipped as a regression in `83b5151`.** I
+  recorded above that lofty stores **bps** and that `formatBitrate` must divide by 1000. It does not:
+  lofty 0.22.4 documents `audio_bitrate()` as `/// Audio bitrate (kbps)` and its arithmetic agrees —
+  WAV `(bytes_per_second * 8) / 1000` (`lofty-0.22.4/src/iff/wav/properties.rs:230`), MP3 bits-per-
+  millisecond (`src/mpeg/properties.rs:163`), which *is* kbps. Dividing by 1000 turned every 320 kbps
+  file into `"< 1 kbps"`. Reverted in `1b667d0`, with the unit now named in the doc comment.
+  **Lesson: read a third-party crate's computation, not only its comments, and look for the repo's
+  own fixture of the field before deciding what a unit is.**
+- **Symphonia 0.5.5 API facts** (so the next reader does not re-derive them): `CodecParameters` has
+  NO bitrate field (`symphonia-core-0.5.5/src/codecs.rs:249-283`); `Channels::count()` exists
+  (`src/audio.rs:114`); `CodecType(u32)`'s inner field is PRIVATE (`src/codecs.rs:23`), so PCM codecs
+  cannot be matched by range — the explicit codec-constant list in
+  `read_audio_properties_symphonia` is verbose because the API forces it. PCM constants live in
+  `0x100..=0x125`; `ALAW`/`MULAW` are deliberately excluded.
+- **A re-scan does not repair existing rows:** `rescan_skips_every_existing_file`
+  (`services/library/scan.rs:315`) proves scan never re-reads properties for files already in the
+  library. Legacy fallback rows keep their bit-depth value until a stamped repair pass or a
+  remove-and-reimport.
 
 ## Evidence log
 
@@ -227,7 +255,8 @@ remembered when re-enabled.
   `TRACKLIST_COLUMN_DEFINITIONS` registry, and `defaultTracklistColumns` /
   `normalizeTracklistColumns` / `visibleTracklistColumns` / `tracklistGridTemplate` /
   `moveTracklistColumn` / `toggleTracklistColumn` / `getTrackOriginFolder` in
-  `shared/utils/tracklistColumns.ts`. `formatBitrate` now converts stored bps → kbps.
+  `shared/utils/tracklistColumns.ts`. ~~`formatBitrate` now converts stored bps → kbps.~~ (That claim
+  was wrong — see the bitrate-unit entry at the top of this log; corrected in `1b667d0`.)
   Gates: `npx vitest run` 39 passed (2 files); `yarn check:svelte` 1 error = pre-existing
   `PUBLIC_APP_VERSION` baseline at `apps/desktop/src/routes/+layout.svelte:12` (2 warnings
   pre-existing); `yarn check:svelte:mobile` 0/0; prettier + lint clean; `git diff --check` clean.
@@ -278,6 +307,7 @@ pushed, no PR opened). Base was `f003473`.
 | `cab761e` feat(settings): persist the tracklist column layout | W2 + W3 | 4 files, +80/−1 |
 | `1fc71dc` feat(i18n): add tracklist column and column-menu labels | W7 i18n | 15 files, +150 |
 | `14632bb` feat(tracklist): render, pick and reorder columns from the saved layout | W4 + W5 + W6 + docs | 6 files, +471/−151 |
+| `1b667d0` fix(tracklist): report bitrate in the unit the library stores | bitrate defects | 4 files, +102/−15 |
 
 Ordering is deliberate: i18n lands **before** the UI because `$translate` renders the raw key when a
 message is missing, so no commit ever shows a user a `library.columns.*` string.
@@ -303,3 +333,9 @@ No display in this environment, so `yarn dev` was never run. A human must confir
 7. Reset to default columns → back to the original layout.
 8. Window resize during a drag (cached-rect staleness) and a pointer released while the window is
    blurred (now handled by the `onblur` reset, unverified at runtime).
+
+The user ran the app and reported it works ("funciona bien"), which closes steps 1–7 as
+human-confirmed; the drag edge cases in step 8 remain unconfirmed.
+
+Also worth a human glance now that the unit is settled: enable the Bitrate column and confirm a
+known MP3 reads `128`/`320 kbps` rather than `< 1 kbps`, and that a WAV reads `1411 kbps`.
