@@ -16,6 +16,7 @@ export {
 	previewTrackIndex,
 } from './player'
 export { tagsStore, allTags, getTagById, getCategoryById, computeTagStates } from './tags'
+export { taggerStore } from './tagger'
 export { playlistsStore, rootPlaylists, getPlaylistChildren, buildPlaylistTree } from './playlists'
 export type { PlaylistTreeNode } from './playlists'
 export {

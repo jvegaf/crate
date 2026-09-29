@@ -22,6 +22,7 @@ export {
 	previewTrackIndex,
 } from '$shared/stores/player'
 export { tagsStore, allTags, getTagById, getCategoryById, computeTagStates } from '$shared/stores/tags'
+export { taggerStore } from '$shared/stores/tagger'
 export { playlistsStore, rootPlaylists, getPlaylistChildren, buildPlaylistTree } from '$shared/stores/playlists'
 export type { PlaylistTreeNode } from '$shared/stores/playlists'
 export {

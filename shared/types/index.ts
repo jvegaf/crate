@@ -1012,3 +1012,51 @@ export interface LibraryRoot {
 	name: string
 	local_path: string | null
 }
+
+// =============================================================================
+// Tagger Types
+// =============================================================================
+
+/**
+ * A single metadata candidate returned by a tagger provider search.
+ *
+ * Mirrors `models/tagger.rs` in snake_case. Optional fields are `T | null`
+ * because serde emits `null` for `None`, never `undefined`.
+ */
+export interface TagCandidate {
+	provider: string
+	title: string
+	version: string | null
+	artists: string[]
+	album: string | null
+	label: string | null
+	catalog_number: string | null
+	genre: string | null
+	release_date: string | null
+	bpm: number | null
+	key: string | null
+	duration_ms: number | null
+	isrc: string | null
+	track_number: number | null
+	artwork_url: string | null
+	url: string
+	provider_track_id: string | null
+	provider_release_id: string | null
+}
+
+/** `ScoredTagCandidate` is `#[serde(flatten)]` + `similarity_score`, so the wire shape is flat. */
+export interface ScoredTagCandidate extends TagCandidate {
+	similarity_score: number
+}
+
+/** A provider that failed during a ranked search; the others still contributed. */
+export interface ProviderError {
+	provider: string
+	error: string
+}
+
+/** Best-N candidates for the user to choose from, plus any provider failures. */
+export interface RankedSearchResult {
+	candidates: ScoredTagCandidate[]
+	errors: ProviderError[]
+}
