@@ -12,8 +12,10 @@ import type {
 	BackupFrequency,
 	FollowCheckCadence,
 	AutoFollowOnImport,
+	TracklistColumnPref,
 } from '../types'
 import * as settingsApi from '../api/settings'
+import { defaultTracklistColumns, normalizeTracklistColumns } from '../utils/tracklistColumns'
 import { rebuildMenu, type MenuTranslations } from '../api/app'
 import { setLanguage as setI18nLanguage, translate } from '../i18n'
 
@@ -44,6 +46,7 @@ interface SettingsState {
 	releaseDayReminders: boolean
 	newReleasesSummary: boolean
 	ignoredDeviceIds: string[]
+	tracklistColumns: TracklistColumnPref[]
 	lastBackupAt: string | null
 	backupFrequency: BackupFrequency
 	lastBackupType: string | null
@@ -76,6 +79,7 @@ const initialState: SettingsState = {
 	releaseDayReminders: true,
 	newReleasesSummary: true,
 	ignoredDeviceIds: [],
+	tracklistColumns: defaultTracklistColumns(),
 	lastBackupAt: null,
 	backupFrequency: 'monthly',
 	lastBackupType: null,
@@ -303,6 +307,7 @@ function createSettingsStore() {
 					releaseDayReminders: settings.releaseDayReminders ?? true,
 					newReleasesSummary: settings.newReleasesSummary ?? true,
 					ignoredDeviceIds: settings.ignoredDeviceIds,
+					tracklistColumns: normalizeTracklistColumns(settings.tracklistColumns),
 					lastBackupAt: settings.lastBackupAt ?? null,
 					backupFrequency: settings.backupFrequency ?? 'monthly',
 					lastBackupType: settings.lastBackupType ?? null,
@@ -620,6 +625,15 @@ function createSettingsStore() {
 			}
 		},
 
+		async setTracklistColumns(columns: TracklistColumnPref[]) {
+			update((s) => ({ ...s, tracklistColumns: columns }))
+			try {
+				await settingsApi.setSetting('tracklist_columns', JSON.stringify(columns))
+			} catch (error) {
+				console.error('Failed to save tracklist columns setting:', error)
+			}
+		},
+
 		/**
 		 * Refresh the list of available audio devices
 		 */
@@ -717,6 +731,8 @@ export const releaseDayReminders = derived(settingsStore, ($s) => $s.releaseDayR
 export const newReleasesSummary = derived(settingsStore, ($s) => $s.newReleasesSummary)
 
 export const ignoredDeviceIds = derived(settingsStore, ($s) => $s.ignoredDeviceIds)
+
+export const tracklistColumns = derived(settingsStore, ($s) => $s.tracklistColumns)
 
 export const lastBackupAt = derived(settingsStore, ($s) => $s.lastBackupAt)
 

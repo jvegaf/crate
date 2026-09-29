@@ -4,8 +4,14 @@ use rusqlite::Connection;
 use serde_json;
 
 use crate::error::{CrateError, Result};
-use crate::models::AppSettings;
+use crate::models::{AppSettings, TracklistColumnPref};
 use crate::services::cloud_sync::{self, pipeline::dirty};
+
+pub(crate) fn parse_tracklist_columns(raw: Option<String>) -> Vec<TracklistColumnPref> {
+  raw
+    .and_then(|value| serde_json::from_str(&value).ok())
+    .unwrap_or_default()
+}
 
 pub struct SettingsService {
   conn: Arc<Mutex<Connection>>,
@@ -114,6 +120,9 @@ impl SettingsService {
       .and_then(|v| serde_json::from_str(&v).ok())
       .unwrap_or_default();
 
+    let tracklist_columns =
+      parse_tracklist_columns(self.get_setting_value(&conn, "tracklist_columns")?);
+
     let last_backup_at = self.get_setting_value(&conn, "last_backup_at")?;
 
     let backup_frequency = self
@@ -172,6 +181,7 @@ impl SettingsService {
       release_day_reminders,
       new_releases_summary,
       ignored_device_ids,
+      tracklist_columns,
       last_backup_at,
       backup_frequency,
       last_backup_type,
@@ -208,5 +218,47 @@ impl SettingsService {
       Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
       Err(e) => Err(CrateError::Database(e)),
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::parse_tracklist_columns;
+  use crate::models::TracklistColumnPref;
+
+  #[test]
+  fn parse_tracklist_columns_round_trips_valid_json() {
+    let raw = r#"[{"id":"title","visible":true},{"id":"artist","visible":false}]"#;
+    let columns = parse_tracklist_columns(Some(raw.to_string()));
+
+    assert_eq!(
+      columns,
+      vec![
+        TracklistColumnPref {
+          id: "title".to_string(),
+          visible: true,
+        },
+        TracklistColumnPref {
+          id: "artist".to_string(),
+          visible: false,
+        },
+      ]
+    );
+    assert_eq!(serde_json::to_string(&columns).unwrap(), raw);
+  }
+
+  #[test]
+  fn parse_tracklist_columns_defaults_missing_json_to_empty() {
+    assert!(parse_tracklist_columns(None).is_empty());
+  }
+
+  #[test]
+  fn parse_tracklist_columns_defaults_malformed_json_to_empty() {
+    assert!(parse_tracklist_columns(Some("not json".to_string())).is_empty());
+  }
+
+  #[test]
+  fn parse_tracklist_columns_defaults_invalid_fields_to_empty() {
+    assert!(parse_tracklist_columns(Some(r#"[{"id":1}]"#.to_string())).is_empty());
   }
 }

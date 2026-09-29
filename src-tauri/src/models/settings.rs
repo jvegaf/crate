@@ -369,6 +369,13 @@ impl std::str::FromStr for AutoFollowOnImport {
   }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TracklistColumnPref {
+  pub id: String,
+  pub visible: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -391,6 +398,8 @@ pub struct AppSettings {
   pub release_day_reminders: bool,
   pub new_releases_summary: bool,
   pub ignored_device_ids: Vec<String>,
+  // An empty list leaves defaults to the frontend; Rust deliberately does not know column ids.
+  pub tracklist_columns: Vec<TracklistColumnPref>,
   pub last_backup_at: Option<String>,
   pub backup_frequency: BackupFrequency,
   pub last_backup_type: Option<String>,
@@ -420,6 +429,7 @@ impl Default for AppSettings {
       release_day_reminders: true,
       new_releases_summary: true,
       ignored_device_ids: Vec::new(),
+      tracklist_columns: Vec::new(),
       last_backup_at: None,
       backup_frequency: BackupFrequency::default(),
       last_backup_type: None,

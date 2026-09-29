@@ -57,6 +57,7 @@ export {
 	keyNotationFormat,
 	language,
 	dateFormat,
+	tracklistColumns,
 	continuousPlayback,
 	hasCompletedOnboarding,
 	hasCompletedWizard,
