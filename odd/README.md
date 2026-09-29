@@ -30,15 +30,28 @@ A feature moves `pending` → `in progress` → `done` as it lands.
 | Feature | Status | Task file |
 | --- | --- | --- |
 | Agent harness bootstrap | Done | [`tasks/agent-harness-bootstrap.md`](tasks/agent-harness-bootstrap.md) |
+| Analysis skip stubs + force re-analysis | Done | [`tasks/analysis-skip-stubs-and-force.md`](tasks/analysis-skip-stubs-and-force.md) |
+| Analysis worker limit | Done — live end-to-end run never verified (its own evidence log) | [`tasks/analysis-worker-limit.md`](tasks/analysis-worker-limit.md) |
 | Contributor documentation | Done | [`tasks/contributor-docs.md`](tasks/contributor-docs.md) |
-| Analysis skip + force re-analysis | In progress | [`tasks/analysis-skip-stubs-and-force.md`](tasks/analysis-skip-stubs-and-force.md) |
-| Tracklist column configuration | Done (manual UI check owed) | [`tasks/tracklist-column-config.md`](tasks/tracklist-column-config.md) |
-
-> The table above is itself stale: `odd/tasks/` currently holds 12 feature files and only 3 were
-> indexed before the tracklist entry was added. Reconciling the index is an open follow-up.
+| Import + display POPM rating | Done — `1433315` | [`tasks/import-and-display-popm-rating.md`](tasks/import-and-display-popm-rating.md) |
+| Key format display fix | Done | [`tasks/key-format-display-fix.md`](tasks/key-format-display-fix.md) |
+| Library folder scan | Shipped — checkboxes T6–T10 left unticked although the API wrapper, the `LibraryFolderScanResult` type and the Settings → Library UI all exist; the record is stale, not the work | [`tasks/library-folder-scan.md`](tasks/library-folder-scan.md) |
+| Library scan performance | **Not started** — reconnaissance and design only, 0 of 9 tasks ticked | [`tasks/library-scan-performance.md`](tasks/library-scan-performance.md) |
+| Testing setup | Done — store tests explicitly not implemented (stores need Tauri `invoke` mocks) | [`tasks/testing-setup.md`](tasks/testing-setup.md) |
+| Track Editor UI redesign | Done | [`tasks/track-editor-ui.md`](tasks/track-editor-ui.md) |
+| Track Metadata Modal | Done | [`tasks/track-metadata-modal.md`](tasks/track-metadata-modal.md) |
+| Tracklist column configuration | Done — UI confirmed by the user; native review unattested | [`tasks/tracklist-column-config.md`](tasks/tracklist-column-config.md) |
 
 Update this table whenever a feature is added or closes. It is the front door — if it is stale, the
 record may as well not exist.
+
+> **Provenance of the 2026-09-29 reconciliation.** This table listed 3 of the 12 files actually in
+> `tasks/`. The added statuses were derived, not guessed: each was read against its own Task
+> checklist, its Evidence log / Delivery section, and — where the two disagreed — against the tree
+> (e.g. `shared/api/library.ts:183`, `shared/types/index.ts:206` and `LibraryTab.svelte` confirm the
+> folder-scan work exists despite unticked boxes; `git cat-file` confirmed the cited hashes exist).
+> Where a document's checkboxes contradict its own evidence, the row says so instead of silently
+> picking one.
 
 ## Adding a feature
 
