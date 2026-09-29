@@ -1,5 +1,6 @@
 import type { Track, SortConfig, TrackSortField, SortDirection, TrackColor } from '../types'
 import { COLOR_SORT_ORDER } from '../types'
+import { getTrackOriginFolder } from './tracklistColumns'
 
 /**
  * Sort tracks by the given configuration
@@ -39,6 +40,12 @@ function getTrackSortValue(track: Track, field: TrackSortField): string | number
 			return track.artist?.toLowerCase() ?? null
 		case 'album':
 			return track.album?.toLowerCase() ?? null
+		case 'label':
+			return track.label?.toLowerCase() ?? null
+		case 'bitrate':
+			return track.bitrate
+		case 'origin':
+			return getTrackOriginFolder(track.file_path).toLowerCase() || null
 		case 'bpm':
 			return track.bpm
 		case 'key':

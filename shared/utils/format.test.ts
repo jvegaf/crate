@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatDurationCompact, formatBpm } from './format'
+import { formatDuration, formatDurationCompact, formatBpm, formatBitrate } from './format'
 
 describe('formatDuration', () => {
 	it('formats 0ms as 0:00', () => {
@@ -61,5 +61,19 @@ describe('formatBpm', () => {
 
 	it('handles zero BPM', () => {
 		expect(formatBpm(0)).toBe('0.0')
+	})
+})
+
+describe('formatBitrate', () => {
+	it('converts bits per second to rounded kilobits per second', () => {
+		expect(formatBitrate(320_000)).toBe('320 kbps')
+		expect(formatBitrate(128_000)).toBe('128 kbps')
+		expect(formatBitrate(44_100)).toBe('44 kbps')
+	})
+
+	it('formats zero, sub-kbps positive values, and null', () => {
+		expect(formatBitrate(0)).toBe('0 kbps')
+		expect(formatBitrate(499)).toBe('< 1 kbps')
+		expect(formatBitrate(null)).toBe('-')
 	})
 })

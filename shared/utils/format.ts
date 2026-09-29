@@ -82,7 +82,7 @@ const STANDARD_TO_CAMELOT: Record<string, string> = {
  * (sharps; flats only where Ab has no sharp counterpart).
  */
 const CAMELOT_TO_STANDARD: Record<string, string> = Object.fromEntries(
-	Object.entries(STANDARD_TO_CAMELOT).map(([k, v]) => [v, k]),
+	Object.entries(STANDARD_TO_CAMELOT).map(([k, v]) => [v, k])
 )
 
 /**
@@ -227,7 +227,9 @@ export function formatRelativeDate(dateStr: string, t: TranslateFn): string {
  */
 export function formatBitrate(bitrate: number | null): string {
 	if (bitrate === null) return '-'
-	return `${bitrate} kbps`
+	const kbps = Math.round(bitrate / 1000)
+	if (bitrate > 0 && kbps === 0) return '< 1 kbps'
+	return `${kbps} kbps`
 }
 
 /**

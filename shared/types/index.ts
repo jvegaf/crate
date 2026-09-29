@@ -428,18 +428,35 @@ export type TrackSortField =
 	| 'date_added'
 	| 'rating'
 	| 'color'
+	| 'label'
+	| 'bitrate'
+	| 'origin'
+
+export type TracklistColumnId =
+	| 'color'
+	| 'artwork'
+	| 'title'
+	| 'artist'
+	| 'album'
+	| 'label'
+	| 'origin'
+	| 'bpm'
+	| 'key'
+	| 'duration_ms'
+	| 'bitrate'
+	| 'year'
+	| 'date_added'
+	| 'tags'
+	| 'rating'
+
+export interface TracklistColumnPref {
+	id: TracklistColumnId
+	visible: boolean
+}
 
 export interface SortConfig {
 	field: TrackSortField
 	direction: SortDirection
-}
-
-export interface ColumnConfig {
-	id: TrackSortField | 'tags'
-	label: string
-	width: number
-	visible: boolean
-	sortable: boolean
 }
 
 export interface ContextMenuItem {
@@ -447,6 +464,8 @@ export interface ContextMenuItem {
 	label: string
 	/** Native hover tooltip (title attribute) — a hint shown on the menu item. */
 	tooltip?: string
+	/** When true, running the action does not close the menu (multi-toggle pickers). */
+	keepOpen?: boolean
 	icon?: string
 	iconFill?: boolean
 	shortcut?: string
@@ -585,6 +604,7 @@ export interface AppSettings {
 	releaseDayReminders: boolean
 	newReleasesSummary: boolean
 	ignoredDeviceIds: string[]
+	tracklistColumns: TracklistColumnPref[]
 	lastBackupAt: string | null
 	backupFrequency: BackupFrequency
 	lastBackupType: string | null
