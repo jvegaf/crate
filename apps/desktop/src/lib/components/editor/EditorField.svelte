@@ -7,6 +7,7 @@
 		value: string | number | null
 		mixed?: boolean
 		type?: 'text' | 'number'
+		step?: string
 		placeholder?: string
 		disabled?: boolean
 		onchange?: (value: string | number | null) => void
@@ -19,6 +20,7 @@
 		value = $bindable(),
 		mixed = false,
 		type = 'text',
+		step = undefined,
 		placeholder = '',
 		disabled = false,
 		onchange,
@@ -33,10 +35,14 @@
 	$effect(() => {
 		if (mixed) {
 			inputValue = ''
-		} else if (value !== null && value !== undefined) {
-			inputValue = String(value)
 		} else {
-			inputValue = ''
+			const next = value === null || value === undefined ? '' : String(value)
+			// Keep an in-progress decimal like "123." or "12.5" intact when the parsed number is unchanged
+			const partialDecimal =
+				type === 'number' && next !== '' && inputValue !== '' && Number(next) === Number(inputValue)
+			if (next !== inputValue && !partialDecimal) {
+				inputValue = next
+			}
 		}
 	})
 
@@ -67,6 +73,7 @@
 	<Text as="span" size="xs" weight="medium" color="secondary" class="block">{label}</Text>
 	<input
 		{type}
+		{step}
 		value={inputValue}
 		placeholder={mixed ? MIXED_PLACEHOLDER : placeholder}
 		{disabled}

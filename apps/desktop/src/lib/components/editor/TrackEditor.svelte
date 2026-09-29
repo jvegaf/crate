@@ -309,6 +309,7 @@
 					<EditorField
 						label={$translate('editor.bpm')}
 						type="number"
+						step="any"
 						value={formData.bpm ?? bulkInfo.bpm.value}
 						mixed={bulkInfo.bpm.mixed && formData.bpm === undefined}
 						onchange={handleFieldChange('bpm')}
