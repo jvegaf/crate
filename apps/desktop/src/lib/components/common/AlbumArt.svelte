@@ -24,9 +24,9 @@
 
 	const iconSizes: Record<Size, string> = {
 		xs: 'h-4 w-4',
-		sm: 'h-4 w-4',
-		md: 'h-6 w-6',
-		lg: 'h-16 w-16',
+		sm: 'h-5 w-5',
+		md: 'h-8 w-8',
+		lg: 'h-36 w-36',
 	}
 
 	let localUrl = $derived(getArtworkUrl(artworkPath, $appDataDir))
@@ -79,6 +79,6 @@
 	{#if displayUrl}
 		<img src={displayUrl} alt="Album artwork" class="h-full w-full object-cover" onerror={handleError} />
 	{:else}
-		<Icon name="music-note" class="{iconSizes[size]} text-text-tertiary" />
+		<Icon name="vinyl" class="{iconSizes[size]} text-text-tertiary" />
 	{/if}
 </div>
