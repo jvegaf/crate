@@ -119,16 +119,27 @@ Each track in your library has properties you can view and edit:
 | Date Added | When imported |
 | Last Played | Most recent play |
 
-### Editable Properties
+### Editing a Single Track's Metadata
 
-You can edit these properties in the Inspector panel:
+For a focused view of one track, right-click it in the library and choose **Edit Metadata**. The modal shows editable metadata alongside technical and library details.
 
-- Title, Artist, Album
-- Year, Genre, Label
-- BPM, Key
-- Rating
-- Color
-- Tags
+Editable audio metadata:
+
+- Title, Artist, Album, Year, Genre, Label, Catalog Number
+- BPM and Key
+- Embedded artwork
+
+Rating is stored in Crate's library rather than embedded audio tags. It ranges from 0 to 5; clearing the rating sets it to 0, meaning unrated.
+
+Use **Clear Field** to remove nullable text or numeric metadata explicitly. Leaving a field unchanged does not send it to the audio-file writer.
+
+The modal also lets you edit Crate tags and Crate-managed artwork. These are library data, separate from embedded audio metadata and embedded artwork. For tag categories and organization, see [Tagging](/crate/user-guide/tagging/).
+
+Duration, format, bitrate, sample rate, play count, dates, file path, and other technical/library properties are read-only in this modal. The Inspector remains available for its existing quick and bulk editing workflows, including color and tags.
+
+#### Saving embedded metadata
+
+Crate stages embedded tag and artwork changes before replacing the audio file. If the file format cannot write a requested embedded change, or the staged write fails, that metadata update is rejected and an error is shown. SQLite and the audio file cannot be made crash-atomic together, so a sudden process or system failure during replacement may still require recovery. Crate tags and Crate artwork use separate operations; the modal reports partial failures if one of those operations succeeds while another fails.
 
 ## Track Colors
 

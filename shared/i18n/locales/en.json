@@ -461,6 +461,7 @@
 		"noTagCategoriesYet": "No tag categories yet"
 	},
 	"contextMenu": {
+		"editMetadata": "Edit Metadata...",
 		"viewInFinder": "View in Finder",
 		"viewInExplorer": "View in Explorer",
 		"viewInFileManager": "View in File Manager",
@@ -533,6 +534,65 @@
 			"removeDiscoveryReleasesFromPlaylistTitle": "Remove from Playlist",
 			"removeDiscoveryReleasesFromPlaylistMessage": "{count, plural, =1 {Remove this release from the playlist?} other {Remove {count} releases from the playlist?}}",
 			"deleteReleasesFromCollection": "Also delete releases from my collection"
+		},
+		"trackMetadata": {
+			"title": "Track Metadata",
+			"details": "Metadata",
+			"crateTags": "Crate Tags",
+			"crateTagsHint": "These library tags are managed by Crate and are not embedded in the audio file.",
+			"crateArtwork": "Crate Artwork",
+			"crateArtworkHint": "Library artwork is stored by Crate and is separate from embedded audio artwork.",
+			"embeddedArtwork": "Embedded Audio Artwork",
+			"embeddedArtworkHint": "This writes artwork into the audio file. It is separate from Crate's library artwork.",
+			"technicalDetails": "Read-only Properties",
+			"noTags": "No Crate tags are available.",
+			"clearField": "Clear",
+			"chooseArtwork": "Choose Image...",
+			"clearArtwork": "Clear Artwork",
+			"undoArtworkChange": "Undo",
+			"artworkReady": "Image validated and ready to embed.",
+			"artworkWillClear": "Artwork will be cleared on save.",
+			"partialSave": "Some changes were not saved.",
+			"partialSaveHint": "Metadata, Crate tags, and Crate artwork use separate operations and cannot be saved atomically. Successful changes may already be applied.",
+			"invalidImage": "Choose a valid supported image file.",
+			"invalid": {
+				"year": "Year must be a non-negative whole number.",
+				"bpm": "BPM must be a valid number.",
+				"rating": "Rating must be a whole number from 0 to 5."
+			},
+			"errors": {
+				"metadata": "Audio and track metadata update failed",
+				"removeTags": "Could not remove Crate tags",
+				"addTags": "Could not add Crate tags",
+				"crateArtwork": "Could not update Crate artwork",
+				"refresh": "Changes may have succeeded, but the track could not be refreshed"
+			},
+			"fields": {
+				"title": "Title",
+				"artist": "Artist",
+				"album": "Album",
+				"year": "Year",
+				"genre": "Genre",
+				"label": "Label",
+				"catalogNumber": "Catalog Number",
+				"bpm": "BPM",
+				"key": "Key",
+				"rating": "Rating (0–5; clear sets to 0)"
+			},
+			"readOnly": {
+				"duration": "Duration",
+				"format": "Audio Format",
+				"bitrate": "Bitrate",
+				"sampleRate": "Sample Rate",
+				"playCount": "Play Count",
+				"dateAdded": "Date Added",
+				"dateModified": "Date Modified",
+				"lastPlayed": "Last Played",
+				"filePath": "File Path",
+				"analysisSource": "Analysis Source",
+				"color": "Track Color",
+				"rekordboxId": "Rekordbox ID"
+			}
 		},
 		"relocate": {
 			"title": "Relocate Track",

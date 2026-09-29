@@ -21,6 +21,7 @@
 		onRemoveFromPlaylist: () => void
 		onRemoveFromLibrary: () => void
 		onRelocate?: (track: Track) => void
+		onEditMetadata: (track: Track) => void
 		onSetColor?: (color: TrackColor | null) => void
 		onAnalyze?: () => void
 	}
@@ -40,6 +41,7 @@
 		onRemoveFromPlaylist,
 		onRemoveFromLibrary,
 		onRelocate,
+		onEditMetadata,
 		onSetColor,
 		onAnalyze,
 	}: Props = $props()
@@ -94,8 +96,14 @@
 			})
 		}
 
-		// "View in Finder/Explorer" - only for single track selection
+		// Single-track metadata editor targets the track captured when this menu opened.
 		if (selectedTracks.length === 1) {
+			items.push({
+				id: 'edit-metadata',
+				label: get(translate)('contextMenu.editMetadata'),
+				icon: 'edit',
+				action: () => onEditMetadata(selectedTracks[0]),
+			})
 			items.push({
 				id: 'reveal-in-explorer',
 				label: revealLabel,
