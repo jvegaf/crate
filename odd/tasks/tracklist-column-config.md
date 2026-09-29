@@ -327,10 +327,28 @@ pushed, no PR opened). Base was `f003473`.
 Ordering is deliberate: i18n lands **before** the UI because `$translate` renders the raw key when a
 message is missing, so no commit ever shows a user a `library.columns.*` string.
 
+Full commit list on `dev` for this feature, base `f003473` — code first, tooling kept out of every
+feature commit (AGENTS.md §2):
+
+| Hash | Kind |
+| --- | --- |
+| `83b5151` | feat(tracklist): add column registry and layout helpers |
+| `cab761e` | feat(settings): persist the tracklist column layout |
+| `1fc71dc` | feat(i18n): add tracklist column and column-menu labels |
+| `14632bb` | feat(tracklist): render, pick and reorder columns from the saved layout |
+| `1b667d0` | fix(tracklist): report bitrate in the unit the library stores |
+| `81813aa` | fix(db): clear bit-depth values written into tracks.bitrate |
+| `a78023f` | chore(odd): record tracklist column feature tracking |
+| `099e394` | docs(odd): correct the commit-evidence note |
+| `998e413` | docs(odd): keep the evidence log's tree-state note accurate |
+| `f446671` | docs(odd): record the bitrate unit correction and the legacy-row constraint |
+| `0046a4f` | docs(odd): reconcile the feature index with the tree it describes |
+| `e147e50` | docs(odd): record the bitrate data repair lifting the earlier no-migration decision |
+
 odd/tasks/tracklist-column-config.md` and `odd/README.md` were committed separately as
 `a78023f chore(odd): record tracklist column feature tracking` — `odd/` is versioned on this
 integration branch, but workflow tooling never rides inside a feature commit (AGENTS.md §2).
-Tree is clean at the tip (`099e394`, a wording fix to this document). Verified green on the final committed tree: vitest 43/43, `cargo test
+Working tree is clean at close; the tip is a `docs(odd)` commit in the list above. Verified green on the final committed tree: vitest 43/43, `cargo test
 --features desktop` 240/240, clippy `-D warnings` clean, `check:svelte` baseline-only
 (pre-existing `PUBLIC_APP_VERSION` error + 2 `LibraryTab` warnings), `check:svelte:mobile` 0/0,
 `lint:check` exit 0, prettier exit 0, `git diff --check` clean.
