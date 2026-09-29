@@ -285,7 +285,7 @@ message is missing, so no commit ever shows a user a `library.columns.*` string.
 odd/tasks/tracklist-column-config.md` and `odd/README.md` were committed separately as
 `a78023f chore(odd): record tracklist column feature tracking` — `odd/` is versioned on this
 integration branch, but workflow tooling never rides inside a feature commit (AGENTS.md §2).
-Tree is clean at `a78023f`. Verified green on the final committed tree: vitest 43/43, `cargo test
+Tree is clean at the tip (`099e394`, a wording fix to this document). Verified green on the final committed tree: vitest 43/43, `cargo test
 --features desktop` 240/240, clippy `-D warnings` clean, `check:svelte` baseline-only
 (pre-existing `PUBLIC_APP_VERSION` error + 2 `LibraryTab` warnings), `check:svelte:mobile` 0/0,
 `lint:check` exit 0, prettier exit 0, `git diff --check` clean.
