@@ -348,8 +348,9 @@ feature commit (AGENTS.md §2):
 odd/tasks/tracklist-column-config.md` and `odd/README.md` were committed separately as
 `a78023f chore(odd): record tracklist column feature tracking` — `odd/` is versioned on this
 integration branch, but workflow tooling never rides inside a feature commit (AGENTS.md §2).
-Working tree is clean at close; the tip is a `docs(odd)` commit in the list above. Verified green on the final committed tree: vitest 43/43, `cargo test
---features desktop` 240/240, clippy `-D warnings` clean, `check:svelte` baseline-only
+Working tree is clean at close; the tip is a `docs(odd)` commit in the list above. Verified green on
+the final committed tree: vitest 44/44, `cargo test --features desktop` 244/244, clippy
+`-D warnings` clean, `check:svelte` baseline-only
 (pre-existing `PUBLIC_APP_VERSION` error + 2 `LibraryTab` warnings), `check:svelte:mobile` 0/0,
 `lint:check` exit 0, prettier exit 0, `git diff --check` clean.
 
