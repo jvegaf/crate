@@ -472,6 +472,7 @@
 	},
 	"contextMenu": {
 		"editMetadata": "Edit Metadata...",
+		"findTrackTags": "Find track tags",
 		"viewInFinder": "View in Finder",
 		"viewInExplorer": "View in Explorer",
 		"viewInFileManager": "View in File Manager",
@@ -685,6 +686,23 @@
 		"failedToSetArtwork": "Failed to set artwork",
 		"failedToRemoveArtwork": "Failed to remove artwork",
 		"noArtworkInFile": "No artwork found in audio file"
+	},
+	"tagger": {
+		"title": "Find track tags",
+		"searching": "Searching providers…",
+		"enriching": "Loading track details…",
+		"noResults": "No candidate scored high enough.",
+		"providerErrors": "Some providers could not be reached",
+		"selectHint": "Pick the correct match, then apply it",
+		"apply": "Apply tags",
+		"applying": "Applying…",
+		"score": "Match",
+		"toast": {
+			"applied": "Track tags applied",
+			"searchFailed": "Failed to search track tags",
+			"extendFailed": "Failed to load the track details",
+			"applyFailed": "Failed to apply track tags"
+		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Cannot drop a folder into itself",

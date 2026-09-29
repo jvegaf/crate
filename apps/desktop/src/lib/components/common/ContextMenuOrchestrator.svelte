@@ -56,6 +56,7 @@
 		onTrackRemoveFromLibrary: (tracks: Track[]) => void
 		onTrackRelocate: (track: Track) => void
 		onTrackEditMetadata: (track: Track) => void
+		onTrackFindTags: (track: Track) => void
 		onTrackSetColor: (color: TrackColor | null, tracks: Track[]) => void
 		onTrackAnalyze: (tracks: Track[]) => void
 
@@ -145,6 +146,7 @@
 		onTrackRemoveFromLibrary,
 		onTrackRelocate,
 		onTrackEditMetadata,
+		onTrackFindTags,
 		onTrackSetColor,
 		onTrackAnalyze,
 		onPlaylistCreatePlaylist,
@@ -424,6 +426,11 @@
 	function handleTrackEditMetadata(track: Track) {
 		closeAll()
 		onTrackEditMetadata(track)
+	}
+
+	function handleTrackFindTags(track: Track) {
+		closeAll()
+		onTrackFindTags(track)
 	}
 
 	function handleTrackSetColor(color: TrackColor | null) {
@@ -719,6 +726,7 @@
 		onRemoveFromLibrary={handleTrackRemoveFromLibrary}
 		onRelocate={handleTrackRelocate}
 		onEditMetadata={handleTrackEditMetadata}
+		onFindTags={handleTrackFindTags}
 		onSetColor={handleTrackSetColor}
 		onAnalyze={handleTrackAnalyze}
 	/>

@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store'
 import type { ProviderError, ScoredTagCandidate, TagCandidate, Track, TrackMetadataPatch } from '../types'
 import { extendTrackTag, searchRankedTrackTags } from '../api/tagger'
 import { updateTrackMetadata } from '../api/library'
+import { translate } from '../i18n'
 import { toastStore } from './toast'
 
 // =============================================================================
@@ -34,12 +35,6 @@ const initialState: TaggerState = {
 	selected: null,
 	extended: null,
 }
-
-// Plain-English placeholders until S4 replaces them with i18n keys.
-const SEARCH_FAILED = 'Failed to search track tags'
-const EXTEND_FAILED = 'Failed to extend the selected tag'
-const APPLY_FAILED = 'Failed to apply track tags'
-const APPLIED = 'Track tags applied'
 
 // =============================================================================
 // Helpers
@@ -122,7 +117,7 @@ function createTaggerStore() {
 					extended: null,
 				}))
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : SEARCH_FAILED
+				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.searchFailed')
 				update((state) => ({ ...state, error: errorMessage }))
 				toastStore.error(errorMessage)
 			} finally {
@@ -150,7 +145,7 @@ function createTaggerStore() {
 				const extended = await extendTrackTag(selected)
 				update((current) => ({ ...current, extended }))
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : EXTEND_FAILED
+				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.extendFailed')
 				update((current) => ({ ...current, error: errorMessage }))
 				toastStore.error(errorMessage)
 			} finally {
@@ -170,10 +165,10 @@ function createTaggerStore() {
 			try {
 				const updated = await updateTrackMetadata(track.id, candidateToPatch(candidate))
 				update((current) => ({ ...current, error: null }))
-				toastStore.success(APPLIED)
+				toastStore.success(get(translate)('tagger.toast.applied'))
 				return updated
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : APPLY_FAILED
+				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
 				update((current) => ({ ...current, error: errorMessage }))
 				toastStore.error(errorMessage)
 				return null

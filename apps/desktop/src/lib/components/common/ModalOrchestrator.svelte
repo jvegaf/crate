@@ -41,6 +41,7 @@
 		| { type: 'deviceInfo'; device: UsbDevice }
 		| { type: 'relocate'; track: Track }
 		| { type: 'trackMetadata'; track: Track }
+		| { type: 'tagSearch'; track: Track }
 		| {
 				type: 'moveConflict'
 				movingItem: Playlist
@@ -91,6 +92,7 @@
 	import { DeviceInfoModal, ReformatDeviceModal } from '$lib/components/devices'
 	import { SettingsModal } from '$lib/components/settings'
 	import { RelocateTrackModal } from '$lib/components/library'
+	import { TagSearchModal } from '$lib/components/tagger'
 	import TrackMetadataModal, { type CrateArtworkChange } from './TrackMetadataModal.svelte'
 	import { SmartPlaylistModal } from '$lib/components/playlists'
 	import { ExportModal, ExportFailureModal, QuickExportModal } from '$lib/components/export'
@@ -320,6 +322,10 @@
 		activeModal = { type: 'trackMetadata', track }
 	}
 
+	export function openTagSearchModal(track: Track) {
+		activeModal = { type: 'tagSearch', track }
+	}
+
 	export function openMoveConflictModal(movingItem: Playlist, existingItem: Playlist, targetParentId: string | null) {
 		activeModal = { type: 'moveConflict', movingItem, existingItem, targetParentId }
 	}
@@ -514,6 +520,14 @@
 	function handleRelocateComplete(track: Track) {
 		closeAll()
 		onRelocateComplete(track)
+	}
+
+	// Tag search apply reuses the metadata-editor refresh path: patch the store's
+	// copy and notify sync so every view sees the new tags without a full reload.
+	function handleTagSearchApplied(track: Track) {
+		closeAll()
+		libraryStore.updateTracksInState([track])
+		syncStore.notifyTrackChanges([track.id])
 	}
 
 	// Move conflict handlers
@@ -1066,6 +1080,11 @@
 <!-- Single-track Metadata Modal -->
 {#if activeModal.type === 'trackMetadata'}
 	<TrackMetadataModal track={activeModal.track} {tagCategories} onClose={closeAll} onSave={handleTrackMetadataSave} />
+{/if}
+
+<!-- Find Track Tags Modal -->
+{#if activeModal.type === 'tagSearch'}
+	<TagSearchModal open={true} track={activeModal.track} onClose={closeAll} onApplied={handleTagSearchApplied} />
 {/if}
 
 <!-- Move Conflict Modal -->
