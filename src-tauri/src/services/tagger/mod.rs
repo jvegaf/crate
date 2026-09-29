@@ -8,18 +8,23 @@
 mod bandcamp;
 mod beatport;
 mod http;
+mod scoring;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "desktop")]
 mod traxsource;
 
+use scoring::{rank_candidates, UnifiedScorer};
 #[cfg(feature = "desktop")]
 use traxsource::TraxSourceProvider;
 
 use async_trait::async_trait;
 
 use crate::error::Result;
-use crate::models::{ProviderSearchResult, TagCandidate, TagSearchQuery};
+use crate::models::{
+  ProviderError, ProviderSearchResult, RankedSearchResult, ScoredTagCandidate, TagCandidate,
+  TagSearchQuery,
+};
 
 /// Shared HTTP client plus the persistent provider instances.
 ///
@@ -77,6 +82,92 @@ impl TaggerService {
 
     Ok(results)
   }
+
+  /// Provider ids in service order — the tie-break priority for equal scores.
+  fn provider_priority(&self) -> Vec<String> {
+    self.providers.iter().map(|p| p.id().to_string()).collect()
+  }
+
+  /// Search every provider, score each candidate against the local track, and
+  /// return the best `max_candidates` ordered by similarity.
+  ///
+  /// `max_candidates` is used as-is, so callers must pass at least `1`; the
+  /// Tauri command applies the clamp.
+  ///
+  /// A failing provider contributes a [`ProviderError`] through
+  /// [`RankedSearchResult::errors`], and any candidates it did return are still
+  /// scored rather than dropped; the remaining providers still count. Scoring
+  /// uses the default weights (title 0.5, artist 0.3, duration 0.2), with the
+  /// candidate artist joined as `", "` and a missing local artist treated as
+  /// empty.
+  pub async fn search_and_rank(
+    &self,
+    query: &TagSearchQuery,
+    local_duration_ms: Option<i64>,
+    search_limit: usize,
+    min_score: f64,
+    max_candidates: usize,
+  ) -> Result<RankedSearchResult> {
+    let results = self.search_all(query, search_limit).await?;
+
+    Ok(rank_results(
+      results,
+      query,
+      local_duration_ms.unwrap_or(0),
+      &self.provider_priority(),
+      min_score,
+      max_candidates,
+    ))
+  }
+}
+
+/// Aggregate raw provider results into the ranked best-N answer.
+///
+/// Pure: no providers, no I/O. A failing provider contributes a
+/// [`ProviderError`], and any candidates it did return are still scored rather
+/// than dropped; the remaining providers still count. Scoring uses the default
+/// weights (title 0.5, artist 0.3, duration 0.2),
+/// with the candidate artist joined as `", "` and a missing local artist treated
+/// as empty.
+fn rank_results(
+  results: Vec<ProviderSearchResult>,
+  query: &TagSearchQuery,
+  local_duration_ms: i64,
+  provider_priority: &[String],
+  min_score: f64,
+  max_candidates: usize,
+) -> RankedSearchResult {
+  let scorer = UnifiedScorer::default_weights();
+  let local_title = query.title.as_str();
+  let local_artist = query.artist.as_deref().unwrap_or("");
+
+  let mut candidates = Vec::new();
+  let mut errors = Vec::new();
+  for result in results {
+    if let Some(error) = result.error {
+      errors.push(ProviderError {
+        provider: result.provider,
+        error,
+      });
+    }
+    for candidate in result.candidates {
+      let similarity_score = scorer.score(
+        local_title,
+        local_artist,
+        local_duration_ms,
+        &candidate.title,
+        &candidate.artists.join(", "),
+        candidate.duration_ms,
+      );
+      candidates.push(ScoredTagCandidate {
+        candidate,
+        similarity_score,
+      });
+    }
+  }
+
+  let candidates = rank_candidates(candidates, provider_priority, min_score, max_candidates);
+  RankedSearchResult { candidates, errors }
 }
 
 /// A metadata provider that can search for candidate tracks.

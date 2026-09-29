@@ -326,6 +326,7 @@ pub fn run() {
       commands::discovery::fetch_source_avatar,
       // Tagger commands (shared, not feature-gated)
       commands::tagger::search_track_tags,
+      commands::tagger::search_ranked_track_tags,
       // Follow commands
       commands::follow::follow_source,
       commands::follow::follow_from_entity,

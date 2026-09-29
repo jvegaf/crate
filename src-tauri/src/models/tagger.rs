@@ -58,3 +58,31 @@ pub struct ProviderSearchResult {
   /// Populated when this provider failed; the other providers still return candidates.
   pub error: Option<String>,
 }
+
+/// A candidate plus its similarity score against the local track.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoredTagCandidate {
+  /// Flattened: the wire shape is the candidate's own fields plus `similarity_score`.
+  #[serde(flatten)]
+  pub candidate: TagCandidate,
+  /// Weighted similarity, 0.0..=1.0 (title 0.5, artist 0.3, duration 0.2).
+  pub similarity_score: f64,
+}
+
+/// A provider that failed during a ranked search; the others still contributed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderError {
+  pub provider: String,
+  pub error: String,
+}
+
+/// Best-N candidates for the user to choose from, plus any provider failures.
+///
+/// `candidates` is rank-ordered; `similarity_score` values are therefore **not**
+/// guaranteed to be non-increasing (within a near-tie group, provider priority
+/// can place a slightly lower score first).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankedSearchResult {
+  pub candidates: Vec<ScoredTagCandidate>,
+  pub errors: Vec<ProviderError>,
+}
