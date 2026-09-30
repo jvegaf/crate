@@ -300,6 +300,38 @@ Consequences, recorded so nobody reads them as approvals later:
 The stale non-terminal lineage `review-c82f3ab6f25ba11c` is left as-is. Closing it needs a
 maintainer-authorized `gentle-ai review abandon`; nothing depends on it.
 
+## Follow-up 3 — the artwork that "didn't arrive" (2026-09-30)
+
+Reported as: applying tags never refreshes the carátula, in the tracklist or in the metadata editor.
+
+**It was never a fetch bug.** Evidence, gathered before touching code:
+
+- reading a **copy** of the dev DB (SQLCipher, key from `db.key`) showed `artwork_path` and
+  `artwork_source = 'user_provided'` written at the exact timestamps matching the files, so the
+  fetch → save → DB chain ran end to end;
+- the saved 500×500 WEBP matched the provider's cover for the same track (average colour to three
+  decimals).
+
+The cause was **URL identity**: artwork files were named `{track_id}.webp`, stable per track, so a
+changed image produced an unchanged `getArtworkUrl` URL and WebKit served the stale response from
+its persistent disk cache. `WebKitCache` lives in the app data directory, so it **survives an app
+restart** — which means "I restarted and it still fails" never disproved caching, and that
+hypothesis was dropped too early on the way here.
+
+Fix: content-addressed names `{track_id}-{blake3[..12]}.webp`. A changed image is a changed path, so
+every consumer gets a fresh load with **zero component changes** — deliberately not solved by
+threading a version token through 8 of the 16 `AlbumArt` call sites, which risks silently missing a
+view. Stale siblings (including the legacy `{track_id}.webp`) are removed on save, and `delete`
+removes both shapes.
+
+Two hypotheses were killed by evidence instead of being shipped: the Beatport parser (the v4 API
+really does return `release.image.uri`) and a CDN rejecting `reqwest` (200 `image/jpeg` with no
+User-Agent at all).
+
+Open, deliberately: the artwork still **overwrites** whatever carátula the track had — an opt-in
+checkbox was offered and not answered. The stale-sibling cleanup scans the artwork directory, so it
+is O(N) per save; fine for tagging and rescan, possibly noticeable in a very large bulk import.
+
 ## Orchestration gotcha (reused)
 
 The OpenCode reviewer Task must receive ONLY the provider-issued `provider_task.prompt`.
