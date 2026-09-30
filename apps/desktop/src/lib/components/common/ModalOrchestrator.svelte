@@ -97,6 +97,7 @@
 	import { SmartPlaylistModal } from '$lib/components/playlists'
 	import { ExportModal, ExportFailureModal, QuickExportModal } from '$lib/components/export'
 	import { toastStore } from '$shared/stores/toast'
+	import { taggerStore } from '$shared/stores/tagger'
 	import {
 		deleteTrackArtwork,
 		getTrack,
@@ -227,6 +228,16 @@
 
 	$effect(() => {
 		onModalOpenChange?.(activeModal.type !== 'none')
+	})
+
+	// Background auto-applies must refresh the library without stealing the modal:
+	// the user is still choosing for the remaining rows.
+	$effect(() => {
+		const updated = $taggerStore.autoApply.updated
+		if (updated.length > 0) {
+			libraryStore.updateTracksInState(updated)
+			syncStore.notifyTrackChanges(updated.map((track) => track.id))
+		}
 	})
 
 	// =========================================================================

@@ -39,6 +39,8 @@
 	const progress = $derived($taggerStore.batchProgress)
 	const loading = $derived($taggerStore.batchLoading)
 	const applying = $derived($taggerStore.batchApplying)
+	const autoApply = $derived($taggerStore.autoApply)
+	const autoApplying = $derived(autoApply.processed < autoApply.total)
 
 	// "Skipped" counts an explicit "not available" only; an undecided row is neither.
 	const toApplyCount = $derived(rows.filter((row) => selections.get(row.track.id) != null).length)
@@ -102,6 +104,43 @@
 			</div>
 		{:else}
 			<div class="space-y-4">
+				{#if autoApply.total > 0}
+					{#if autoApplying}
+						<div role="status" class="flex items-center gap-2 text-sm text-text-secondary">
+							<Spinner class="h-4 w-4" />
+							<span>
+								{$translate('tagger.batch.autoApplying', {
+									values: { processed: autoApply.processed, total: autoApply.total },
+								})}
+							</span>
+						</div>
+					{:else}
+						<div role="status" class="flex items-center gap-2 text-sm text-text-secondary">
+							<Icon name="check" class="h-4 w-4 shrink-0 text-success" />
+							<span>
+								{$translate('tagger.batch.autoApplied', { values: { count: autoApply.updated.length } })}
+							</span>
+						</div>
+						{#if autoApply.failed.length > 0}
+							<div
+								role="alert"
+								class="flex items-center gap-2 rounded-md border border-warning/20 bg-warning/10 p-2 text-warning"
+							>
+								<Icon name="warning" class="h-4 w-4 shrink-0" />
+								<Text as="span" variant="caption" color="warning">
+									{$translate('tagger.batch.autoApplyFailed', { values: { count: autoApply.failed.length } })}
+								</Text>
+							</div>
+						{/if}
+					{/if}
+				{/if}
+
+				{#if rows.length === 0}
+					<p class="rounded-md border border-stroke bg-surface-0 p-4 text-sm text-text-secondary">
+						{$translate('tagger.batch.allAutoApplied', { values: { count: autoApply.updated.length } })}
+					</p>
+				{/if}
+
 				{#each rows as row (row.track.id)}
 					{@const selected = selectionFor(row)}
 					<div class="rounded-md border border-stroke bg-surface-0">

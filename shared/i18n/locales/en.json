@@ -709,7 +709,11 @@
 			"providerErrors": "Some providers could not be reached",
 			"confirm": "Confirm ({count})",
 			"stats": "{toApply} to apply · {skipped} skipped",
-			"applyFailed": "Some tracks could not be updated ({count})"
+			"applyFailed": "Some tracks could not be updated ({count})",
+			"autoApplying": "Applying matches automatically… ({processed}/{total})",
+			"autoApplied": "{count, plural, =1 {1 match applied automatically} other {{count} matches applied automatically}}",
+			"autoApplyFailed": "Some automatic matches could not be applied ({count})",
+			"allAutoApplied": "{count, plural, =1 {1 track was matched and applied automatically} other {{count} tracks were matched and applied automatically}}"
 		},
 		"toast": {
 			"applied": "Track tags applied",

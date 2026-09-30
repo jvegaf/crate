@@ -18,6 +18,12 @@ export interface BatchRow {
 	error: string | null
 }
 
+/**
+ * Harmony auto-applies at 0.9 while pre-selecting at 0.85; keeping them apart is
+ * what makes the pre-selection meaningful.
+ */
+export const AUTO_APPLY_MIN_SCORE = 0.9
+
 interface BatchProgress {
 	processed: number
 	total: number
@@ -48,9 +54,25 @@ interface TaggerState {
 	batchProgress: BatchProgress
 	batchLoading: boolean
 	batchApplying: boolean
+	autoApply: {
+		/** Rows excluded from the list because their best candidate is a near-perfect match. */
+		total: number
+		processed: number
+		updated: Track[]
+		failed: Array<{ trackId: string; error: string }>
+	}
 }
 
 const emptyProgress: BatchProgress = { processed: 0, total: 0, currentTitle: '' }
+const emptyAutoApply: TaggerState['autoApply'] = { total: 0, processed: 0, updated: [], failed: [] }
+
+/**
+ * Bumped on every `searchBatch` and `resetBatch`. A background auto-apply pass
+ * captures the value it started under and stops writing once it no longer
+ * matches, so a pass from a replaced or cleared batch cannot repopulate
+ * `autoApply` with stale results.
+ */
+let autoApplyGeneration = 0
 
 const initialState: TaggerState = {
 	trackId: null,
@@ -66,6 +88,7 @@ const initialState: TaggerState = {
 	batchProgress: emptyProgress,
 	batchLoading: false,
 	batchApplying: false,
+	autoApply: emptyAutoApply,
 }
 
 // =============================================================================
@@ -126,6 +149,59 @@ function candidateToPatch(candidate: TagCandidate): TrackMetadataPatch {
 
 function createTaggerStore() {
 	const { subscribe, set, update } = writable<TaggerState>(initialState)
+
+	/**
+	 * Apply near-perfect matches one at a time, reusing the exact `applyBatch`
+	 * steps. `searchBatch` starts this fire-and-forget: it must not block the
+	 * user-facing rows. One failure is recorded in `autoApply.failed`, surfaced as
+	 * `error` (and toasted once at the end) and never stops the rest.
+	 */
+	async function applyAutoRows(rows: BatchRow[], generation: number) {
+		// `resetBatch` or a newer `searchBatch` invalidates this pass: stop writing
+		// rather than let a stale pass repopulate the current `autoApply`.
+		const isStale = () => generation !== autoApplyGeneration
+
+		for (const row of rows) {
+			if (isStale()) return
+			const best = row.candidates[0]
+			if (best === undefined) continue
+
+			try {
+				const extended = await extendTrackTag(best)
+				let track = await updateTrackMetadata(row.track.id, candidateToPatch(extended))
+				if (hasValue(extended.artwork_url)) {
+					track = await setTrackArtworkFromUrl(row.track.id, extended.artwork_url)
+				}
+				if (isStale()) return
+				update((current) => ({
+					...current,
+					autoApply: {
+						...current.autoApply,
+						processed: current.autoApply.processed + 1,
+						updated: [...current.autoApply.updated, track],
+					},
+				}))
+			} catch (error) {
+				if (isStale()) return
+				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
+				update((current) => ({
+					...current,
+					error: errorMessage,
+					autoApply: {
+						...current.autoApply,
+						processed: current.autoApply.processed + 1,
+						failed: [...current.autoApply.failed, { trackId: row.track.id, error: errorMessage }],
+					},
+				}))
+			}
+		}
+
+		if (isStale()) return
+		const failed = get({ subscribe }).autoApply.failed.length
+		if (failed > 0) {
+			toastStore.error(get(translate)('tagger.batch.autoApplyFailed', { values: { count: failed } }))
+		}
+	}
 
 	return {
 		subscribe,
@@ -241,14 +317,21 @@ function createTaggerStore() {
 		 * set instead of aborting the whole batch. Once the loop is done, the best
 		 * candidate is pre-selected for every row scoring >= 0.85; nothing else is
 		 * pre-selected, so "not decided" stays distinct from an explicit skip.
+		 *
+		 * A row whose best candidate scores >= `AUTO_APPLY_MIN_SCORE` is a
+		 * near-perfect match: it is applied in the background and never reaches the
+		 * list the user chooses from, so the user can keep deciding the rest.
 		 */
 		async searchBatch(tracks: Track[]) {
+			// A new batch supersedes any pass still running for the previous one.
+			const generation = ++autoApplyGeneration
 			update((state) => ({
 				...state,
 				batchRows: [],
 				batchSelections: new Map(),
 				batchProgress: { processed: 0, total: tracks.length, currentTitle: '' },
 				batchLoading: true,
+				autoApply: emptyAutoApply,
 				error: null,
 			}))
 
@@ -286,12 +369,35 @@ function createTaggerStore() {
 				}))
 			}
 
+			// Partition: near-perfect rows are auto-applied and kept off the list.
+			const autoRows: BatchRow[] = []
+			const manualRows: BatchRow[] = []
+			for (const row of rows) {
+				const best = row.candidates[0]
+				if (best !== undefined && best.similarity_score >= AUTO_APPLY_MIN_SCORE) {
+					autoRows.push(row)
+				} else {
+					manualRows.push(row)
+				}
+			}
+
+			// Auto-applied rows never reach the list, so drop their pre-selection too.
+			for (const row of autoRows) {
+				selections.delete(row.track.id)
+			}
+
 			update((state) => ({
 				...state,
-				batchRows: rows,
+				batchRows: manualRows,
 				batchSelections: selections,
 				batchLoading: false,
+				autoApply: { total: autoRows.length, processed: 0, updated: [], failed: [] },
 			}))
+
+			// Resolve now: the user chooses the manual rows while this runs.
+			if (autoRows.length > 0) {
+				void applyAutoRows(autoRows, generation)
+			}
 		},
 
 		/** Record a decision for one row; `null` is an explicit "not available". */
@@ -344,6 +450,8 @@ function createTaggerStore() {
 
 		/** Clear the batch rows, progress and selections, leaving single-track state alone. */
 		resetBatch() {
+			// Invalidate any background pass still running for the cleared batch.
+			autoApplyGeneration += 1
 			update((state) => ({
 				...state,
 				batchRows: [],
@@ -351,6 +459,7 @@ function createTaggerStore() {
 				batchProgress: emptyProgress,
 				batchLoading: false,
 				batchApplying: false,
+				autoApply: emptyAutoApply,
 			}))
 		},
 	}
