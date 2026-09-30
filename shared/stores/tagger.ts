@@ -67,10 +67,11 @@ const emptyProgress: BatchProgress = { processed: 0, total: 0, currentTitle: '' 
 const emptyAutoApply: TaggerState['autoApply'] = { total: 0, processed: 0, updated: [], failed: [] }
 
 /**
- * Bumped on every `searchBatch` and `resetBatch`. A background auto-apply pass
- * captures the value it started under and stops writing once it no longer
- * matches, so a pass from a replaced or cleared batch cannot repopulate
- * `autoApply` with stale results.
+ * Bumped when a NEW batch starts. An auto-apply pass captures the value it began
+ * under and uses it only to decide whether its progress counters still describe
+ * the batch on screen — never whether a row gets applied. Closing the modal must
+ * not cancel the work: the pass always runs to completion, and the applied feed
+ * keeps growing so the library is refreshed either way.
  */
 let autoApplyGeneration = 0
 
@@ -157,12 +158,14 @@ function createTaggerStore() {
 	 * `error` (and toasted once at the end) and never stops the rest.
 	 */
 	async function applyAutoRows(rows: BatchRow[], generation: number) {
-		// `resetBatch` or a newer `searchBatch` invalidates this pass: stop writing
-		// rather than let a stale pass repopulate the current `autoApply`.
-		const isStale = () => generation !== autoApplyGeneration
+		// Closing the modal must NOT stop the work: this pass always runs to
+		// completion. The generation only decides whether the progress counters still
+		// describe the batch on screen. The applied feed is written unconditionally,
+		// so the library keeps being refreshed after the modal is gone.
+		const isCurrentBatch = () => generation === autoApplyGeneration
+		let failures = 0
 
 		for (const row of rows) {
-			if (isStale()) return
 			const best = row.candidates[0]
 			if (best === undefined) continue
 
@@ -172,34 +175,36 @@ function createTaggerStore() {
 				if (hasValue(extended.artwork_url)) {
 					track = await setTrackArtworkFromUrl(row.track.id, extended.artwork_url)
 				}
-				if (isStale()) return
 				update((current) => ({
 					...current,
 					autoApply: {
 						...current.autoApply,
-						processed: current.autoApply.processed + 1,
+						processed: isCurrentBatch() ? current.autoApply.processed + 1 : current.autoApply.processed,
 						updated: [...current.autoApply.updated, track],
 					},
 				}))
 			} catch (error) {
-				if (isStale()) return
+				failures += 1
 				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
 				update((current) => ({
 					...current,
 					error: errorMessage,
 					autoApply: {
 						...current.autoApply,
-						processed: current.autoApply.processed + 1,
-						failed: [...current.autoApply.failed, { trackId: row.track.id, error: errorMessage }],
+						processed: isCurrentBatch() ? current.autoApply.processed + 1 : current.autoApply.processed,
+						failed: isCurrentBatch()
+							? [...current.autoApply.failed, { trackId: row.track.id, error: errorMessage }]
+							: current.autoApply.failed,
 					},
 				}))
 			}
 		}
 
-		if (isStale()) return
-		const failed = get({ subscribe }).autoApply.failed.length
-		if (failed > 0) {
-			toastStore.error(get(translate)('tagger.batch.autoApplyFailed', { values: { count: failed } }))
+		// Counted locally rather than read back from the state: a reset during this
+		// pass would have cleared the failure list, and the user still has to hear
+		// that some tracks were not tagged.
+		if (failures > 0) {
+			toastStore.error(get(translate)('tagger.batch.autoApplyFailed', { values: { count: failures } }))
 		}
 	}
 
@@ -450,8 +455,6 @@ function createTaggerStore() {
 
 		/** Clear the batch rows, progress and selections, leaving single-track state alone. */
 		resetBatch() {
-			// Invalidate any background pass still running for the cleared batch.
-			autoApplyGeneration += 1
 			update((state) => ({
 				...state,
 				batchRows: [],
@@ -459,7 +462,10 @@ function createTaggerStore() {
 				batchProgress: emptyProgress,
 				batchLoading: false,
 				batchApplying: false,
-				autoApply: emptyAutoApply,
+				// The applied feed is deliberately kept. A pass started for this batch
+				// keeps running after the modal closes, and the library still has to be
+				// refreshed for every track it writes; only the on-screen counters reset.
+				autoApply: { ...state.autoApply, total: 0, processed: 0, failed: [] },
 			}))
 		},
 	}
