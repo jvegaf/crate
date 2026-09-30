@@ -64,12 +64,11 @@ function candidateToPatch(candidate: TagCandidate): TrackMetadataPatch {
 		patch.artist = candidate.artists.join(', ')
 	}
 
-	const { album, genre, label, catalog_number: catalogNumber, key } = candidate
+	const { album, genre, label, catalog_number: catalogNumber } = candidate
 	if (hasValue(album)) patch.album = album
 	if (hasValue(genre)) patch.genre = genre
 	if (hasValue(label)) patch.label = label
 	if (hasValue(catalogNumber)) patch.catalog_number = catalogNumber
-	if (hasValue(key)) patch.key = key
 
 	const releaseDate = candidate.release_date
 	if (releaseDate !== null && /^\d{4}/.test(releaseDate)) {
@@ -77,12 +76,15 @@ function candidateToPatch(candidate: TagCandidate): TrackMetadataPatch {
 		if (Number.isFinite(year)) patch.year = year
 	}
 
-	if (typeof candidate.bpm === 'number' && Number.isFinite(candidate.bpm)) {
-		patch.bpm = candidate.bpm
-	}
-
-	// `rating` and `embedded_artwork` are intentionally not set: the candidate's
-	// `artwork_url` is remote and the patch only accepts an embedded file.
+	// The text fields above DO overwrite: when a local tag is wrong, the store
+	// match is the authority and has to replace it.
+	//
+	// Deliberately NOT applied:
+	// - `bpm` and `key`: Crate analyses these from the audio itself, and a value
+	//   measured from the file beats whatever the store lists.
+	// - `rating`: the user's own rating, not metadata.
+	// - `embedded_artwork`: done by the dedicated artwork download, not here.
+	// - comments: not a field of this patch at all, so they cannot be touched.
 	return patch
 }
 
