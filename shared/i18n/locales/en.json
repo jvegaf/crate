@@ -701,7 +701,8 @@
 			"applied": "Track tags applied",
 			"searchFailed": "Failed to search track tags",
 			"extendFailed": "Failed to load the track details",
-			"applyFailed": "Failed to apply track tags"
+			"applyFailed": "Failed to apply track tags",
+			"artworkFailed": "Track tags applied, but the artwork could not be saved"
 		}
 	},
 	"errors": {

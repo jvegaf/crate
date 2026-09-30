@@ -8,7 +8,7 @@ use super::scoring::{
 };
 #[cfg(feature = "desktop")]
 use super::traxsource::parse_traxsource_rows;
-use super::{rank_results, TaggerService};
+use super::{artwork_extension, rank_results, TaggerService};
 use crate::models::{
   ProviderSearchResult, RankedSearchResult, ScoredTagCandidate, TagCandidate, TagSearchQuery,
 };
@@ -905,4 +905,67 @@ fn rank_candidates_grouping_boundary_follows_the_computed_gap() {
     .collect();
   assert_eq!(outside_providers, vec!["p1", "p0"]);
   assert_eq!(outside_scores, vec![1.0, 0.99]);
+}
+
+#[test]
+fn artwork_extension_follows_the_content_type() {
+  let url = "https://images.example.com/art";
+  assert_eq!(artwork_extension(Some("image/jpeg"), url), "jpg");
+  assert_eq!(artwork_extension(Some("image/png"), url), "png");
+  assert_eq!(artwork_extension(Some("image/webp"), url), "webp");
+  assert_eq!(artwork_extension(Some("image/gif"), url), "gif");
+}
+
+#[test]
+fn artwork_extension_ignores_content_type_parameters_and_case() {
+  assert_eq!(
+    artwork_extension(Some("image/jpeg; charset=binary"), "https://x/art"),
+    "jpg"
+  );
+  assert_eq!(artwork_extension(Some("IMAGE/PNG"), "https://x/art"), "png");
+}
+
+#[test]
+fn artwork_extension_falls_back_to_the_url_path() {
+  assert_eq!(
+    artwork_extension(None, "https://images.example.com/cover.png"),
+    "png"
+  );
+  assert_eq!(
+    artwork_extension(None, "https://images.example.com/cover.JPEG"),
+    "jpg"
+  );
+  // A query string must not be mistaken for the extension.
+  assert_eq!(
+    artwork_extension(None, "https://images.example.com/cover.webp?token=1"),
+    "webp"
+  );
+}
+
+#[test]
+fn artwork_extension_defaults_to_jpg_without_a_usable_hint() {
+  assert_eq!(
+    artwork_extension(
+      Some("application/octet-stream"),
+      "https://images.example.com/cover"
+    ),
+    "jpg"
+  );
+  assert_eq!(
+    artwork_extension(None, "https://images.example.com/cover"),
+    "jpg"
+  );
+  assert_eq!(artwork_extension(None, "not-a-url"), "jpg");
+}
+
+#[test]
+fn artwork_extension_prefers_content_type_over_a_disagreeing_url() {
+  assert_eq!(
+    artwork_extension(Some("image/png"), "https://images.example.com/cover.jpg"),
+    "png"
+  );
+  assert_eq!(
+    artwork_extension(Some("image/jpeg"), "https://images.example.com/cover.png"),
+    "jpg"
+  );
 }

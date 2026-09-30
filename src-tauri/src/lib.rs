@@ -328,6 +328,9 @@ pub fn run() {
       commands::tagger::search_track_tags,
       commands::tagger::search_ranked_track_tags,
       commands::tagger::extend_track_tag,
+      // Applying remote artwork reuses the desktop-only LibraryService.
+      #[cfg(feature = "desktop")]
+      commands::tagger::set_track_artwork_from_url,
       // Follow commands
       commands::follow::follow_source,
       commands::follow::follow_from_entity,

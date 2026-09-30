@@ -1,7 +1,11 @@
 use tauri::State;
 
 use crate::error::Result;
+#[cfg(feature = "desktop")]
+use crate::models::Track;
 use crate::models::{ProviderSearchResult, RankedSearchResult, TagCandidate, TagSearchQuery};
+#[cfg(feature = "desktop")]
+use crate::services::LibraryService;
 use crate::services::TaggerService;
 
 /// Search every metadata provider (Beatport, TraxSource, Bandcamp) for candidate
@@ -62,4 +66,30 @@ pub async fn extend_track_tag(
   tagger: State<'_, TaggerService>,
 ) -> Result<TagCandidate> {
   tagger.extend_candidate(&candidate).await
+}
+
+/// Download a candidate's artwork and set it as the track's artwork, reusing the
+/// library's user-provided artwork path.
+///
+/// Desktop-only because it depends on [`LibraryService`], which is gated out of
+/// the mobile build. The downloaded temp file is removed on every path.
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub async fn set_track_artwork_from_url(
+  track_id: String,
+  url: String,
+  tagger: State<'_, TaggerService>,
+  library: State<'_, LibraryService>,
+) -> Result<Track> {
+  let temp_path = tagger.download_artwork(&url).await?;
+
+  let result = library.set_track_artwork(&track_id, &temp_path);
+
+  // The temp file is ours alone: remove it whether or not the library write
+  // succeeded, so a failed apply cannot leak it.
+  if let Err(e) = std::fs::remove_file(&temp_path) {
+    log::warn!("Failed to remove temporary artwork file {temp_path:?}: {e}");
+  }
+
+  result
 }

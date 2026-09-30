@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { RankedSearchResult, TagCandidate } from '../types'
+import type { RankedSearchResult, TagCandidate, Track } from '../types'
 
 /**
  * Search every metadata provider for candidates matching `artist` + `title` and
@@ -34,4 +34,13 @@ export async function searchRankedTrackTags(params: {
  */
 export async function extendTrackTag(candidate: TagCandidate): Promise<TagCandidate> {
 	return invoke<TagCandidate>('extend_track_tag', { candidate })
+}
+
+/**
+ * Download a candidate's remote artwork and set it as the track's artwork.
+ * The backend owns the download (the app's CSP blocks a frontend fetch) and
+ * reuses the library's user-provided artwork path.
+ */
+export async function setTrackArtworkFromUrl(trackId: string, url: string): Promise<Track> {
+	return invoke<Track>('set_track_artwork_from_url', { trackId, url })
 }

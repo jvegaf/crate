@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store'
 import type { ProviderError, ScoredTagCandidate, TagCandidate, Track, TrackMetadataPatch } from '../types'
-import { extendTrackTag, searchRankedTrackTags } from '../api/tagger'
+import { extendTrackTag, searchRankedTrackTags, setTrackArtworkFromUrl } from '../api/tagger'
 import { updateTrackMetadata } from '../api/library'
 import { translate } from '../i18n'
 import { toastStore } from './toast'
@@ -156,22 +156,43 @@ function createTaggerStore() {
 		/**
 		 * Apply the extended candidate (or the selected one) to a track. Returns
 		 * the updated track, or null when there is nothing to apply or it failed.
+		 *
+		 * Metadata is written first, then the candidate's remote artwork when it
+		 * has one. If the artwork step fails after a successful metadata write,
+		 * the metadata is still reflected in the returned track and the partial
+		 * failure is surfaced rather than swallowed.
 		 */
 		async apply(track: Track): Promise<Track | null> {
 			const state = get({ subscribe })
 			const candidate = state.extended ?? state.selected
 			if (candidate === null) return null
 
+			let updated: Track
 			try {
-				const updated = await updateTrackMetadata(track.id, candidateToPatch(candidate))
+				updated = await updateTrackMetadata(track.id, candidateToPatch(candidate))
 				update((current) => ({ ...current, error: null }))
 				toastStore.success(get(translate)('tagger.toast.applied'))
-				return updated
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
 				update((current) => ({ ...current, error: errorMessage }))
 				toastStore.error(errorMessage)
 				return null
+			}
+
+			const artworkUrl = candidate.artwork_url
+			if (!hasValue(artworkUrl)) {
+				return updated
+			}
+
+			try {
+				return await setTrackArtworkFromUrl(track.id, artworkUrl)
+			} catch (error) {
+				// Metadata was applied; make the half-done outcome explicit and
+				// still return the metadata-updated track so the UI reflects it.
+				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.artworkFailed')
+				update((current) => ({ ...current, error: errorMessage }))
+				toastStore.error(errorMessage)
+				return updated
 			}
 		},
 

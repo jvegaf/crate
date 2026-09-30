@@ -138,6 +138,90 @@ impl TaggerService {
 
     provider.extend(&self.client, candidate).await
   }
+
+  /// Download a remote artwork URL to a temporary file and return its path.
+  ///
+  /// The caller owns the file and must remove it. An empty URL is an error.
+  /// The extension is derived from the response `Content-Type`, then the URL
+  /// path, then defaults to `jpg`.
+  pub async fn download_artwork(&self, url: &str) -> Result<std::path::PathBuf> {
+    let url = url.trim();
+    if url.is_empty() {
+      return Err(CrateError::Tagger(
+        "Cannot download artwork: empty URL".to_string(),
+      ));
+    }
+
+    let response = self
+      .client
+      .get(url)
+      .send()
+      .await
+      .map_err(|e| CrateError::Tagger(format!("Artwork request failed: {e}")))?;
+
+    if !response.status().is_success() {
+      let status = response.status();
+      return Err(CrateError::Tagger(format!(
+        "Artwork download returned HTTP {status}"
+      )));
+    }
+
+    let content_type = response
+      .headers()
+      .get(reqwest::header::CONTENT_TYPE)
+      .and_then(|value| value.to_str().ok())
+      .map(str::to_string);
+    let extension = artwork_extension(content_type.as_deref(), url);
+
+    let bytes = response
+      .bytes()
+      .await
+      .map_err(|e| CrateError::Tagger(format!("Artwork read failed: {e}")))?;
+
+    let file_name = uuid::Uuid::new_v4();
+    let path = std::env::temp_dir().join(format!("crate-artwork-{file_name}.{extension}"));
+    std::fs::write(&path, &bytes)?;
+
+    Ok(path)
+  }
+}
+
+/// Decide the file extension for a downloaded artwork image.
+///
+/// The response `Content-Type` wins when it maps to a known image type;
+/// otherwise the URL's own extension is used, and an unknown or absent
+/// extension falls back to `jpg`.
+fn artwork_extension(content_type: Option<&str>, url: &str) -> &'static str {
+  let from_content_type = content_type.and_then(|value| {
+    let mime = value.split(';').next()?.trim().to_ascii_lowercase();
+    match mime.as_str() {
+      "image/jpeg" | "image/jpg" => Some("jpg"),
+      "image/png" => Some("png"),
+      "image/webp" => Some("webp"),
+      "image/gif" => Some("gif"),
+      _ => None,
+    }
+  });
+  if let Some(extension) = from_content_type {
+    return extension;
+  }
+
+  let without_fragment = url.split(['?', '#']).next().unwrap_or(url);
+  let last_segment = without_fragment
+    .rsplit('/')
+    .next()
+    .unwrap_or(without_fragment);
+  match last_segment
+    .rsplit_once('.')
+    .map(|(_, ext)| ext.to_ascii_lowercase())
+    .as_deref()
+  {
+    Some("jpg") | Some("jpeg") => "jpg",
+    Some("png") => "png",
+    Some("webp") => "webp",
+    Some("gif") => "gif",
+    _ => "jpg",
+  }
 }
 
 /// Aggregate raw provider results into the ranked best-N answer.
