@@ -697,6 +697,20 @@
 		"apply": "Apply tags",
 		"applying": "Applying…",
 		"score": "Match",
+		"batch": {
+			"title": "Find track tags",
+			"subtitle": "{count, plural, =0 {No tracks selected} =1 {1 track selected} other {{count} tracks selected}}",
+			"searching": "Searching providers… ({processed}/{total})",
+			"searchingCurrent": "Searching “{title}” ({processed}/{total})",
+			"applying": "Applying…",
+			"notAvailable": "Not available",
+			"noResults": "No results",
+			"error": "Error",
+			"providerErrors": "Some providers could not be reached",
+			"confirm": "Confirm ({count})",
+			"stats": "{toApply} to apply · {skipped} skipped",
+			"applyFailed": "Some tracks could not be updated ({count})"
+		},
 		"toast": {
 			"applied": "Track tags applied",
 			"searchFailed": "Failed to search track tags",

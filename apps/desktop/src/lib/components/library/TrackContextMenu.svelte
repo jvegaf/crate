@@ -22,7 +22,7 @@
 		onRemoveFromLibrary: () => void
 		onRelocate?: (track: Track) => void
 		onEditMetadata: (track: Track) => void
-		onFindTags?: (track: Track) => void
+		onFindTags?: (tracks: Track[]) => void
 		onSetColor?: (color: TrackColor | null) => void
 		onAnalyze?: () => void
 	}
@@ -98,15 +98,14 @@
 			})
 		}
 
-		// "Find track tags..." - ranked provider shortlist. A ranked shortlist is a
-		// per-track judgement, so it stays disabled for a multi-track selection.
+		// "Find track tags..." - ranked provider shortlist. One selection opens the
+		// single-track modal; several open the batch layout with one row each.
 		if (onFindTags) {
 			items.push({
 				id: 'findTags',
 				label: get(translate)('contextMenu.findTrackTags'),
 				icon: 'tag',
-				action: () => onFindTags?.(selectedTracks[0]),
-				disabled: selectedTracks.length !== 1,
+				action: () => onFindTags?.(selectedTracks),
 			})
 		}
 

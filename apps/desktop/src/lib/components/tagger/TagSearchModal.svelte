@@ -9,6 +9,7 @@
 	import Modal from '$lib/components/common/Modal.svelte'
 	import Spinner from '$lib/components/common/Spinner.svelte'
 	import Text from '$lib/components/common/Text.svelte'
+	import { providerCapsuleClass, scoreClass } from './tones'
 
 	type Props = {
 		open: boolean
@@ -21,41 +22,9 @@
 
 	let applying = $state(false)
 
-	const CAPSULE_BASE_CLASS = 'rounded-full px-2 py-0.5 text-[11px] font-medium'
-
 	/** Provider ids are proper nouns: capitalise locally, never translate. */
 	function capitalize(value: string): string {
 		return value.charAt(0).toUpperCase() + value.slice(1)
-	}
-
-	/**
-	 * Brand identity colours per provider. These are identities, not states, so they
-	 * stay on the raw palette instead of the success/info/warning tokens. Unknown
-	 * providers fall back to a neutral surface.
-	 */
-	function providerCapsuleClass(provider: string): string {
-		let tone: string
-		switch (provider) {
-			case 'beatport':
-				tone = 'bg-green-500/15 text-green-500'
-				break
-			case 'traxsource':
-				tone = 'bg-blue-500/15 text-blue-500'
-				break
-			case 'bandcamp':
-				tone = 'bg-orange-500/15 text-orange-500'
-				break
-			default:
-				tone = 'bg-surface-2 text-text-tertiary'
-		}
-		return `${CAPSULE_BASE_CLASS} ${tone}`
-	}
-
-	/** Match score is a state: use the semantic tokens so the best row reads at a glance. */
-	function scoreClass(score: number): string {
-		if (score >= 0.75) return 'bg-success/15 text-success'
-		if (score >= 0.4) return 'bg-warning/15 text-warning'
-		return 'bg-danger/15 text-danger'
 	}
 
 	// Search once when the modal opens (or when the track changes while open).

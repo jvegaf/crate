@@ -9,6 +9,21 @@ import { toastStore } from './toast'
 // State
 // =============================================================================
 
+/** One local track and the ranked candidates the batch search returned for it. */
+export interface BatchRow {
+	track: Track
+	candidates: ScoredTagCandidate[]
+	errors: ProviderError[]
+	/** Per-track failure (the search itself threw), distinct from per-provider errors. */
+	error: string | null
+}
+
+interface BatchProgress {
+	processed: number
+	total: number
+	currentTitle: string
+}
+
 interface TaggerState {
 	trackId: string | null
 	loading: boolean
@@ -23,7 +38,19 @@ interface TaggerState {
 	selected: ScoredTagCandidate | null
 	/** The extended form of the selected candidate once `extendSelected` ran. */
 	extended: TagCandidate | null
+	/** One row per local track in the batch flow. */
+	batchRows: BatchRow[]
+	/**
+	 * Per-track decision. A missing key means "not decided yet"; an explicit
+	 * `null` means the user chose "not available" (skipped).
+	 */
+	batchSelections: Map<string, ScoredTagCandidate | null>
+	batchProgress: BatchProgress
+	batchLoading: boolean
+	batchApplying: boolean
 }
+
+const emptyProgress: BatchProgress = { processed: 0, total: 0, currentTitle: '' }
 
 const initialState: TaggerState = {
 	trackId: null,
@@ -34,6 +61,11 @@ const initialState: TaggerState = {
 	error: null,
 	selected: null,
 	extended: null,
+	batchRows: [],
+	batchSelections: new Map(),
+	batchProgress: emptyProgress,
+	batchLoading: false,
+	batchApplying: false,
 }
 
 // =============================================================================
@@ -201,6 +233,125 @@ function createTaggerStore() {
 		/** Reset the store to its initial state. */
 		reset() {
 			set(initialState)
+		},
+
+		/**
+		 * Search every provider for each of `tracks`, sequentially, and expose one
+		 * row per track. A track whose search throws becomes a row with `error`
+		 * set instead of aborting the whole batch. Once the loop is done, the best
+		 * candidate is pre-selected for every row scoring >= 0.85; nothing else is
+		 * pre-selected, so "not decided" stays distinct from an explicit skip.
+		 */
+		async searchBatch(tracks: Track[]) {
+			update((state) => ({
+				...state,
+				batchRows: [],
+				batchSelections: new Map(),
+				batchProgress: { processed: 0, total: tracks.length, currentTitle: '' },
+				batchLoading: true,
+				error: null,
+			}))
+
+			const rows: BatchRow[] = []
+			const selections = new Map<string, ScoredTagCandidate | null>()
+
+			for (const [index, track] of tracks.entries()) {
+				update((state) => ({
+					...state,
+					batchProgress: { processed: index, total: tracks.length, currentTitle: track.title ?? '' },
+				}))
+
+				try {
+					const result = await searchRankedTrackTags({
+						artist: track.artist ?? null,
+						title: track.title ?? '',
+						durationMs: track.duration_ms,
+					})
+					rows.push({ track, candidates: result.candidates, errors: result.errors, error: null })
+
+					const best = result.candidates[0]
+					if (best !== undefined && best.similarity_score >= 0.85) {
+						selections.set(track.id, best)
+					}
+				} catch (error) {
+					// One failed search must not sink the batch: record it on the row
+					// and keep going. The per-row status badge surfaces it to the user.
+					const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.batch.error')
+					rows.push({ track, candidates: [], errors: [], error: errorMessage })
+				}
+
+				update((state) => ({
+					...state,
+					batchProgress: { processed: index + 1, total: tracks.length, currentTitle: track.title ?? '' },
+				}))
+			}
+
+			update((state) => ({
+				...state,
+				batchRows: rows,
+				batchSelections: selections,
+				batchLoading: false,
+			}))
+		},
+
+		/** Record a decision for one row; `null` is an explicit "not available". */
+		selectFor(trackId: string, candidate: ScoredTagCandidate | null) {
+			update((state) => {
+				const batchSelections = new Map(state.batchSelections)
+				batchSelections.set(trackId, candidate)
+				return { ...state, batchSelections }
+			})
+		},
+
+		/**
+		 * Apply every non-null selection. Each row runs `extend` then the metadata
+		 * patch then, when the candidate has artwork, the artwork download. One
+		 * row failing is recorded in `failed` and does not stop the others.
+		 */
+		async applyBatch(): Promise<{ updated: Track[]; failed: Array<{ trackId: string; error: string }> }> {
+			const state = get({ subscribe })
+			update((current) => ({ ...current, batchApplying: true }))
+
+			const updated: Track[] = []
+			const failed: Array<{ trackId: string; error: string }> = []
+
+			for (const row of state.batchRows) {
+				const selected = state.batchSelections.get(row.track.id)
+				// `undefined` is "not decided"; `null` is an explicit skip. Neither applies.
+				if (selected === undefined || selected === null) continue
+
+				try {
+					const extended = await extendTrackTag(selected)
+					let track = await updateTrackMetadata(row.track.id, candidateToPatch(extended))
+					if (hasValue(extended.artwork_url)) {
+						track = await setTrackArtworkFromUrl(row.track.id, extended.artwork_url)
+					}
+					updated.push(track)
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
+					failed.push({ trackId: row.track.id, error: errorMessage })
+				}
+			}
+
+			update((current) => ({ ...current, batchApplying: false }))
+
+			if (failed.length > 0) {
+				toastStore.error(get(translate)('tagger.batch.applyFailed', { values: { count: failed.length } }))
+			}
+
+			return { updated, failed }
+		},
+
+		/** Clear the batch rows, progress and selections, leaving single-track state alone. */
+		resetBatch() {
+			update((state) => ({
+				...state,
+				batchRows: [],
+				batchSelections: new Map(),
+				batchProgress: emptyProgress,
+				batchLoading: false,
+				batchApplying: false,
+			}))
 		},
 	}
 }

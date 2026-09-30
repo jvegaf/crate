@@ -56,7 +56,7 @@
 		onTrackRemoveFromLibrary: (tracks: Track[]) => void
 		onTrackRelocate: (track: Track) => void
 		onTrackEditMetadata: (track: Track) => void
-		onTrackFindTags: (track: Track) => void
+		onTrackFindTags: (tracks: Track[]) => void
 		onTrackSetColor: (color: TrackColor | null, tracks: Track[]) => void
 		onTrackAnalyze: (tracks: Track[]) => void
 
@@ -428,9 +428,9 @@
 		onTrackEditMetadata(track)
 	}
 
-	function handleTrackFindTags(track: Track) {
+	function handleTrackFindTags(tracks: Track[]) {
 		closeAll()
-		onTrackFindTags(track)
+		onTrackFindTags(tracks)
 	}
 
 	function handleTrackSetColor(color: TrackColor | null) {

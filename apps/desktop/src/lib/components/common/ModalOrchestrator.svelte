@@ -41,7 +41,7 @@
 		| { type: 'deviceInfo'; device: UsbDevice }
 		| { type: 'relocate'; track: Track }
 		| { type: 'trackMetadata'; track: Track }
-		| { type: 'tagSearch'; track: Track }
+		| { type: 'tagSearch'; tracks: Track[] }
 		| {
 				type: 'moveConflict'
 				movingItem: Playlist
@@ -92,7 +92,7 @@
 	import { DeviceInfoModal, ReformatDeviceModal } from '$lib/components/devices'
 	import { SettingsModal } from '$lib/components/settings'
 	import { RelocateTrackModal } from '$lib/components/library'
-	import { TagSearchModal } from '$lib/components/tagger'
+	import { TagBatchModal, TagSearchModal } from '$lib/components/tagger'
 	import TrackMetadataModal, { type CrateArtworkChange } from './TrackMetadataModal.svelte'
 	import { SmartPlaylistModal } from '$lib/components/playlists'
 	import { ExportModal, ExportFailureModal, QuickExportModal } from '$lib/components/export'
@@ -322,8 +322,8 @@
 		activeModal = { type: 'trackMetadata', track }
 	}
 
-	export function openTagSearchModal(track: Track) {
-		activeModal = { type: 'tagSearch', track }
+	export function openTagSearchModal(tracks: Track[]) {
+		activeModal = { type: 'tagSearch', tracks }
 	}
 
 	export function openMoveConflictModal(movingItem: Playlist, existingItem: Playlist, targetParentId: string | null) {
@@ -528,6 +528,13 @@
 		closeAll()
 		libraryStore.updateTracksInState([track])
 		syncStore.notifyTrackChanges([track.id])
+	}
+
+	// Batch variant: refresh the library for every track that was updated.
+	function handleTagBatchApplied(updated: Track[]) {
+		closeAll()
+		libraryStore.updateTracksInState(updated)
+		syncStore.notifyTrackChanges(updated.map((track) => track.id))
 	}
 
 	// Move conflict handlers
@@ -1084,7 +1091,11 @@
 
 <!-- Find Track Tags Modal -->
 {#if activeModal.type === 'tagSearch'}
-	<TagSearchModal open={true} track={activeModal.track} onClose={closeAll} onApplied={handleTagSearchApplied} />
+	{#if activeModal.tracks.length === 1}
+		<TagSearchModal open={true} track={activeModal.tracks[0]} onClose={closeAll} onApplied={handleTagSearchApplied} />
+	{:else}
+		<TagBatchModal open={true} tracks={activeModal.tracks} onClose={closeAll} onApplied={handleTagBatchApplied} />
+	{/if}
 {/if}
 
 <!-- Move Conflict Modal -->

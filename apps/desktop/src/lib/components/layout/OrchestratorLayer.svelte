@@ -207,7 +207,7 @@
 	onTrackRemoveFromLibrary={trackController.removeFromLibraryClick}
 	onTrackRelocate={(track) => modalOrchestrator.openRelocateModal(track)}
 	onTrackEditMetadata={(track) => modalOrchestrator.openTrackMetadataModal(track)}
-	onTrackFindTags={(track) => modalOrchestrator.openTagSearchModal(track)}
+	onTrackFindTags={(tracks) => modalOrchestrator.openTagSearchModal(tracks)}
 	onTrackSetColor={trackController.setColorFromContextMenu}
 	onTrackAnalyze={handleTrackAnalyze}
 	onPlaylistCreatePlaylist={(p) => modalOrchestrator.openCreatePlaylistModal(p.id)}
