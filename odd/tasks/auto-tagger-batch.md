@@ -159,11 +159,21 @@ Fix: the background refresh moved **out of the modal** into a close-free `$effec
 the modal mid-pass. `onApplied` is now exclusively the confirm path. A module-level generation
 counter keeps a pass belonging to a replaced batch from repopulating `autoApply`.
 
-### Behaviour decided here, and offered to change
+### Closing the modal does not stop the pass (decided 2026-09-30)
 
-Closing the modal while the background pass runs **cancels the auto-applies that have not started**
-(the generation guard returns early before each row). That reads "closing the dialog means stop" and
-fits the user's framing ("while I'm choosing the others"), but those tracks are then silently left
-untagged. If the preference is "finish the job even after closing", the guard should skip the state
-writes instead of the work.
+On the user's call, the auto-apply pass **always runs to completion**, open modal or not. The first
+implementation had the guard `return` early before each row, which made closing the dialog silently
+abandon the remaining tracks. That is now inverted:
+
+- the generation counter is bumped only when a **new batch** starts, so a close never cancels a pass;
+- it decides only whether the on-screen counters (`total` / `processed` / `failed`) still describe
+  the batch being displayed — never whether a row gets applied;
+- `autoApply.updated`, the feed the orchestrator watches to refresh the library, is written
+  unconditionally, so tracks auto-applied after the modal closed still appear in the list;
+- `resetBatch` clears the on-screen counters but deliberately keeps that feed;
+- the end-of-pass failure toast counts locally instead of reading state back, so a reset during the
+  pass cannot swallow the "these were not tagged" warning.
+
+Verified by gates only: no automated test covers the store, so the behaviour is proven by reading the
+control flow, not by running the app.
 
