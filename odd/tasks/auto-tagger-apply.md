@@ -283,6 +283,23 @@ recorded here rather than implied:
    the provider-error block without hiding the other providers' results; a track with no artist tag
    caps every candidate at 70%.
 
+## Review mode disabled (2026-09-29)
+
+Reviews are **off for this clone**, on explicit user instruction
+(`gentle-ai review mode disable --scope clone`): the OpenCode reviewer task kept failing while the
+user was reviewing the work hands-on by running the app. The global preference is untouched, so
+this is a per-clone decision and reversible.
+
+Consequences, recorded so nobody reads them as approvals later:
+
+- every commit from `5a1acf7` onward (the extend step, the frontend data layer, the modal, the
+  visual pass, the artwork fix) is **verified by tests and gates but never natively reviewed**;
+- no consent prompt will appear for later candidates in this clone;
+- delivery now follows ordinary repository policy and reports `disabled/unmanaged`.
+
+The stale non-terminal lineage `review-c82f3ab6f25ba11c` is left as-is. Closing it needs a
+maintainer-authorized `gentle-ai review abandon`; nothing depends on it.
+
 ## Orchestration gotcha (reused)
 
 The OpenCode reviewer Task must receive ONLY the provider-issued `provider_task.prompt`.
