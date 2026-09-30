@@ -3,6 +3,7 @@
 	import { taggerStore } from '$shared/stores/tagger'
 	import type { ScoredTagCandidate, Track } from '$shared/types'
 	import { formatDuration } from '$shared/utils'
+	import AlbumArt from '$lib/components/common/AlbumArt.svelte'
 	import Button from '$lib/components/common/Button.svelte'
 	import Icon from '$lib/components/common/Icon.svelte'
 	import Modal from '$lib/components/common/Modal.svelte'
@@ -19,6 +20,43 @@
 	let { open, track, onClose, onApplied }: Props = $props()
 
 	let applying = $state(false)
+
+	const CAPSULE_BASE_CLASS = 'rounded-full px-2 py-0.5 text-[11px] font-medium'
+
+	/** Provider ids are proper nouns: capitalise locally, never translate. */
+	function capitalize(value: string): string {
+		return value.charAt(0).toUpperCase() + value.slice(1)
+	}
+
+	/**
+	 * Brand identity colours per provider. These are identities, not states, so they
+	 * stay on the raw palette instead of the success/info/warning tokens. Unknown
+	 * providers fall back to a neutral surface.
+	 */
+	function providerCapsuleClass(provider: string): string {
+		let tone: string
+		switch (provider) {
+			case 'beatport':
+				tone = 'bg-green-500/15 text-green-500'
+				break
+			case 'traxsource':
+				tone = 'bg-blue-500/15 text-blue-500'
+				break
+			case 'bandcamp':
+				tone = 'bg-orange-500/15 text-orange-500'
+				break
+			default:
+				tone = 'bg-surface-2 text-text-tertiary'
+		}
+		return `${CAPSULE_BASE_CLASS} ${tone}`
+	}
+
+	/** Match score is a state: use the semantic tokens so the best row reads at a glance. */
+	function scoreClass(score: number): string {
+		if (score >= 0.75) return 'bg-success/15 text-success'
+		if (score >= 0.4) return 'bg-warning/15 text-warning'
+		return 'bg-danger/15 text-danger'
+	}
 
 	// Search once when the modal opens (or when the track changes while open).
 	// Keyed on `open`/`track`, so it does not re-run on every render.
@@ -95,45 +133,50 @@
 							type="button"
 							aria-pressed={isSelected}
 							onclick={() => handleSelect(candidate)}
-							class="flex w-full flex-col gap-1 border-b border-stroke-subtle px-3 py-2.5 text-left transition-colors last:border-b-0 {isSelected
+							class="flex w-full items-center gap-3 border-b border-stroke-subtle px-3 py-2.5 text-left transition-colors last:border-b-0 {isSelected
 								? 'bg-brand-muted'
 								: 'hover:bg-surface-2/50'}"
 						>
-							<div class="flex items-center justify-between gap-2">
-								<span class="text-[10px] font-semibold tracking-wide text-text-tertiary uppercase">
-									{candidate.provider}
-								</span>
-								<span
-									class="shrink-0 rounded bg-brand-primary-10 px-1.5 py-0.5 text-xs font-medium text-brand-primary"
-									title={$translate('tagger.score')}
-								>
-									{Math.round(candidate.similarity_score * 100)}%
-								</span>
-							</div>
-							<div class="flex min-w-0 items-baseline gap-2">
-								<Text as="span" weight="medium" truncate>{shown.title || $translate('common.untitled')}</Text>
-								{#if shown.version}
-									<Text as="span" variant="caption" class="shrink-0">({shown.version})</Text>
+							<AlbumArt artworkPath={null} artworkUrl={shown.artwork_url} size="xs" />
+							<div class="flex min-w-0 flex-1 flex-col gap-1">
+								<div class="flex items-center justify-between gap-2">
+									<div class="flex min-w-0 items-center gap-2">
+										<span class={providerCapsuleClass(candidate.provider)}>{capitalize(candidate.provider)}</span>
+										{#if shown.version}
+											<span class="rounded-full bg-purple-500/15 px-2 py-0.5 text-[11px] font-medium text-purple-500">
+												{shown.version}
+											</span>
+										{/if}
+									</div>
+									<span
+										class="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium {scoreClass(candidate.similarity_score)}"
+										title={$translate('tagger.score')}
+									>
+										{Math.round(candidate.similarity_score * 100)}%
+									</span>
+								</div>
+								<div class="flex min-w-0 items-baseline gap-2">
+									<Text as="span" weight="medium" truncate>{shown.title || $translate('common.untitled')}</Text>
+								</div>
+								<Text as="span" variant="caption" truncate>
+									{shown.artists.length > 0 ? shown.artists.join(', ') : $translate('common.unknownArtist')}
+								</Text>
+								<div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-text-tertiary">
+									{#if shown.album}<span class="truncate">{shown.album}</span>{/if}
+									{#if shown.label}<span class="truncate">{shown.label}</span>{/if}
+									{#if shown.bpm !== null}
+										<span>{$translate('modals.trackMetadata.fields.bpm')} {shown.bpm}</span>
+									{/if}
+									{#if shown.key}<span>{shown.key}</span>{/if}
+									{#if shown.duration_ms !== null}<span>{formatDuration(shown.duration_ms)}</span>{/if}
+								</div>
+								{#if isExtending}
+									<span class="flex items-center gap-1.5 text-xs text-text-tertiary">
+										<Spinner class="h-3 w-3" />
+										{$translate('tagger.enriching')}
+									</span>
 								{/if}
 							</div>
-							<Text as="span" variant="caption" truncate>
-								{shown.artists.length > 0 ? shown.artists.join(', ') : $translate('common.unknownArtist')}
-							</Text>
-							<div class="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-text-tertiary">
-								{#if shown.album}<span class="truncate">{shown.album}</span>{/if}
-								{#if shown.label}<span class="truncate">{shown.label}</span>{/if}
-								{#if shown.bpm !== null}
-									<span>{$translate('modals.trackMetadata.fields.bpm')} {shown.bpm}</span>
-								{/if}
-								{#if shown.key}<span>{shown.key}</span>{/if}
-								{#if shown.duration_ms !== null}<span>{formatDuration(shown.duration_ms)}</span>{/if}
-							</div>
-							{#if isExtending}
-								<span class="flex items-center gap-1.5 text-xs text-text-tertiary">
-									<Spinner class="h-3 w-3" />
-									{$translate('tagger.enriching')}
-								</span>
-							{/if}
 						</button>
 					{/each}
 				</div>
