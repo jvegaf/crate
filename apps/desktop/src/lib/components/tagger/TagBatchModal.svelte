@@ -81,7 +81,7 @@
 	}
 </script>
 
-<Modal {open} title={$translate('tagger.batch.title')} size="xl" onClose={handleClose}>
+<Modal {open} title={$translate('tagger.batch.title')} size="2xl" onClose={handleClose}>
 	<div class="space-y-4">
 		<p class="text-sm text-text-secondary">
 			{$translate('tagger.batch.subtitle', { values: { count: tracks.length } })}

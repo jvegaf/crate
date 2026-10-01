@@ -6,7 +6,7 @@
 	type Props = {
 		open: boolean
 		title?: string
-		size?: 'sm' | 'md' | 'lg' | 'xl'
+		size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 		flush?: boolean
 		onClose: () => void
 		onSubmit?: () => void
@@ -21,6 +21,8 @@
 		md: 'max-w-md',
 		lg: 'max-w-xl',
 		xl: 'max-w-2xl',
+		// Wide enough for five 208px candidate cards plus the skip button.
+		'2xl': 'max-w-7xl',
 	}
 
 	let dialogEl: HTMLDialogElement | undefined = $state()
