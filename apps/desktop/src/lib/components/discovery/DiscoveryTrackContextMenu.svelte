@@ -6,7 +6,7 @@
 	import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 	import { openUrl } from '@tauri-apps/plugin-opener'
 	import { toastStore } from '$shared/stores/toast'
-	import { buildYouTubeSearchUrl } from '$shared/utils'
+	import { buildYouTubeSearchUrl, getStoreName } from '$shared/utils'
 
 	type Props = {
 		open: boolean
@@ -22,6 +22,10 @@
 	}
 
 	let { open, x, y, release, track, canPlay, onClose, onClosed, onLikeToggle, onPlayPreview }: Props = $props()
+
+	// A release page from a known store gets a dynamic "View on {store}" label; any other host keeps the
+	// generic wording, which stays accurate for SoundCloud, YouTube and Discogs.
+	const releaseStoreName = $derived(getStoreName(release.url))
 
 	const menuItems = $derived.by<ContextMenuItem[]>(() => [
 		{
@@ -50,7 +54,9 @@
 		},
 		{
 			id: 'open-release-in-browser',
-			label: get(translate)('discovery.openReleaseInBrowser'),
+			label: releaseStoreName
+				? get(translate)('contextMenu.viewOnStore', { values: { store: releaseStoreName } })
+				: get(translate)('discovery.openReleaseInBrowser'),
 			icon: 'external-link',
 			action: () => {
 				openUrl(release.url)

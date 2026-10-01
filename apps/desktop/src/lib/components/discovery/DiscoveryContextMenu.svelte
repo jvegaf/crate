@@ -6,7 +6,7 @@
 	import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 	import { openUrl } from '@tauri-apps/plugin-opener'
 	import { toastStore } from '$shared/stores/toast'
-	import { buildYouTubeSearchUrl } from '$shared/utils'
+	import { buildYouTubeSearchUrl, getStoreName } from '$shared/utils'
 
 	type Props = {
 		open: boolean
@@ -52,9 +52,12 @@
 
 		// Open in Browser / Copy URL - single release only
 		if (selectedReleases.length === 1) {
+			const store = getStoreName(selectedReleases[0].url)
 			items.push({
 				id: 'open-in-browser',
-				label: get(translate)('discovery.openInBrowser'),
+				label: store
+					? get(translate)('contextMenu.viewOnStore', { values: { store } })
+					: get(translate)('discovery.openInBrowser'),
 				icon: 'external-link',
 				action: onOpenInBrowser,
 			})
