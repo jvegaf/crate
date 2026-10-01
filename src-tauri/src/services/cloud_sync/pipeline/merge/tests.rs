@@ -492,3 +492,124 @@ fn no_override_when_local_value_authored_elsewhere() {
   assert_eq!(tc_name(&conn, "c1").as_deref(), Some("Techno"));
   assert!(overrides.is_empty());
 }
+
+// --- cues (anti-regression: the `upsert_cue` stray-column defect) ----------
+
+fn seed_cue_track(conn: &Connection) {
+  conn
+    .execute(
+      "INSERT INTO tracks (id, file_path, duration_ms, date_added, date_modified, url, _hlc) \
+       VALUES ('t1','/x',1000,'2020-01-01T00:00:00Z','2020-01-01T00:00:00Z','https://t1.test','0001')",
+      [],
+    )
+    .unwrap();
+}
+
+fn cue_live(hlc: &str, position_ms: i64, name: &str) -> ParsedRow {
+  parsed(json!({
+    "id": "cue-1", "track_id": "t1", "position_ms": position_ms, "cue_type": "hot",
+    "loop_end_ms": null, "hot_cue_index": 3, "name": name, "color": "#ff0000",
+    "_hlc": hlc, "_deleted": false,
+  }))
+}
+
+fn cue_tomb(hlc: &str) -> ParsedRow {
+  parsed(json!({"id": "cue-1", "_hlc": hlc, "_deleted": true}))
+}
+
+/// `(track_id, position_ms, type, loop_end_ms, hot_cue_index, name, color)` of `cue-1`.
+type CueState = (
+  String,
+  i64,
+  String,
+  Option<i64>,
+  Option<i32>,
+  Option<String>,
+  Option<String>,
+);
+
+fn cue_state(conn: &Connection) -> Option<CueState> {
+  conn
+    .query_row(
+      "SELECT track_id, position_ms, type, loop_end_ms, hot_cue_index, name, color \
+       FROM cues WHERE id = 'cue-1'",
+      [],
+      |r| {
+        Ok((
+          r.get(0)?,
+          r.get(1)?,
+          r.get(2)?,
+          r.get(3)?,
+          r.get(4)?,
+          r.get(5)?,
+          r.get(6)?,
+        ))
+      },
+    )
+    .optional()
+    .unwrap()
+}
+
+/// Live + update + tombstone through `merge_bucket` so the cue UPSERT SQL is really
+/// prepared and executed against the migrated schema. If a column from another table
+/// (the original bug: `url=excluded.url`) ever leaks into that statement, SQLite
+/// rejects it at PREPARE time and this test fails — instead of the app failing at
+/// runtime with 296 green tests.
+#[test]
+fn cue_merge_insert_update_delete_exercises_the_cue_upsert() {
+  let conn = mem();
+  seed_cue_track(&conn);
+
+  merge_bucket(&conn, &Bucket::Cues, &[cue_live("0005", 12345, "Drop")]).unwrap();
+  assert_eq!(
+    cue_state(&conn),
+    Some((
+      "t1".to_string(),
+      12345,
+      "hot".to_string(),
+      None,
+      Some(3),
+      Some("Drop".to_string()),
+      Some("#ff0000".to_string()),
+    )),
+    "live cue row must land with every column in its own field"
+  );
+
+  // Conflict path: the ON CONFLICT DO UPDATE SET clause itself, where the stray column lived.
+  merge_bucket(&conn, &Bucket::Cues, &[cue_live("0009", 54321, "Break")]).unwrap();
+  assert_eq!(
+    cue_state(&conn),
+    Some((
+      "t1".to_string(),
+      54321,
+      "hot".to_string(),
+      None,
+      Some(3),
+      Some("Break".to_string()),
+      Some("#ff0000".to_string()),
+    )),
+    "newer remote cue must overwrite via the UPSERT"
+  );
+
+  // HLC guard intact: an older remote row must not clobber the newer local one.
+  merge_bucket(&conn, &Bucket::Cues, &[cue_live("0007", 111, "Stale")]).unwrap();
+  assert_eq!(cue_state(&conn).unwrap().1, 54321, "older remote ignored");
+
+  merge_bucket(&conn, &Bucket::Cues, &[cue_tomb("0020")]).unwrap();
+  assert_eq!(cue_state(&conn), None, "tombstone deletes the cue");
+  assert_eq!(
+    tomb_hlc(&conn, "cues", "cue-1").as_deref(),
+    Some("0020"),
+    "tombstone recorded"
+  );
+
+  // Synced-columns invariant: the cue UPSERT never touches the tracks row it references.
+  let url: Option<String> = conn
+    .query_row("SELECT url FROM tracks WHERE id = 't1'", [], |r| r.get(0))
+    .unwrap();
+  assert_eq!(
+    url.as_deref(),
+    Some("https://t1.test"),
+    "track row untouched"
+  );
+}

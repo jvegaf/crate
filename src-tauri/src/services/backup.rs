@@ -1331,3 +1331,48 @@ pub async fn run_auto_backup_if_due(
   log::info!("Auto-backup completed successfully");
   Ok(())
 }
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Full export → restore → re-export roundtrip of the BackupTrack column list.
+  ///
+  /// The backup SELECT is positional (`url` at index 25) and the restore INSERT binds a
+  /// 26-value list against named columns; a swap in either half must fail here rather
+  /// than silently corrupting a user's restored library.
+  #[test]
+  fn backup_roundtrip_keeps_every_track_column() {
+    let track = test_utils::sentinel_track();
+    let source = BackupService::new(Arc::new(Mutex::new(test_utils::make_memory_db())));
+    test_utils::insert_sentinel_track(&source.connection().lock().unwrap(), &track);
+
+    let data = source.create_backup_data("0.0.0-test").unwrap();
+    assert_eq!(data.tracks.len(), 1);
+    let expected = test_utils::backup_track_of(&track);
+    test_utils::assert_backup_track_eq(&data.tracks[0], &expected);
+
+    let restored = BackupService::new(Arc::new(Mutex::new(test_utils::make_memory_db())));
+    restored.restore_from_backup_data(data.clone()).unwrap();
+
+    let data2 = restored.create_backup_data("0.0.0-test").unwrap();
+    assert_eq!(data2.tracks.len(), 1);
+    test_utils::assert_backup_track_eq(&data2.tracks[0], &expected);
+
+    // The restored row keeps its url where the tracks table says it lives.
+    let url: Option<String> = restored
+      .conn
+      .lock()
+      .unwrap()
+      .query_row("SELECT url FROM tracks WHERE id = ?1", [&track.id], |r| {
+        r.get(0)
+      })
+      .unwrap();
+    assert_eq!(url.as_deref(), Some("https://example.test/track-9"));
+  }
+}

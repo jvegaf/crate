@@ -961,6 +961,11 @@ impl Clone for AnalysisService {
 }
 
 #[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
 mod tests {
   use super::*;
   use std::time::Duration;
@@ -1098,5 +1103,32 @@ mod tests {
     assert!(AnalysisService::get_existing_analysis(&conn, "neither")
       .unwrap()
       .is_none());
+  }
+
+  /// The instance-side positional map (`get_track`, reached via the public
+  /// `get_updated_track`) must send every SELECT column to its own Track field.
+  #[test]
+  fn get_updated_track_maps_every_column_to_its_own_value() {
+    use crate::services::FileTagsService;
+
+    let track = test_utils::sentinel_track();
+    let conn = Arc::new(Mutex::new(test_utils::make_memory_db()));
+    test_utils::insert_sentinel_track(&conn.lock().unwrap(), &track);
+    let service = AnalysisService::new(conn, FileTagsService::new());
+
+    let read = service.get_updated_track(&track.id).unwrap();
+    test_utils::assert_track_eq(&read, &track);
+  }
+
+  /// The blocking-side positional map (`get_track_static`, run inside every analysis
+  /// job before and after the DB write) must do the same.
+  #[test]
+  fn get_track_static_maps_every_column_to_its_own_value() {
+    let track = test_utils::sentinel_track();
+    let conn = Arc::new(Mutex::new(test_utils::make_memory_db()));
+    test_utils::insert_sentinel_track(&conn.lock().unwrap(), &track);
+
+    let read = AnalysisService::get_track_static(&conn, &track.id).unwrap();
+    test_utils::assert_track_eq(&read, &track);
   }
 }

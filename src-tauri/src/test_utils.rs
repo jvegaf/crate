@@ -11,7 +11,7 @@ use std::path::Path;
 use rusqlite::Connection;
 
 use crate::db::schema::get_migrations;
-use crate::models::Track;
+use crate::models::{BackupTrack, Track};
 
 /// Throwaway encryption key for test-only SQLCipher databases.
 ///
@@ -127,6 +127,237 @@ pub fn fixture_tracks() -> Vec<Track> {
   ]
 }
 
+/// Build a [`Track`] whose every column carries a unique, recognizable sentinel value.
+///
+/// Track rows are read back through positional `row.get(index)` closures over explicit
+/// SELECT lists. Because no two sentinel values repeat, comparing a read result against
+/// this fixture detects ANY index permutation across all columns (not just `url`, the
+/// column whose addition exposed the missing coverage).
+pub fn sentinel_track() -> Track {
+  Track {
+    id: "sentinel-track-9".to_string(),
+    file_path: "/music/sentinel/track-9.mp3".to_string(),
+    file_hash: Some("sentinel-hash-09".to_string()),
+    title: Some("s-title".to_string()),
+    artist: Some("s-artist".to_string()),
+    album: Some("s-album".to_string()),
+    year: Some(1971),
+    genre: Some("s-genre".to_string()),
+    label: Some("s-label".to_string()),
+    catalog_number: Some("s-catalog-9".to_string()),
+    duration_ms: 2_345_678,
+    bpm: Some(123.45),
+    key: Some("s-key".to_string()),
+    bitrate: Some(231),
+    sample_rate: Some(32_100),
+    format: "s-format".to_string(),
+    analysis_source: Some("s-analysis".to_string()),
+    waveform_data: Some(vec![9, 8, 7]),
+    rating: 4,
+    play_count: 9,
+    date_added: "2021-02-03T04:05:06Z".to_string(),
+    date_modified: "2022-03-04T05:06:07Z".to_string(),
+    last_played: Some("2023-04-05T06:07:08Z".to_string()),
+    rekordbox_id: Some("s-rekordbox-9".to_string()),
+    url: Some("https://example.test/track-9".to_string()),
+    artwork_path: Some("s-artwork-path".to_string()),
+    artwork_source: Some("s-artwork-source".to_string()),
+    color: Some("s-color".to_string()),
+    library_root_id: Some("s-library-root".to_string()),
+    relative_path: Some("s/relative/track-9.mp3".to_string()),
+    tags: vec![],
+  }
+}
+
+/// Persist `track` into the `tracks` table with an explicit column list (bypassing import
+/// and file I/O), creating its `library_roots` parent first so the FK holds under
+/// `PRAGMA foreign_keys = ON`.
+pub fn insert_sentinel_track(conn: &Connection, track: &Track) {
+  if let Some(root_id) = &track.library_root_id {
+    conn
+      .execute(
+        "INSERT INTO library_roots (id, name) VALUES (?1, 'Sentinel root') \
+         ON CONFLICT(id) DO NOTHING",
+        [root_id],
+      )
+      .expect("failed to seed library root");
+  }
+  conn
+    .execute(
+      "INSERT INTO tracks (id, file_path, file_hash, title, artist, album, year, genre, label,
+                           catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format,
+                           analysis_source, waveform_data, rating, play_count, date_added,
+                           date_modified, last_played, rekordbox_id, artwork_path, artwork_source,
+                           color, library_root_id, relative_path, url)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30)",
+      rusqlite::params![
+        track.id,
+        track.file_path,
+        track.file_hash,
+        track.title,
+        track.artist,
+        track.album,
+        track.year,
+        track.genre,
+        track.label,
+        track.catalog_number,
+        track.duration_ms,
+        track.bpm,
+        track.key,
+        track.bitrate,
+        track.sample_rate,
+        track.format,
+        track.analysis_source,
+        track.waveform_data,
+        track.rating,
+        track.play_count,
+        track.date_added,
+        track.date_modified,
+        track.last_played,
+        track.rekordbox_id,
+        track.artwork_path,
+        track.artwork_source,
+        track.color,
+        track.library_root_id,
+        track.relative_path,
+        track.url,
+      ],
+    )
+    .expect("failed to seed sentinel track");
+}
+
+/// Asserts each named field of the two values is equal, naming the field on failure.
+macro_rules! assert_fields_eq {
+  ($actual:expr, $expected:expr, $($field:ident),+ $(,)?) => {
+    $({
+      let (a, e) = ($actual, $expected);
+      assert_eq!(a.$field, e.$field, concat!(stringify!($field), " mismatch"));
+    })+
+  };
+}
+
+/// Field-by-field [`Track`] equality with the drifted field named in the failure.
+///
+/// `Track` has no `PartialEq`, and a positional-read regression must report WHICH
+/// column landed in WHICH field. Tags are compared field-wise too, covering the
+/// `fetch_tags_for_tracks` closure.
+pub fn assert_track_eq(actual: &Track, expected: &Track) {
+  assert_fields_eq!(
+    actual,
+    expected,
+    id,
+    file_path,
+    file_hash,
+    title,
+    artist,
+    album,
+    year,
+    genre,
+    label,
+    catalog_number,
+    duration_ms,
+    bpm,
+    key,
+    bitrate,
+    sample_rate,
+    format,
+    analysis_source,
+    waveform_data,
+    rating,
+    play_count,
+    date_added,
+    date_modified,
+    last_played,
+    rekordbox_id,
+    url,
+    artwork_path,
+    artwork_source,
+    color,
+    library_root_id,
+    relative_path
+  );
+  assert_eq!(actual.tags.len(), expected.tags.len(), "tags length");
+  for (actual_tag, expected_tag) in actual.tags.iter().zip(expected.tags.iter()) {
+    assert_fields_eq!(
+      actual_tag,
+      expected_tag,
+      id,
+      category_id,
+      name,
+      color,
+      sort_order
+    );
+  }
+}
+
+/// Project a [`Track`] into the [`BackupTrack`] shape the backup service reads positionally
+/// (waveform/analysis/library-root columns are intentionally absent from backups).
+pub fn backup_track_of(track: &Track) -> BackupTrack {
+  BackupTrack {
+    id: track.id.clone(),
+    file_path: track.file_path.clone(),
+    file_hash: track.file_hash.clone(),
+    title: track.title.clone(),
+    artist: track.artist.clone(),
+    album: track.album.clone(),
+    year: track.year,
+    genre: track.genre.clone(),
+    label: track.label.clone(),
+    catalog_number: track.catalog_number.clone(),
+    duration_ms: track.duration_ms,
+    bpm: track.bpm,
+    key: track.key.clone(),
+    bitrate: track.bitrate,
+    sample_rate: track.sample_rate,
+    format: Some(track.format.clone()),
+    rating: track.rating,
+    play_count: track.play_count,
+    date_added: track.date_added.clone(),
+    date_modified: track.date_modified.clone(),
+    last_played: track.last_played.clone(),
+    rekordbox_id: track.rekordbox_id.clone(),
+    artwork_path: track.artwork_path.clone(),
+    artwork_source: track.artwork_source.clone(),
+    color: track.color.clone(),
+    url: track.url.clone(),
+  }
+}
+
+/// Field-by-field [`BackupTrack`] equality — same rationale as [`assert_track_eq`]: the
+/// backup SELECT is a second drift-prone positional list (`url` reads at index 25).
+pub fn assert_backup_track_eq(actual: &BackupTrack, expected: &BackupTrack) {
+  assert_fields_eq!(
+    actual,
+    expected,
+    id,
+    file_path,
+    file_hash,
+    title,
+    artist,
+    album,
+    year,
+    genre,
+    label,
+    catalog_number,
+    duration_ms,
+    bpm,
+    key,
+    bitrate,
+    sample_rate,
+    format,
+    rating,
+    play_count,
+    date_added,
+    date_modified,
+    last_played,
+    rekordbox_id,
+    artwork_path,
+    artwork_source,
+    color,
+    url
+  );
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -167,6 +398,103 @@ mod tests {
       .optional()
       .unwrap();
     assert_eq!(tracks_exists, Some(1));
+  }
+
+  /// The sentinel fixture is only drift-proof if no two column values repeat —
+  /// otherwise an index swap could still compare equal against it.
+  #[test]
+  fn sentinel_track_values_are_pairwise_distinct() {
+    let t = sentinel_track();
+    let values: Vec<String> = vec![
+      format!("{:?}", t.id),
+      format!("{:?}", t.file_path),
+      format!("{:?}", t.file_hash),
+      format!("{:?}", t.title),
+      format!("{:?}", t.artist),
+      format!("{:?}", t.album),
+      format!("{:?}", t.year),
+      format!("{:?}", t.genre),
+      format!("{:?}", t.label),
+      format!("{:?}", t.catalog_number),
+      format!("{:?}", t.duration_ms),
+      format!("{:?}", t.bpm),
+      format!("{:?}", t.key),
+      format!("{:?}", t.bitrate),
+      format!("{:?}", t.sample_rate),
+      format!("{:?}", t.format),
+      format!("{:?}", t.analysis_source),
+      format!("{:?}", t.waveform_data),
+      format!("{:?}", t.rating),
+      format!("{:?}", t.play_count),
+      format!("{:?}", t.date_added),
+      format!("{:?}", t.date_modified),
+      format!("{:?}", t.last_played),
+      format!("{:?}", t.rekordbox_id),
+      format!("{:?}", t.url),
+      format!("{:?}", t.artwork_path),
+      format!("{:?}", t.artwork_source),
+      format!("{:?}", t.color),
+      format!("{:?}", t.library_root_id),
+      format!("{:?}", t.relative_path),
+    ];
+    let unique: std::collections::HashSet<&String> = values.iter().collect();
+    assert_eq!(
+      values.len(),
+      unique.len(),
+      "sentinel values must be distinct"
+    );
+  }
+
+  /// Exercises the seeding + comparison helpers (they are compiled into every module
+  /// that includes this file) and proves the seed lands where the named columns say.
+  #[test]
+  fn sentinel_seed_and_assert_helpers_are_consistent() {
+    let track = sentinel_track();
+    let conn = make_memory_db();
+    insert_sentinel_track(&conn, &track);
+
+    let (url, root_id): (Option<String>, Option<String>) = conn
+      .query_row(
+        "SELECT url, library_root_id FROM tracks WHERE id = ?1",
+        [&track.id],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+      )
+      .unwrap();
+    assert_eq!(url, track.url);
+    assert_eq!(root_id, track.library_root_id);
+
+    let read_back = conn
+      .query_row(
+        "SELECT id, url, waveform_data, color FROM tracks WHERE id = ?1",
+        [&track.id],
+        |r| {
+          Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Option<String>>(1)?,
+            r.get::<_, Option<Vec<u8>>>(2)?,
+            r.get::<_, Option<String>>(3)?,
+          ))
+        },
+      )
+      .unwrap();
+    assert_eq!(read_back.0, track.id);
+    assert_eq!(read_back.1, track.url);
+    assert_eq!(read_back.2, track.waveform_data);
+    assert_eq!(read_back.3, track.color);
+
+    let mut with_tag = track.clone();
+    with_tag.tags = vec![crate::models::Tag {
+      id: "s-tag".to_string(),
+      category_id: "s-cat".to_string(),
+      name: "s-tag-name".to_string(),
+      color: Some("#112233".to_string()),
+      sort_order: 92,
+    }];
+    assert_track_eq(&track, &track);
+    assert_track_eq(&with_tag, &with_tag);
+
+    let backup = backup_track_of(&track);
+    assert_backup_track_eq(&backup, &backup_track_of(&with_tag));
   }
 
   #[test]

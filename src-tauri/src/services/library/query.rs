@@ -348,3 +348,143 @@ impl LibraryService {
     }
   }
 }
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn library(conn: Connection, app_data_dir: &std::path::Path) -> LibraryService {
+    LibraryService::new(
+      Arc::new(Mutex::new(conn)),
+      app_data_dir.to_path_buf(),
+      FileTagsService::new(),
+    )
+  }
+
+  /// Seed one category/tag/link with values distinct from every track column, so the
+  /// positional `fetch_tags_for_tracks` closure is checked alongside the track map.
+  fn seed_tag(conn: &Connection) -> Tag {
+    conn
+      .execute(
+        "INSERT INTO tag_categories (id, name, sort_order, color) VALUES ('s-cat', 's-category-name', 91, '#111111')",
+        [],
+      )
+      .unwrap();
+    conn
+      .execute(
+        "INSERT INTO tags (id, category_id, name, color, sort_order) VALUES ('s-tag', 's-cat', 's-tag-name', '#222222', 92)",
+        [],
+      )
+      .unwrap();
+    conn
+      .execute(
+        "INSERT INTO track_tags (track_id, tag_id) VALUES ('sentinel-track-9', 's-tag')",
+        [],
+      )
+      .unwrap();
+    Tag {
+      id: "s-tag".to_string(),
+      category_id: "s-cat".to_string(),
+      name: "s-tag-name".to_string(),
+      color: Some("#222222".to_string()),
+      sort_order: 92,
+    }
+  }
+
+  #[test]
+  fn get_tracks_maps_every_column_to_its_own_value() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = test_utils::make_memory_db();
+    let track = test_utils::sentinel_track();
+    test_utils::insert_sentinel_track(&conn, &track);
+    let tag = seed_tag(&conn);
+    let library = library(conn, dir.path());
+
+    let mut expected = track.clone();
+    expected.tags = vec![tag];
+
+    let tracks = library.get_tracks(None).unwrap();
+    assert_eq!(tracks.len(), 1);
+    test_utils::assert_track_eq(&tracks[0], &expected);
+  }
+
+  #[test]
+  fn get_tracks_filters_bind_placeholders_to_the_right_slots() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = test_utils::make_memory_db();
+    let track = test_utils::sentinel_track();
+    test_utils::insert_sentinel_track(&conn, &track);
+    let tag = seed_tag(&conn);
+    let library = library(conn, dir.path());
+
+    // Each filter arm appends its own placeholders; a miscounted ?N slot must return
+    // the wrong set. Search uses ?1; combined search + tag pushes the tag to ?2.
+    let hits = library
+      .get_tracks(Some(TrackFilter {
+        search: Some("s-titl".to_string()),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert_eq!(hits.len(), 1);
+    let mut expected = track;
+    expected.tags = vec![tag];
+    test_utils::assert_track_eq(&hits[0], &expected);
+
+    let misses = library
+      .get_tracks(Some(TrackFilter {
+        search: Some("no-such-text".to_string()),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert!(misses.is_empty());
+
+    let by_key = library
+      .get_tracks(Some(TrackFilter {
+        key: Some("s-key".to_string()),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert_eq!(by_key.len(), 1);
+
+    let by_bpm_range = library
+      .get_tracks(Some(TrackFilter {
+        bpm_min: Some(123.0),
+        bpm_max: Some(124.0),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert_eq!(by_bpm_range.len(), 1);
+
+    let by_tag = library
+      .get_tracks(Some(TrackFilter {
+        tag_ids: Some(vec!["s-tag".to_string()]),
+        tag_filter_mode: Some("and".to_string()),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert_eq!(by_tag.len(), 1);
+
+    let search_and_tag = library
+      .get_tracks(Some(TrackFilter {
+        search: Some("s-titl".to_string()),
+        tag_ids: Some(vec!["s-tag".to_string()]),
+        tag_filter_mode: Some("and".to_string()),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert_eq!(search_and_tag.len(), 1);
+
+    let wrong_tag = library
+      .get_tracks(Some(TrackFilter {
+        tag_ids: Some(vec!["no-such-tag".to_string()]),
+        ..Default::default()
+      }))
+      .unwrap();
+    assert!(wrong_tag.is_empty());
+  }
+}

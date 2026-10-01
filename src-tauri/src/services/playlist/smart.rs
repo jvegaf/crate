@@ -351,3 +351,40 @@ impl PlaylistService {
     Ok(count)
   }
 }
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn get_smart_playlist_tracks_maps_every_column_to_its_own_value() {
+    let conn = test_utils::make_memory_db();
+    let track = test_utils::sentinel_track();
+    test_utils::insert_sentinel_track(&conn, &track);
+    let service = PlaylistService::new(Arc::new(Mutex::new(conn)));
+
+    // One text rule against a single column (title) — matching the seeded sentinel.
+    let rules = r#"{"match_mode":"all","conditions":[{"type":"text","field":"title","operator":"equals","value":"s-title"}],"limit":null}"#;
+    let playlist = service
+      .create_smart_playlist(
+        "Sentinel Smart".to_string(),
+        None,
+        "library".to_string(),
+        rules.to_string(),
+      )
+      .unwrap();
+    assert_eq!(
+      playlist.track_count, 1,
+      "rule must evaluate against the seed"
+    );
+
+    let tracks = service.get_smart_playlist_tracks(&playlist.id).unwrap();
+    assert_eq!(tracks.len(), 1);
+    test_utils::assert_track_eq(&tracks[0], &track);
+  }
+}

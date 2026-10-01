@@ -236,3 +236,66 @@ impl ExportService {
     Ok(tracks)
   }
 }
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn collect_tracks_for_export_maps_every_column_to_its_own_value() {
+    let conn = test_utils::make_memory_db();
+    let track = test_utils::sentinel_track();
+    test_utils::insert_sentinel_track(&conn, &track);
+
+    // One plain playlist (membership row) and one smart playlist (rule against bpm) so
+    // BOTH positional reads below the export entry point run: get_playlist_tracks and
+    // get_smart_playlist_tracks_for_export.
+    conn
+      .execute(
+        r#"
+        INSERT INTO playlists (id, name, is_folder, is_smart, smart_rules, sort_order,
+                               date_created, date_modified, context)
+        VALUES ('pl-plain', 'Plain', 0, 0, NULL, 0,
+                '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 'library'),
+               ('pl-smart', 'Smart', 0, 1,
+                '{"match_mode":"all","conditions":[{"type":"numeric","field":"bpm","operator":"equals","value":123.45}],"limit":null}',
+                1, '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 'library')
+        "#,
+        [],
+      )
+      .unwrap();
+    conn
+      .execute(
+        "INSERT INTO playlist_tracks (playlist_id, track_id, position, date_added) \
+         VALUES ('pl-plain', ?1, 0, '2020-01-01T00:00:00Z')",
+        [&track.id],
+      )
+      .unwrap();
+    let service = ExportService::new(Arc::new(Mutex::new(conn)));
+
+    let collected = service
+      .collect_tracks_for_export(&["pl-plain".to_string(), "pl-smart".to_string()])
+      .unwrap();
+    assert_eq!(collected.len(), 2);
+
+    let (playlist, tracks) = &collected[0];
+    assert_eq!(playlist.id, "pl-plain");
+    assert_eq!(playlist.track_count, 1);
+    assert_eq!(tracks.len(), 1);
+    test_utils::assert_track_eq(&tracks[0], &track);
+
+    let (playlist, tracks) = &collected[1];
+    assert_eq!(playlist.id, "pl-smart");
+    assert_eq!(
+      tracks.len(),
+      1,
+      "numeric bpm rule must bind its placeholder"
+    );
+    test_utils::assert_track_eq(&tracks[0], &track);
+  }
+}

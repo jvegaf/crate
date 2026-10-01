@@ -303,3 +303,105 @@ impl LibraryService {
     Ok(())
   }
 }
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn library(conn: Connection, app_data_dir: &std::path::Path) -> LibraryService {
+    LibraryService::new(
+      Arc::new(Mutex::new(conn)),
+      app_data_dir.to_path_buf(),
+      FileTagsService::new(),
+    )
+  }
+
+  /// The dynamic `SET` array appends one `?N` slot per present field; a drifted slot
+  /// counter must write one column's value into another column.
+  #[test]
+  fn update_track_sets_only_the_provided_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = test_utils::make_memory_db();
+    let track = test_utils::sentinel_track();
+    test_utils::insert_sentinel_track(&conn, &track);
+    let library = library(conn, dir.path());
+
+    let updated = library
+      .update_track(
+        &track.id,
+        TrackUpdate {
+          title: Some("updated-title".to_string()),
+          year: Some(1988),
+          url: Some("https://example.test/updated".to_string()),
+          rating: Some(2),
+          ..Default::default()
+        },
+      )
+      .unwrap();
+
+    let mut expected = track.clone();
+    expected.title = Some("updated-title".to_string());
+    expected.year = Some(1988);
+    expected.url = Some("https://example.test/updated".to_string());
+    expected.rating = 2;
+    expected.date_modified = updated.date_modified.clone();
+    // None means UNCHANGED in TrackUpdate semantics: every other sentinel must survive,
+    // which assert_track_eq checks field-by-field against the untouched fixture.
+    test_utils::assert_track_eq(&updated, &expected);
+
+    let reread = library.get_track(&track.id).unwrap();
+    test_utils::assert_track_eq(&reread, &updated);
+  }
+
+  /// An all-None update must leave stored values (including `url`) untouched, and the
+  /// bulk path's `WHERE id IN (...)` placeholders must bind the ids, not earlier slots.
+  #[test]
+  fn update_track_with_none_leaves_url_and_bulk_update_targets_all_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = test_utils::make_memory_db();
+    let track_a = test_utils::sentinel_track();
+    let mut track_b = track_a.clone();
+    track_b.id = "sentinel-track-8".to_string();
+    track_b.file_path = "/music/sentinel/track-8.mp3".to_string();
+    test_utils::insert_sentinel_track(&conn, &track_a);
+    test_utils::insert_sentinel_track(&conn, &track_b);
+    let library = library(conn, dir.path());
+
+    let kept = library
+      .update_track(&track_b.id, TrackUpdate::default())
+      .unwrap();
+    assert_eq!(kept.url, track_b.url, "None must not clear the stored url");
+
+    let updated = library
+      .update_tracks(
+        vec![track_a.id.clone(), track_b.id.clone()],
+        TrackUpdate {
+          genre: Some("bulk-genre".to_string()),
+          bpm: Some(145.5),
+          ..Default::default()
+        },
+      )
+      .unwrap();
+    assert_eq!(updated.len(), 2);
+
+    for (got, source) in updated.iter().zip([&track_a, &track_b]) {
+      assert_eq!(got.id, source.id);
+      assert_eq!(got.genre.as_deref(), Some("bulk-genre"));
+      assert_eq!(got.bpm, Some(145.5));
+      assert_eq!(
+        got.url, source.url,
+        "unlisted fields must survive the bulk update"
+      );
+      assert_eq!(got.title, source.title);
+    }
+
+    let reread = library.get_track(&track_a.id).unwrap();
+    assert_eq!(reread.genre, updated[0].genre);
+    assert_eq!(reread.url, track_a.url);
+  }
+}

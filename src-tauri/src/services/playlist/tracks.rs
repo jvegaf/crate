@@ -243,3 +243,32 @@ impl PlaylistService {
     Ok(())
   }
 }
+
+#[cfg(test)]
+#[allow(clippy::duplicate_mod)]
+#[path = "../../test_utils.rs"]
+mod test_utils;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn get_playlist_tracks_maps_every_column_to_its_own_value() {
+    let conn = test_utils::make_memory_db();
+    let track = test_utils::sentinel_track();
+    test_utils::insert_sentinel_track(&conn, &track);
+    let service = PlaylistService::new(Arc::new(Mutex::new(conn)));
+
+    let playlist = service
+      .create_playlist("Sentinel PL".to_string(), None, "library".to_string())
+      .unwrap();
+    service
+      .add_tracks(&playlist.id, vec![track.id.clone()])
+      .unwrap();
+
+    let tracks = service.get_playlist_tracks(&playlist.id).unwrap();
+    assert_eq!(tracks.len(), 1);
+    test_utils::assert_track_eq(&tracks[0], &track);
+  }
+}
