@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Pochette",
-			"artworkHint": "S’applique à la pochette de la bibliothèque et intègre l’image au fichier audio."
+			"artworkHint": "S’applique à la pochette de la bibliothèque et intègre l’image au fichier audio.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Ouvrir dans le navigateur"
 		},
 		"createPlaylist": {
 			"title": "Nouvelle playlist",

@@ -87,6 +87,9 @@ impl LibraryService {
 
         // Try to get the rating from an ID3v2 POPM frame
         track.rating = self.extract_rating(tag);
+
+        // Store page URL from the ID3v2 WOAR frame.
+        track.url = self.extract_url(tag);
       }
 
       // Extract album artwork
@@ -161,6 +164,7 @@ impl LibraryService {
         track.bpm = self.extract_bpm(tag);
         track.key = self.extract_key(tag);
         track.rating = self.extract_rating(tag);
+        track.url = self.extract_url(tag);
       }
 
       // Extract album artwork
@@ -387,7 +391,7 @@ impl LibraryService {
                 rating, play_count,
                 date_added, date_modified, last_played,
                 rekordbox_id, artwork_path, artwork_source, color,
-                _hlc, library_root_id, relative_path
+                _hlc, library_root_id, relative_path, url
             ) VALUES (
                 ?1, ?2, ?3,
                 ?4, ?5, ?6, ?7, ?8, ?9, ?10,
@@ -396,7 +400,7 @@ impl LibraryService {
                 ?19, ?20,
                 ?21, ?22, ?23,
                 ?24, ?25, ?26, ?27,
-                ?28, ?29, ?30
+                ?28, ?29, ?30, ?31
             )
             ON CONFLICT(file_path) DO UPDATE SET
                 title = excluded.title,
@@ -442,6 +446,7 @@ impl LibraryService {
         hlc,
         library_root_id,
         relative_path,
+        track.url,
       ],
     )?;
 
@@ -463,6 +468,15 @@ impl LibraryService {
     tag
       .get_string(&ItemKey::InitialKey)
       .map(|s| s.trim().to_string())
+  }
+
+  fn extract_url(&self, tag: &Tag) -> Option<String> {
+    // Store page URL is persisted in the ID3v2 WOAR frame, which lofty maps to
+    // ItemKey::TrackArtistUrl. Blank values are treated as absent everywhere.
+    tag
+      .get_string(&ItemKey::TrackArtistUrl)
+      .map(|s| s.trim().to_string())
+      .filter(|s| !s.is_empty())
   }
 
   /// Extract Crate's 0-5 star rating from ID3v2 `POPM` frames.
@@ -627,6 +641,38 @@ mod tests {
     tag.insert_text(ItemKey::InitialKey, "  Dbm  ".to_string());
 
     assert_eq!(service().extract_key(&tag), Some("Dbm".to_string()));
+  }
+
+  #[test]
+  fn extract_url_reads_woar_tag_trimmed() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.insert_text(
+      ItemKey::TrackArtistUrl,
+      "  https://www.beatport.com/track/x/1  ".to_string(),
+    );
+
+    assert_eq!(
+      service().extract_url(&tag),
+      Some("https://www.beatport.com/track/x/1".to_string())
+    );
+  }
+
+  #[test]
+  fn extract_url_treats_blank_woar_as_absent() {
+    for raw in ["", "  "] {
+      let mut tag = Tag::new(TagType::Id3v2);
+      tag.insert_text(ItemKey::TrackArtistUrl, raw.to_string());
+
+      assert_eq!(service().extract_url(&tag), None, "raw = {raw:?}");
+    }
+  }
+
+  #[test]
+  fn extract_url_returns_none_without_woar_frame() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.insert_text(ItemKey::TrackTitle, "Some Title".to_string());
+
+    assert_eq!(service().extract_url(&tag), None);
   }
 
   /// Build a generic `Tag` that carries ID3v2 `POPM` frames, mirroring how lofty

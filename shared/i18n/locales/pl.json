@@ -492,7 +492,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Okładka",
-			"artworkHint": "Zostanie zastosowana jako okładka w bibliotece, a obraz zostanie osadzony w pliku audio."
+			"artworkHint": "Zostanie zastosowana jako okładka w bibliotece, a obraz zostanie osadzony w pliku audio.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Otwórz w przeglądarce"
 		},
 		"createPlaylist": {
 			"title": "Nowa playlista",

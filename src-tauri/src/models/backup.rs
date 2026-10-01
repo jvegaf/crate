@@ -34,6 +34,8 @@ pub struct BackupTrack {
   pub artwork_path: Option<String>,
   pub artwork_source: Option<String>,
   pub color: Option<String>,
+  /// Store page URL (ID3v2 WOAR). `Option` so older backups deserialize with `None`.
+  pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

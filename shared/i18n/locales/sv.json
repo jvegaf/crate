@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Omslag",
-			"artworkHint": "Används för bibliotekets omslagsbild och bäddar in bilden i ljudfilen."
+			"artworkHint": "Används för bibliotekets omslagsbild och bäddar in bilden i ljudfilen.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Öppna i webbläsaren"
 		},
 		"createPlaylist": {
 			"title": "Ny spellista",

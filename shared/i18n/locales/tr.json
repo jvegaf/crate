@@ -492,7 +492,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Kapak görseli",
-			"artworkHint": "Kitaplık kapak görseline uygulanır ve görseli ses dosyasına gömer."
+			"artworkHint": "Kitaplık kapak görseline uygulanır ve görseli ses dosyasına gömer.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Tarayıcıda aç"
 		},
 		"createPlaylist": {
 			"title": "Yeni Çalma Listesi",

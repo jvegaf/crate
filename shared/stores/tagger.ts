@@ -126,6 +126,11 @@ function candidateToPatch(candidate: TagCandidate): TrackMetadataPatch {
 	if (hasValue(label)) patch.label = label
 	if (hasValue(catalogNumber)) patch.catalog_number = catalogNumber
 
+	// The store page URL is carried over whenever the candidate has one; an empty
+	// URL is omitted (not sent as null), so an existing URL is never wiped.
+	const storeUrl = candidate.url.trim()
+	if (storeUrl !== '') patch.url = storeUrl
+
 	const releaseDate = candidate.release_date
 	if (releaseDate !== null && /^\d{4}/.test(releaseDate)) {
 		const year = Number(releaseDate.slice(0, 4))
@@ -133,7 +138,9 @@ function candidateToPatch(candidate: TagCandidate): TrackMetadataPatch {
 	}
 
 	// The text fields above DO overwrite: when a local tag is wrong, the store
-	// match is the authority and has to replace it.
+	// match is the authority and has to replace it. The candidate's store page
+	// URL is applied the same way when non-empty (see above); an empty URL is
+	// dropped rather than sent, keeping any existing value Unchanged.
 	//
 	// Deliberately NOT applied:
 	// - `bpm` and `key`: Crate analyses these from the audio itself, and a value

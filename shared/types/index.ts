@@ -128,6 +128,8 @@ export interface Track {
 
 	// External references
 	rekordbox_id: string | null
+	// Store page URL (Beatport/Bandcamp/Traxsource), persisted in the audio file's ID3v2 WOAR frame
+	url: string | null
 
 	// Album artwork
 	artwork_path: string | null
@@ -161,6 +163,7 @@ export interface TrackUpdate {
 	year?: number
 	genre?: string
 	label?: string
+	url?: string | null
 	bpm?: number
 	key?: string
 	rating?: number
@@ -184,6 +187,7 @@ export interface TrackMetadataPatch {
 	genre?: string | null
 	label?: string | null
 	catalog_number?: string | null
+	url?: string | null
 	bpm?: number | null
 	key?: string | null
 	rating?: number

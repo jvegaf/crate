@@ -63,6 +63,11 @@ impl LibraryService {
       params.push(Box::new(label.clone()));
       param_idx += 1;
     }
+    if let Some(ref url) = update.url {
+      updates.push(format!("url = ?{param_idx}"));
+      params.push(Box::new(url.clone()));
+      param_idx += 1;
+    }
     if let Some(bpm) = update.bpm {
       updates.push(format!("bpm = ?{param_idx}"));
       params.push(Box::new(bpm));
@@ -156,6 +161,11 @@ impl LibraryService {
     if let Some(ref label) = update.label {
       updates.push(format!("label = ?{param_idx}"));
       params.push(Box::new(label.clone()));
+      param_idx += 1;
+    }
+    if let Some(ref url) = update.url {
+      updates.push(format!("url = ?{param_idx}"));
+      params.push(Box::new(url.clone()));
       param_idx += 1;
     }
     if let Some(bpm) = update.bpm {

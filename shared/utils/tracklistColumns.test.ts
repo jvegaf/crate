@@ -43,6 +43,7 @@ function makeTrack(overrides: Partial<Track> = {}): Track {
 		genre: null,
 		label: null,
 		catalog_number: null,
+		url: null,
 		duration_ms: 0,
 		bpm: null,
 		key: null,

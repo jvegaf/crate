@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "封面",
-			"artworkHint": "应用于曲库封面，并将图像嵌入音频文件。"
+			"artworkHint": "应用于曲库封面，并将图像嵌入音频文件。",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "在浏览器中打开"
 		},
 		"createPlaylist": {
 			"title": "新建播放列表",

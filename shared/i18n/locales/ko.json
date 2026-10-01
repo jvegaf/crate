@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "앨범 아트",
-			"artworkHint": "라이브러리 앨범 아트에 적용되며 이미지를 오디오 파일에 삽입합니다."
+			"artworkHint": "라이브러리 앨범 아트에 적용되며 이미지를 오디오 파일에 삽입합니다.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "브라우저에서 열기"
 		},
 		"createPlaylist": {
 			"title": "새 재생목록",

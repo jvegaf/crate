@@ -122,7 +122,7 @@ impl PlaylistService {
                 t.rating, t.play_count,
                 t.date_added, t.date_modified, t.last_played,
                 t.rekordbox_id, t.artwork_path, t.artwork_source, t.color,
-                t.library_root_id, t.relative_path
+                t.library_root_id, t.relative_path, t.url
             FROM tracks t
             WHERE {where_clause}
             "#,
@@ -164,6 +164,7 @@ impl PlaylistService {
           color: row.get(26)?,
           library_root_id: row.get(27)?,
           relative_path: row.get(28)?,
+          url: row.get(29)?,
           tags: Vec::new(),
         })
       })?

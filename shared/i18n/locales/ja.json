@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "アートワーク",
-			"artworkHint": "ライブラリのアートワークに適用され、画像を音声ファイルに埋め込みます。"
+			"artworkHint": "ライブラリのアートワークに適用され、画像を音声ファイルに埋め込みます。",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "ブラウザで開く"
 		},
 		"createPlaylist": {
 			"title": "新しいプレイリスト",

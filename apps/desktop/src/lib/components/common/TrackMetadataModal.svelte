@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { open } from '@tauri-apps/plugin-dialog'
 	import { readFile } from '@tauri-apps/plugin-fs'
+	import { openUrl } from '@tauri-apps/plugin-opener'
 	import { get } from 'svelte/store'
 	import { translate } from '$shared/i18n'
 	import type { EmbeddedArtwork, Tag, TagCategory, Track, TrackMetadataPatch } from '$shared/types'
@@ -24,6 +25,7 @@
 		| 'genre'
 		| 'label'
 		| 'catalog_number'
+		| 'url'
 		| 'bpm'
 		| 'key'
 		| 'rating'
@@ -50,6 +52,7 @@
 		'genre',
 		'label',
 		'catalog_number',
+		'url',
 		'bpm',
 		'key',
 	]
@@ -61,6 +64,7 @@
 		genre: 'genre',
 		label: 'label',
 		catalog_number: 'catalogNumber',
+		url: 'url',
 		bpm: 'bpm',
 		key: 'key',
 		rating: 'rating',
@@ -389,7 +393,7 @@
 					{$translate('editor.information')}
 				</Text>
 				<div class="space-y-3">
-					{#each nullableFields.filter( (field) => ['title', 'artist', 'album', 'label', 'catalog_number'].includes(field) ) as field (field)}
+					{#each nullableFields.filter( (field) => ['title', 'artist', 'album', 'label', 'catalog_number', 'url'].includes(field) ) as field (field)}
 						<label class="block space-y-1 text-sm text-text-secondary">
 							<span>{$translate(`modals.trackMetadata.fields.${fieldLabels[field]}`)}</span>
 							<div class="relative">
@@ -407,6 +411,16 @@
 										title={$translate('modals.trackMetadata.clearField')}
 										disabled={saving}
 										onclick={() => clearField(field)}
+									/>
+								{/if}
+								{#if field === 'url' && fieldValue(field) !== ''}
+									<IconButton
+										class="absolute top-1/2 right-8 -translate-y-1/2"
+										icon="external-link"
+										size="sm"
+										title={$translate('modals.trackMetadata.openUrl')}
+										disabled={saving}
+										onclick={() => openUrl(fieldValue(field)).catch(() => {})}
 									/>
 								{/if}
 							</div>

@@ -69,7 +69,7 @@ impl BackupService {
       "SELECT id, file_path, file_hash, title, artist, album, year, genre, label,
                     catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format,
                     rating, play_count, date_added, date_modified, last_played,
-                    rekordbox_id, artwork_path, artwork_source, color
+                    rekordbox_id, artwork_path, artwork_source, color, url
              FROM tracks",
     )?;
     let tracks = stmt
@@ -100,6 +100,7 @@ impl BackupService {
           artwork_path: row.get(22)?,
           artwork_source: row.get(23)?,
           color: row.get(24)?,
+          url: row.get(25)?,
         })
       })?
       .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -454,9 +455,9 @@ impl BackupService {
                     "INSERT INTO tracks (id, file_path, file_hash, title, artist, album, year, genre, label,
                                          catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format,
                                          analysis_source, waveform_data, rating, play_count, date_added,
-                                         date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color)
+                                         date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, url)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-                             NULL, NULL, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
+                             NULL, NULL, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
                 )?;
         for t in &data.tracks {
           stmt.execute(params![
@@ -485,6 +486,7 @@ impl BackupService {
             t.artwork_path,
             t.artwork_source,
             t.color,
+            t.url,
           ])?;
         }
       }

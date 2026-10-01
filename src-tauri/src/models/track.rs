@@ -41,6 +41,8 @@ pub struct Track {
 
   // External references
   pub rekordbox_id: Option<String>,
+  /// Store page URL (Beatport/Bandcamp/Traxsource), persisted in the audio file's ID3v2 WOAR frame.
+  pub url: Option<String>,
 
   // Album artwork
   pub artwork_path: Option<String>,
@@ -89,6 +91,7 @@ impl Track {
       date_modified: now,
       last_played: None,
       rekordbox_id: None,
+      url: None,
       artwork_path: None,
       artwork_source: None,
       color: None,
@@ -120,6 +123,7 @@ pub struct TrackUpdate {
   pub year: Option<i32>,
   pub genre: Option<String>,
   pub label: Option<String>,
+  pub url: Option<String>,
   pub bpm: Option<f64>,
   pub key: Option<String>,
   pub rating: Option<i32>,
@@ -202,6 +206,8 @@ pub struct TrackMetadataPatch {
   pub label: MetadataField<String>,
   #[serde(default)]
   pub catalog_number: MetadataField<String>,
+  #[serde(default)]
+  pub url: MetadataField<String>,
   #[serde(default)]
   pub bpm: MetadataField<f64>,
   #[serde(default)]

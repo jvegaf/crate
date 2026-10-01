@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Cover",
-			"artworkHint": "Wird auf das Bibliothekscover angewendet und das Bild in die Audiodatei eingebettet."
+			"artworkHint": "Wird auf das Bibliothekscover angewendet und das Bild in die Audiodatei eingebettet.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Im Browser öffnen"
 		},
 		"createPlaylist": {
 			"title": "Neue Playlist",

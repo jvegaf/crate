@@ -492,7 +492,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Copertă",
-			"artworkHint": "Se aplică imaginii din bibliotecă și încorporează imaginea în fișierul audio."
+			"artworkHint": "Se aplică imaginii din bibliotecă și încorporează imaginea în fișierul audio.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Deschide în browser"
 		},
 		"createPlaylist": {
 			"title": "Nou Playlist",

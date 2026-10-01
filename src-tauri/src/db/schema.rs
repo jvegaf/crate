@@ -396,5 +396,11 @@ CREATE INDEX IF NOT EXISTS idx_tracks_file_hash ON tracks(file_hash);
     r#"
 UPDATE tracks SET bitrate = NULL WHERE bitrate IS NOT NULL AND bitrate < 96;
 "#,
+    // Migration 9: Store page URL (Beatport/Bandcamp/Traxsource). Nullable TEXT; existing
+    // rows stay NULL until the user tags a track or sets the URL manually. Persisted to the
+    // audio file's ID3v2 WOAR frame (`ItemKey::TrackArtistUrl`).
+    r#"
+ALTER TABLE tracks ADD COLUMN url TEXT;
+"#,
   ]
 }

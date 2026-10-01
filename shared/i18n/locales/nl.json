@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Artwork",
-			"artworkHint": "Wordt toegepast op de bibliotheekafbeelding en de afbeelding wordt in het audiobestand ingesloten."
+			"artworkHint": "Wordt toegepast op de bibliotheekafbeelding en de afbeelding wordt in het audiobestand ingesloten.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Openen in browser"
 		},
 		"createPlaylist": {
 			"title": "Nieuwe afspeellijst",

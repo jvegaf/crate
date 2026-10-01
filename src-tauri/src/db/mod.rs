@@ -226,6 +226,11 @@ mod tests {
     run_migrations(&conn).unwrap();
 
     assert_sync_schema(&conn);
+    // Migration 9 adds the store page URL column (`tracks.url`).
+    assert!(
+      column_exists(&conn, "tracks", "url"),
+      "expected column `tracks.url` to exist"
+    );
     let latest = schema::get_migrations().len() as i32;
     assert_eq!(version(&conn), latest);
 
@@ -257,7 +262,10 @@ mod tests {
 
     let conn = open_mem();
     let migrations = schema::get_migrations();
-    let migration_count = migrations.len();
+    // The bitrate repair is migration 8 (index 7). Migrations are append-only, so its
+    // position is stable regardless of later additions; do not re-derive it from the length.
+    const REPAIR_MIGRATION_INDEX: usize = 7;
+    assert!(migrations.len() > REPAIR_MIGRATION_INDEX);
 
     // Simulate a database at the version immediately before the data-repair migration.
     conn
@@ -266,7 +274,7 @@ mod tests {
         [],
       )
       .unwrap();
-    for (idx, sql) in migrations.iter().take(migration_count - 1).enumerate() {
+    for (idx, sql) in migrations.iter().take(REPAIR_MIGRATION_INDEX).enumerate() {
       conn.execute_batch(sql).unwrap();
       conn
         .execute(
@@ -307,8 +315,10 @@ mod tests {
       assert_eq!(actual_bitrate, expected_bitrate, "track {id}");
     }
 
-    // Reapplying the SQL is an idempotent no-op: no rows match after repair.
-    conn.execute_batch(migrations.last().unwrap()).unwrap();
+    // Reapplying the repair SQL is an idempotent no-op: no rows match after repair.
+    conn
+      .execute_batch(migrations[REPAIR_MIGRATION_INDEX])
+      .unwrap();
     assert_eq!(conn.changes(), 0);
     for (id, (_, expected_bitrate)) in track_ids.iter().zip(cases) {
       let actual_bitrate: Option<i64> = conn

@@ -110,6 +110,7 @@ impl FileTagsService {
     genre: Option<&str>,
     bpm: Option<f64>,
     key: Option<&str>,
+    url: Option<&str>,
   ) -> Result<()> {
     // Quick no-op check (nothing to write).
     if title.is_none()
@@ -119,6 +120,7 @@ impl FileTagsService {
       && genre.is_none()
       && bpm.is_none()
       && key.is_none()
+      && url.is_none()
     {
       return Ok(());
     }
@@ -160,6 +162,10 @@ impl FileTagsService {
     }
     if let Some(k) = key {
       tag_mut.insert_text(ItemKey::InitialKey, k.trim().to_string());
+    }
+    if let Some(v) = url {
+      // Store page URL lives in the ID3v2 WOAR frame (ItemKey::TrackArtistUrl).
+      tag_mut.insert_text(ItemKey::TrackArtistUrl, v.to_string());
     }
 
     tagged_file
@@ -204,6 +210,7 @@ impl FileTagsService {
     Self::apply_text_field(tag, ItemKey::Genre, &patch.genre)?;
     Self::apply_text_field(tag, ItemKey::Label, &patch.label)?;
     Self::apply_text_field(tag, ItemKey::CatalogNumber, &patch.catalog_number)?;
+    Self::apply_text_field(tag, ItemKey::TrackArtistUrl, &patch.url)?;
     match &patch.bpm {
       MetadataField::Unchanged => {}
       MetadataField::Set(value) => {
@@ -277,6 +284,7 @@ impl FileTagsService {
     Self::verify_text_field(tag, ItemKey::Genre, &patch.genre)?;
     Self::verify_text_field(tag, ItemKey::Label, &patch.label)?;
     Self::verify_text_field(tag, ItemKey::CatalogNumber, &patch.catalog_number)?;
+    Self::verify_text_field(tag, ItemKey::TrackArtistUrl, &patch.url)?;
     Self::verify_year_field(tag, &patch.year)?;
     Self::verify_bpm_field(tag, &patch.bpm)?;
     Self::verify_text_field(tag, ItemKey::InitialKey, &patch.key)?;
@@ -396,7 +404,7 @@ impl FileTagsService {
 
   /// Convenience shortcut used by the analysis pipeline to persist just BPM + key.
   pub fn write_bpm_and_key(&self, path: &Path, bpm: f64, key: Option<&str>) -> Result<()> {
-    self.write_track_meta(path, None, None, None, None, None, Some(bpm), key)
+    self.write_track_meta(path, None, None, None, None, None, Some(bpm), key, None)
   }
 
   // ---------------------------------------------------------------------------
@@ -471,5 +479,43 @@ mod tests {
 
     assert_eq!(FileTagsService::extract_bpm(Some(&tag)), None);
     assert_eq!(FileTagsService::extract_key(Some(&tag)), None);
+  }
+
+  /// A `Set(url)` patch writes the store page URL into the ID3v2 WOAR frame, and a
+  /// `Clear` patch removes it again (ItemKey::TrackArtistUrl ⇄ "WOAR" in lofty).
+  #[test]
+  fn metadata_patch_roundtrips_url_through_the_woar_frame() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    let patch = TrackMetadataPatch {
+      url: MetadataField::Set("https://www.beatport.com/track/x/1".to_string()),
+      ..Default::default()
+    };
+
+    FileTagsService::apply_text_field(&mut tag, ItemKey::TrackArtistUrl, &patch.url).unwrap();
+    assert_eq!(
+      tag.get_string(&ItemKey::TrackArtistUrl).as_deref(),
+      Some("https://www.beatport.com/track/x/1")
+    );
+
+    FileTagsService::apply_text_field(&mut tag, ItemKey::TrackArtistUrl, &MetadataField::Clear)
+      .unwrap();
+    assert_eq!(tag.get_string(&ItemKey::TrackArtistUrl), None);
+  }
+
+  /// An `Unchanged` patch state must not create or remove a WOAR frame.
+  #[test]
+  fn unchanged_url_patch_leaves_the_woar_frame_untouched() {
+    let mut tag = Tag::new(TagType::Id3v2);
+    tag.insert_text(
+      ItemKey::TrackArtistUrl,
+      "https://existing.example".to_string(),
+    );
+
+    FileTagsService::apply_text_field(&mut tag, ItemKey::TrackArtistUrl, &MetadataField::Unchanged)
+      .unwrap();
+    assert_eq!(
+      tag.get_string(&ItemKey::TrackArtistUrl).as_deref(),
+      Some("https://existing.example")
+    );
   }
 }

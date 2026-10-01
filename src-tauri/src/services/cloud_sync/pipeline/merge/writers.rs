@@ -100,8 +100,8 @@ fn upsert_track(tx: &Connection, t: &BackupTrack, hlc: &str) -> Result<()> {
         "INSERT INTO tracks \
             (id, file_path, file_hash, title, artist, album, year, genre, label, catalog_number, \
              duration_ms, bpm, key, bitrate, sample_rate, format, rating, play_count, date_added, \
-             date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, _hlc) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26) \
+             date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, url, _hlc) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27) \
          ON CONFLICT(id) DO UPDATE SET \
             file_path=excluded.file_path, file_hash=excluded.file_hash, title=excluded.title, \
             artist=excluded.artist, album=excluded.album, year=excluded.year, genre=excluded.genre, \
@@ -111,12 +111,12 @@ fn upsert_track(tx: &Connection, t: &BackupTrack, hlc: &str) -> Result<()> {
             date_added=excluded.date_added, date_modified=excluded.date_modified, \
             last_played=excluded.last_played, rekordbox_id=excluded.rekordbox_id, \
             artwork_path=excluded.artwork_path, artwork_source=excluded.artwork_source, \
-            color=excluded.color, _hlc=excluded._hlc",
+            color=excluded.color, url=excluded.url, _hlc=excluded._hlc",
         params![
             t.id, t.file_path, t.file_hash, t.title, t.artist, t.album, t.year, t.genre, t.label,
             t.catalog_number, t.duration_ms, t.bpm, t.key, t.bitrate, t.sample_rate, t.format,
             t.rating, t.play_count, t.date_added, t.date_modified, t.last_played, t.rekordbox_id,
-            t.artwork_path, t.artwork_source, t.color, hlc,
+            t.artwork_path, t.artwork_source, t.color, t.url, hlc,
         ],
     )?;
   Ok(())

@@ -493,7 +493,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Capa",
-			"artworkHint": "Aplica-se à capa da biblioteca e incorpora a imagem no ficheiro de áudio."
+			"artworkHint": "Aplica-se à capa da biblioteca e incorpora a imagem no ficheiro de áudio.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Abrir no navegador"
 		},
 		"createPlaylist": {
 			"title": "Nova playlist",

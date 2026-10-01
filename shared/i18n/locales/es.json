@@ -491,7 +491,11 @@
 	"modals": {
 		"trackMetadata": {
 			"artwork": "Carátula",
-			"artworkHint": "Se aplica a la carátula de la biblioteca y se incrusta en el archivo de audio."
+			"artworkHint": "Se aplica a la carátula de la biblioteca y se incrusta en el archivo de audio.",
+			"fields": {
+				"url": "URL"
+			},
+			"openUrl": "Abrir en el navegador"
 		},
 		"createPlaylist": {
 			"title": "Nueva lista de reproducción",

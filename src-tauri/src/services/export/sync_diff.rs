@@ -240,6 +240,7 @@ mod tests {
       date_modified: "2024-01-01T00:00:00Z".to_string(),
       last_played: None,
       rekordbox_id: None,
+      url: None,
       artwork_path: None,
       artwork_source: None,
       color: None,

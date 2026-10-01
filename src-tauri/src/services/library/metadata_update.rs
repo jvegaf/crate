@@ -83,6 +83,7 @@ impl LibraryService {
             "catalog_number",
             &patch.catalog_number,
         );
+        add_patch_value(&mut updates, &mut params, "url", &patch.url);
         add_patch_value(&mut updates, &mut params, "bpm", &patch.bpm);
         add_patch_value(&mut updates, &mut params, "key", &patch.key);
         add_rating_patch_value(&mut updates, &mut params, &patch.rating);
@@ -246,6 +247,7 @@ fn apply_patch_to_track(track: &mut Track, patch: &TrackMetadataPatch) {
     apply_nullable(&mut track.genre, &patch.genre);
     apply_nullable(&mut track.label, &patch.label);
     apply_nullable(&mut track.catalog_number, &patch.catalog_number);
+    apply_nullable(&mut track.url, &patch.url);
     apply_nullable(&mut track.bpm, &patch.bpm);
     apply_nullable(&mut track.key, &patch.key);
     if let MetadataField::Set(rating) = &patch.rating {
@@ -272,6 +274,7 @@ impl TrackMetadataPatch {
             || !matches!(&self.genre, MetadataField::Unchanged)
             || !matches!(&self.label, MetadataField::Unchanged)
             || !matches!(&self.catalog_number, MetadataField::Unchanged)
+            || !matches!(&self.url, MetadataField::Unchanged)
             || !matches!(&self.bpm, MetadataField::Unchanged)
             || !matches!(&self.key, MetadataField::Unchanged)
             || !matches!(&self.embedded_artwork, MetadataField::Unchanged)
@@ -374,6 +377,7 @@ mod tests {
                 &audio_path,
                 None,
                 Some("Old Artist"),
+                None,
                 None,
                 None,
                 None,

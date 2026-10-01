@@ -591,7 +591,8 @@
 				"catalogNumber": "Catalog Number",
 				"bpm": "BPM",
 				"key": "Key",
-				"rating": "Rating"
+				"rating": "Rating",
+				"url": "URL"
 			},
 			"readOnly": {
 				"duration": "Duration",
@@ -606,7 +607,8 @@
 				"analysisSource": "Analysis Source",
 				"color": "Track Color",
 				"rekordboxId": "Rekordbox ID"
-			}
+			},
+			"openUrl": "Open in browser"
 		},
 		"relocate": {
 			"title": "Relocate Track",
