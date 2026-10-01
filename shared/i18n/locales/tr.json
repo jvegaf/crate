@@ -477,6 +477,8 @@
 		"viewInFinder": "Finder'da Göster",
 		"viewInExplorer": "Explorer'da Göster",
 		"viewInFileManager": "Dosya Yöneticisinde Göster",
+		"viewOnStore": "{store} üzerinde görüntüle",
+		"viewInStore": "Mağazada görüntüle",
 		"addToPlaylist": "Çalma Listesine Ekle",
 		"setColor": "Rengi Ayarla",
 		"removeColor": "Rengi Kaldır",

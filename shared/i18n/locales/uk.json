@@ -477,6 +477,8 @@
 		"viewInFinder": "Показати у Finder",
 		"viewInExplorer": "Показати в Explorer",
 		"viewInFileManager": "Показати в менеджері файлів",
+		"viewOnStore": "Переглянути на {store}",
+		"viewInStore": "Переглянути в магазині",
 		"addToPlaylist": "Додати до плейлиста",
 		"setColor": "Установити колір",
 		"removeColor": "Видалити колір",

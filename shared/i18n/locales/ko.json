@@ -478,6 +478,8 @@
 		"viewInFinder": "Finder에서 보기",
 		"viewInExplorer": "탐색기에서 보기",
 		"viewInFileManager": "파일 관리자에서 보기",
+		"viewOnStore": "{store}에서 보기",
+		"viewInStore": "스토어에서 보기",
 		"addToPlaylist": "재생목록에 추가",
 		"setColor": "색상 설정",
 		"removeColor": "색상 제거",

@@ -478,6 +478,8 @@
 		"viewInFinder": "Finderで表示",
 		"viewInExplorer": "エクスプローラーで表示",
 		"viewInFileManager": "ファイルマネージャーで表示",
+		"viewOnStore": "{store} で見る",
+		"viewInStore": "ストアで見る",
 		"addToPlaylist": "プレイリストに追加",
 		"setColor": "色を設定",
 		"removeColor": "色を削除",

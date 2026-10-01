@@ -4,6 +4,8 @@
 	import ContextMenu from '$lib/components/common/ContextMenu.svelte'
 	import { missingTrackIds } from '$lib/stores'
 	import { translate } from '$shared/i18n'
+	import { getStoreName } from '$shared/utils'
+	import { openUrl } from '@tauri-apps/plugin-opener'
 	import { get } from 'svelte/store'
 
 	type Props = {
@@ -123,6 +125,18 @@
 				icon: 'folder-open',
 				action: onRevealInExplorer,
 			})
+			const storeUrl = selectedTracks[0].url?.trim() ?? ''
+			if (storeUrl) {
+				const store = getStoreName(storeUrl)
+				items.push({
+					id: 'view-in-store',
+					label: store
+						? get(translate)('contextMenu.viewOnStore', { values: { store } })
+						: get(translate)('contextMenu.viewInStore'),
+					icon: 'external-link',
+					action: () => openUrl(storeUrl).catch(() => {}),
+				})
+			}
 			items.push({
 				id: 'reveal-divider',
 				label: '',

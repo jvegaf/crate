@@ -476,6 +476,8 @@
 		"viewInFinder": "Ver en Finder",
 		"viewInExplorer": "Ver en Explorador",
 		"viewInFileManager": "Ver en gestor de archivos",
+		"viewOnStore": "Ver en {store}",
+		"viewInStore": "Ver en la tienda",
 		"addToPlaylist": "Añadir a lista de reproducción",
 		"setColor": "Establecer color",
 		"removeColor": "Quitar color",

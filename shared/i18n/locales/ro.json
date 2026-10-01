@@ -477,6 +477,8 @@
 		"viewInFinder": "Arată în Finder",
 		"viewInExplorer": "Arată în Explorer",
 		"viewInFileManager": "Arată în File Manager",
+		"viewOnStore": "Vezi pe {store}",
+		"viewInStore": "Vezi în magazin",
 		"addToPlaylist": "Adaugă la Playlist",
 		"setColor": "Setează Culoare",
 		"removeColor": "Elimină Culoare",

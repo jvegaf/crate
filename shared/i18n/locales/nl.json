@@ -478,6 +478,8 @@
 		"viewInFinder": "Bekijken in Finder",
 		"viewInExplorer": "Bekijken in Verkenner",
 		"viewInFileManager": "Bekijken in Bestandsbeheer",
+		"viewOnStore": "Bekijken op {store}",
+		"viewInStore": "Bekijken in de webshop",
 		"addToPlaylist": "Toevoegen aan afspeellijst",
 		"setColor": "Kleur instellen",
 		"removeColor": "Kleur verwijderen",

@@ -478,6 +478,8 @@
 		"viewInFinder": "Visa i Finder",
 		"viewInExplorer": "Visa i Utforskaren",
 		"viewInFileManager": "Visa i filhanteraren",
+		"viewOnStore": "Visa på {store}",
+		"viewInStore": "Visa i butiken",
 		"addToPlaylist": "Lägg till i spellista",
 		"setColor": "Ange färg",
 		"removeColor": "Ta bort färg",
