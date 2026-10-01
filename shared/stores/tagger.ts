@@ -102,6 +102,17 @@ function hasValue(value: string | null): value is string {
 }
 
 /**
+ * Human-readable form of a caught failure. `CrateError` serializes to its
+ * `Display` string over IPC, so a Tauri rejection arrives as a plain string,
+ * not an `Error` — that string has to survive extraction, not be discarded.
+ */
+function describeError(error: unknown): string {
+	if (error instanceof Error) return error.message
+	if (typeof error === 'string' && error !== '') return error
+	return String(error)
+}
+
+/**
  * Map a candidate to a metadata patch, omitting every field the candidate does
  * not provide. `TrackMetadataPatch` treats an omitted key as "unchanged" and an
  * explicit `null` as "clear", so omitting keeps an existing tag intact when the
@@ -176,10 +187,15 @@ function createTaggerStore() {
 			const best = row.candidates[0]
 			if (best === undefined) continue
 
+			// The step that was running when the try throws: a failure must name
+			// which of the three awaits below it hit.
+			let stage: 'extend' | 'patch' | 'artwork' = 'extend'
 			try {
 				const extended = await extendTrackTag(best)
+				stage = 'patch'
 				let track = await updateTrackMetadata(row.track.id, candidateToPatch(extended))
 				if (hasValue(extended.artwork_url)) {
+					stage = 'artwork'
 					track = await setTrackArtworkFromUrl(row.track.id, extended.artwork_url)
 				}
 				update((current) => ({
@@ -191,8 +207,9 @@ function createTaggerStore() {
 					},
 				}))
 			} catch (error) {
+				console.error('[tagger] auto-apply failed', { trackId: row.track.id, title: row.track.title, stage, error })
 				failures += 1
-				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
+				const errorMessage = describeError(error) || get(translate)('tagger.toast.applyFailed')
 				update((current) => ({
 					...current,
 					error: errorMessage,
@@ -239,7 +256,8 @@ function createTaggerStore() {
 					extended: null,
 				}))
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.searchFailed')
+				console.error('[tagger] search failed', { trackId: track.id, title: track.title, stage: 'search', error })
+				const errorMessage = describeError(error) || get(translate)('tagger.toast.searchFailed')
 				update((state) => ({ ...state, error: errorMessage }))
 				toastStore.error(errorMessage)
 			} finally {
@@ -267,7 +285,8 @@ function createTaggerStore() {
 				const extended = await extendTrackTag(selected)
 				update((current) => ({ ...current, extended }))
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.extendFailed')
+				console.error('[tagger] extend candidate failed', { trackId: state.trackId, stage: 'extend', error })
+				const errorMessage = describeError(error) || get(translate)('tagger.toast.extendFailed')
 				update((current) => ({ ...current, error: errorMessage }))
 				toastStore.error(errorMessage)
 			} finally {
@@ -295,7 +314,8 @@ function createTaggerStore() {
 				update((current) => ({ ...current, error: null }))
 				toastStore.success(get(translate)('tagger.toast.applied'))
 			} catch (error) {
-				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
+				console.error('[tagger] apply failed', { trackId: track.id, title: track.title, stage: 'patch', error })
+				const errorMessage = describeError(error) || get(translate)('tagger.toast.applyFailed')
 				update((current) => ({ ...current, error: errorMessage }))
 				toastStore.error(errorMessage)
 				return null
@@ -311,7 +331,8 @@ function createTaggerStore() {
 			} catch (error) {
 				// Metadata was applied; make the half-done outcome explicit and
 				// still return the metadata-updated track so the UI reflects it.
-				const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.artworkFailed')
+				console.error('[tagger] artwork failed', { trackId: track.id, title: track.title, stage: 'artwork', error })
+				const errorMessage = describeError(error) || get(translate)('tagger.toast.artworkFailed')
 				update((current) => ({ ...current, error: errorMessage }))
 				toastStore.error(errorMessage)
 				return updated
@@ -371,7 +392,13 @@ function createTaggerStore() {
 				} catch (error) {
 					// One failed search must not sink the batch: record it on the row
 					// and keep going. The per-row status badge surfaces it to the user.
-					const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.batch.error')
+					console.error('[tagger] batch search failed', {
+						trackId: track.id,
+						title: track.title,
+						stage: 'search',
+						error,
+					})
+					const errorMessage = describeError(error) || get(translate)('tagger.batch.error')
 					rows.push({ track, candidates: [], errors: [], error: errorMessage })
 				}
 
@@ -438,15 +465,26 @@ function createTaggerStore() {
 				// `undefined` is "not decided"; `null` is an explicit skip. Neither applies.
 				if (selected === undefined || selected === null) continue
 
+				// The step that was running when the try throws: a failure must name
+				// which of the three awaits below it hit.
+				let stage: 'extend' | 'patch' | 'artwork' = 'extend'
 				try {
 					const extended = await extendTrackTag(selected)
+					stage = 'patch'
 					let track = await updateTrackMetadata(row.track.id, candidateToPatch(extended))
 					if (hasValue(extended.artwork_url)) {
+						stage = 'artwork'
 						track = await setTrackArtworkFromUrl(row.track.id, extended.artwork_url)
 					}
 					updated.push(track)
 				} catch (error) {
-					const errorMessage = error instanceof Error ? error.message : get(translate)('tagger.toast.applyFailed')
+					console.error('[tagger] batch apply failed', {
+						trackId: row.track.id,
+						title: row.track.title,
+						stage,
+						error,
+					})
+					const errorMessage = describeError(error) || get(translate)('tagger.toast.applyFailed')
 					failed.push({ trackId: row.track.id, error: errorMessage })
 				}
 			}

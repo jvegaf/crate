@@ -65,7 +65,11 @@ pub async fn extend_track_tag(
   candidate: TagCandidate,
   tagger: State<'_, TaggerService>,
 ) -> Result<TagCandidate> {
-  tagger.extend_candidate(&candidate).await
+  let provider = &candidate.provider;
+  let candidate_id = &candidate.provider_track_id;
+  tagger.extend_candidate(&candidate).await.inspect_err(|e| {
+    log::warn!("extend_track_tag failed for candidate {provider} {candidate_id:?}: {e}")
+  })
 }
 
 /// Download a candidate's artwork and set it as the track's artwork, reusing the
@@ -81,9 +85,13 @@ pub async fn set_track_artwork_from_url(
   tagger: State<'_, TaggerService>,
   library: State<'_, LibraryService>,
 ) -> Result<Track> {
-  let temp_path = tagger.download_artwork(&url).await?;
+  let temp_path = tagger.download_artwork(&url).await.inspect_err(|e| {
+    log::warn!("set_track_artwork_from_url: artwork download failed for track {track_id}: {e}")
+  })?;
 
-  let result = library.set_track_artwork(&track_id, &temp_path);
+  let result = library
+    .set_track_artwork(&track_id, &temp_path)
+    .inspect_err(|e| log::warn!("set_track_artwork_from_url failed for track {track_id}: {e}"));
 
   // The temp file is ours alone: remove it whether or not the library write
   // succeeded, so a failed apply cannot leak it.

@@ -47,7 +47,9 @@ pub async fn update_track_metadata(
   patch: TrackMetadataPatch,
   library: State<'_, LibraryService>,
 ) -> Result<Track> {
-  library.update_track_metadata(&id, patch)
+  library
+    .update_track_metadata(&id, patch)
+    .inspect_err(|e| log::warn!("update_track_metadata failed for track {id}: {e}"))
 }
 
 #[tauri::command]
