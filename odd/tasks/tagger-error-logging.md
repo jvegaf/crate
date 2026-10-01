@@ -81,6 +81,9 @@ the change is observability-only. Ordinary functional checks above apply instead
 ## Progress log
 - 2026-10-01: Feature doc created. Route: delegated direct (writer). RDD state to be read after
   implementation.
+- 2026-10-01: Gates green (writer + parent spot check). RDD OFF for this clone (clone_local) →
+  gates are the verification of record; no native review opened.
+- Committed as work unit `a56f8bd` (code) + `2d470fb` (this doc) on `dev`.
 - 2026-10-01: T1+T2 implemented by delegated writer (describeError + console.error in 7 tagger
   catches with stage tracking; log::warn via inspect_err in the 3 apply-path commands). All gates
   run — see Verification. No commit (repo §1.3).

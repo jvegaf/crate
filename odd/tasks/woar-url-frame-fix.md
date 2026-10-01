@@ -109,6 +109,7 @@ same session).
 - 2026-10-01 (writer ses_f06e383f): T4-T7 done; RED captured pre-fix (`WOAR, Value: "Text"` on
   real-file save), GREEN after; +188/−31 across two Rust files + 853 B fixture. RDD is disabled
   (clone_local), so gates above are the verification of record — no native receipt.
+- Committed as work unit `e32e75b` (code + fixture) + `e09b8a8` (this doc) on `dev`.
 
 ## Status
 CLOSED except AC2 (user re-runs the tagger apply on a Beatport candidate) and the commit
