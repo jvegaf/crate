@@ -18,6 +18,7 @@ const columnIds: TracklistColumnId[] = [
 	'title',
 	'artist',
 	'album',
+	'genre',
 	'label',
 	'origin',
 	'bpm',
@@ -115,6 +116,25 @@ describe('normalizeTracklistColumns', () => {
 		expect(normalized.findIndex(({ id }) => id === 'album')).toBeGreaterThan(
 			normalized.findIndex(({ id }) => id === 'artist')
 		)
+	})
+
+	it('inserts the genre column at its canonical position into an older saved layout', () => {
+		const legacyPrefs: TracklistColumnPref[] = [
+			{ id: 'color', visible: true },
+			{ id: 'artwork', visible: true },
+			{ id: 'title', visible: true },
+			{ id: 'artist', visible: true },
+			{ id: 'album', visible: true },
+			{ id: 'label', visible: false },
+			{ id: 'origin', visible: true },
+			{ id: 'bpm', visible: true },
+		]
+
+		const normalized = normalizeTracklistColumns(legacyPrefs)
+		const ids = normalized.map(({ id }) => id)
+
+		expect(ids.indexOf('genre')).toBe(ids.indexOf('album') + 1)
+		expect(normalized.find(({ id }) => id === 'genre')?.visible).toBe(false)
 	})
 
 	it('anchors inserted columns to the nearest canonical neighbor in a reordered preference list', () => {
@@ -313,7 +333,7 @@ describe('moveTracklistColumn', () => {
 		const definitionById = new Map(TRACKLIST_COLUMN_DEFINITIONS.map(({ id, width }) => [id, width]))
 		const expectedTemplate = expectedVisibleIds.map((id) => definitionById.get(id)).join(' ')
 
-		expect(prefs).toHaveLength(15)
+		expect(prefs).toHaveLength(16)
 		expect(tracklistGridTemplate(moved)).toBe(expectedTemplate)
 	})
 
@@ -370,6 +390,16 @@ describe('sortTracks for tracklist columns', () => {
 		]
 
 		expect(sortTracks(tracks, { field: 'origin', direction: 'asc' }).map(({ id }) => id)).toEqual(['a', 'z', 'null'])
+	})
+
+	it('sorts genres case-insensitively with nulls last', () => {
+		const tracks = [
+			makeTrack({ id: 'null', genre: null }),
+			makeTrack({ id: 'z', genre: 'Zulu' }),
+			makeTrack({ id: 'a', genre: 'ambient' }),
+		]
+
+		expect(sortTracks(tracks, { field: 'genre', direction: 'asc' }).map(({ id }) => id)).toEqual(['a', 'z', 'null'])
 	})
 
 	it('sorts labels case-insensitively with nulls last', () => {

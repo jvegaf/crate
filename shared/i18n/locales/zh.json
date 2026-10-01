@@ -283,6 +283,7 @@
 			"title": "标题",
 			"artist": "艺术家",
 			"album": "专辑",
+			"genre": "流派",
 			"label": "厂牌",
 			"origin": "来源",
 			"bpm": "BPM",

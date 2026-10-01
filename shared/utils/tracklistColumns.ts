@@ -22,6 +22,7 @@ export const TRACKLIST_COLUMN_DEFINITIONS: TracklistColumnDefinition[] = [
 	},
 	{ id: 'artist', labelKey: 'library.columns.artist', width: '1fr', sortable: true, defaultVisible: true },
 	{ id: 'album', labelKey: 'library.columns.album', width: '1fr', sortable: true, defaultVisible: false },
+	{ id: 'genre', labelKey: 'library.columns.genre', width: '1fr', sortable: true, defaultVisible: false },
 	{ id: 'label', labelKey: 'library.columns.label', width: '1fr', sortable: true, defaultVisible: false },
 	{ id: 'origin', labelKey: 'library.columns.origin', width: '1fr', sortable: true, defaultVisible: false },
 	{ id: 'bpm', labelKey: 'library.columns.bpm', width: '80px', sortable: true, defaultVisible: true },

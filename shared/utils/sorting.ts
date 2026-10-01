@@ -40,6 +40,8 @@ function getTrackSortValue(track: Track, field: TrackSortField): string | number
 			return track.artist?.toLowerCase() ?? null
 		case 'album':
 			return track.album?.toLowerCase() ?? null
+		case 'genre':
+			return track.genre?.toLowerCase() ?? null
 		case 'label':
 			return track.label?.toLowerCase() ?? null
 		case 'bitrate':

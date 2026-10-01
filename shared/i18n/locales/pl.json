@@ -283,6 +283,7 @@
 			"title": "Tytuł",
 			"artist": "Artysta",
 			"album": "Album",
+			"genre": "Gatunek",
 			"label": "Wytwórnia",
 			"origin": "Źródło",
 			"bpm": "BPM",

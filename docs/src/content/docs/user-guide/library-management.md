@@ -115,17 +115,18 @@ The tracklist shows the columns you need, in the order you want them. Your layou
 | Tags | Assigned tags, up to three plus a count | Yes |
 | Rating | Star rating | Yes |
 | Album | Album name | No |
+| Genre | Music genre | No |
 | Label | Record label | No |
-| Origin | Name of the folder that holds the file | No |
+| Source | Name of the folder that holds the file | No |
 | Bitrate | Audio quality, in kbps | No |
 | Year | Release year | No |
 | Date Added | When the track entered your library | No |
 
 **Change the order.** Drag a column header left or right. While you drag, a thin vertical marker shows where the column will land: drop on the left half of a header to place the column before it, on the right half to place it after. The other columns shift to make room.
 
-**Widths adjust automatically.** You cannot set a width, and you do not need to: the table always fills the space it has. Compact columns (color, artwork, duration, BPM, key, bitrate, year, date added, rating) keep a fixed width, while text columns (title, artist, album, label, origin, tags) share whatever space is left. Hiding a wide text column therefore gives that room back to the others instead of leaving a gap on the right.
+**Widths adjust automatically.** You cannot set a width, and you do not need to: the table always fills the space it has. Compact columns (color, artwork, duration, BPM, key, bitrate, year, date added, rating) keep a fixed width, while text columns (title, artist, album, genre, label, source, tags) share whatever space is left. Hiding a wide text column therefore gives that room back to the others instead of leaving a gap on the right.
 
-The Origin column is the name of the folder the audio file sits in, not the whole path — useful when you organised your collection in folders before importing it. Hover the cell to see the full name if it is cut off.
+The Source column is the name of the folder the audio file sits in, not the whole path — useful when you organised your collection in folders before importing it. Hover the cell to see the full name if it is cut off.
 
 ### Viewable Properties
 

@@ -212,6 +212,10 @@
 			<div class="truncate text-text-secondary">
 				{track.album ?? ''}
 			</div>
+		{:else if column.id === 'genre'}
+			<div class="truncate text-text-secondary">
+				{track.genre ?? ''}
+			</div>
 		{:else if column.id === 'label'}
 			<div class="truncate text-text-secondary">
 				{track.label ?? ''}

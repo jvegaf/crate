@@ -283,6 +283,7 @@
 			"title": "Başlık",
 			"artist": "Sanatçı",
 			"album": "Albüm",
+			"genre": "Tür",
 			"label": "Label",
 			"origin": "Kaynak",
 			"bpm": "BPM",
