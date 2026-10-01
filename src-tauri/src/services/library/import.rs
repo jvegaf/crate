@@ -6,7 +6,7 @@ use lofty::file::{AudioFile, TaggedFile};
 use lofty::id3::v2::{Frame, Id3v2Tag};
 use lofty::prelude::*;
 use lofty::probe::Probe;
-use lofty::tag::{Tag, TagType};
+use lofty::tag::{ItemValue, Tag, TagType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::probe::Hint;
 
@@ -472,9 +472,17 @@ impl LibraryService {
 
   fn extract_url(&self, tag: &Tag) -> Option<String> {
     // Store page URL is persisted in the ID3v2 WOAR frame, which lofty maps to
-    // ItemKey::TrackArtistUrl. Blank values are treated as absent everywhere.
+    // ItemKey::TrackArtistUrl and reads back as an ItemValue::Locator — Tag::get_string
+    // matches only Text, so the value variants are inspected directly. The Text arm
+    // covers non-URL containers (which persist a Locator as a plain string) and tags
+    // written before the WOAR write fix. Blank values are treated as absent everywhere.
     tag
-      .get_string(&ItemKey::TrackArtistUrl)
+      .items()
+      .find(|item| item.key() == &ItemKey::TrackArtistUrl)
+      .and_then(|item| match item.value() {
+        ItemValue::Locator(s) | ItemValue::Text(s) => Some(s.as_str()),
+        _ => None,
+      })
       .map(|s| s.trim().to_string())
       .filter(|s| !s.is_empty())
   }
@@ -546,7 +554,7 @@ mod test_utils;
 mod tests {
   use super::*;
   use lofty::id3::v2::PopularimeterFrame;
-  use lofty::tag::TagType;
+  use lofty::tag::{TagItem, TagType};
 
   /// The tag path needs no database state and no real artwork directory, so an
   /// in-memory connection and a throwaway path are enough.
@@ -643,27 +651,54 @@ mod tests {
     assert_eq!(service().extract_key(&tag), Some("Dbm".to_string()));
   }
 
+  /// Both value kinds must be read and trimmed: `Locator` is what lofty returns for a
+  /// correctly-written ID3v2 WOAR frame, `Text` covers non-URL containers and tags
+  /// written before the WOAR write fix.
   #[test]
   fn extract_url_reads_woar_tag_trimmed() {
+    for value in [
+      ItemValue::Locator("  https://www.beatport.com/track/x/1  ".to_string()),
+      ItemValue::Text("  https://www.beatport.com/track/x/1  ".to_string()),
+    ] {
+      let mut tag = Tag::new(TagType::Id3v2);
+      tag.insert(TagItem::new(ItemKey::TrackArtistUrl, value));
+
+      assert_eq!(
+        service().extract_url(&tag),
+        Some("https://www.beatport.com/track/x/1".to_string())
+      );
+    }
+  }
+
+  /// A `Locator`-valued WOAR item — the shape of every correctly-written URL frame —
+  /// must be readable. `Tag::get_string` (Text only) used to miss it and silently drop
+  /// the URL on import.
+  #[test]
+  fn extract_url_reads_a_locator_valued_woar_item() {
     let mut tag = Tag::new(TagType::Id3v2);
-    tag.insert_text(
+    tag.insert(TagItem::new(
       ItemKey::TrackArtistUrl,
-      "  https://www.beatport.com/track/x/1  ".to_string(),
-    );
+      ItemValue::Locator("https://beatport.com/track/1".to_string()),
+    ));
 
     assert_eq!(
       service().extract_url(&tag),
-      Some("https://www.beatport.com/track/x/1".to_string())
+      Some("https://beatport.com/track/1".to_string())
     );
   }
 
   #[test]
   fn extract_url_treats_blank_woar_as_absent() {
     for raw in ["", "  "] {
-      let mut tag = Tag::new(TagType::Id3v2);
-      tag.insert_text(ItemKey::TrackArtistUrl, raw.to_string());
+      for value in [
+        ItemValue::Locator(raw.to_string()),
+        ItemValue::Text(raw.to_string()),
+      ] {
+        let mut tag = Tag::new(TagType::Id3v2);
+        tag.insert(TagItem::new(ItemKey::TrackArtistUrl, value));
 
-      assert_eq!(service().extract_url(&tag), None, "raw = {raw:?}");
+        assert_eq!(service().extract_url(&tag), None, "raw = {raw:?}");
+      }
     }
   }
 

@@ -22,7 +22,7 @@ use lofty::config::{ParseOptions, ParsingMode, WriteOptions};
 use lofty::file::{AudioFile, TaggedFile, TaggedFileExt};
 use lofty::prelude::*;
 use lofty::probe::Probe;
-use lofty::tag::Tag;
+use lofty::tag::{ItemValue, Tag, TagItem};
 
 use crate::error::{CrateError, Result};
 use crate::models::{EmbeddedArtwork, MetadataField, TrackMetadataPatch};
@@ -164,8 +164,13 @@ impl FileTagsService {
       tag_mut.insert_text(ItemKey::InitialKey, k.trim().to_string());
     }
     if let Some(v) = url {
-      // Store page URL lives in the ID3v2 WOAR frame (ItemKey::TrackArtistUrl).
-      tag_mut.insert_text(ItemKey::TrackArtistUrl, v.to_string());
+      // Store page URL lives in the ID3v2 WOAR frame (ItemKey::TrackArtistUrl). lofty
+      // validates WOAR as a URL frame at save time, so it must carry ItemValue::Locator —
+      // ItemValue::Text is accepted in memory but rejected by save_to_path.
+      tag_mut.insert(TagItem::new(
+        ItemKey::TrackArtistUrl,
+        ItemValue::Locator(v.to_string()),
+      ));
     }
 
     tagged_file
@@ -210,7 +215,7 @@ impl FileTagsService {
     Self::apply_text_field(tag, ItemKey::Genre, &patch.genre)?;
     Self::apply_text_field(tag, ItemKey::Label, &patch.label)?;
     Self::apply_text_field(tag, ItemKey::CatalogNumber, &patch.catalog_number)?;
-    Self::apply_text_field(tag, ItemKey::TrackArtistUrl, &patch.url)?;
+    Self::apply_url_field(tag, &patch.url)?;
     match &patch.bpm {
       MetadataField::Unchanged => {}
       MetadataField::Set(value) => {
@@ -254,6 +259,29 @@ impl FileTagsService {
     Ok(())
   }
 
+  /// Apply the store page URL field to the ID3v2 WOAR frame (`ItemKey::TrackArtistUrl`).
+  ///
+  /// lofty classifies WOAR as a URL frame and rejects `ItemValue::Text` at save time
+  /// (`Attempted to write an invalid frame`), so the value must be inserted as
+  /// `ItemValue::Locator`. Text-only `Tag::insert_text` is deliberately not used here.
+  fn apply_url_field(tag: &mut Tag, field: &MetadataField<String>) -> Result<()> {
+    let key = ItemKey::TrackArtistUrl;
+    match field {
+      MetadataField::Unchanged => {}
+      MetadataField::Set(value) => {
+        if !tag.insert(TagItem::new(key.clone(), ItemValue::Locator(value.clone()))) {
+          return Err(CrateError::FileTags(format!(
+            "Audio tag format does not support metadata key {key:?}"
+          )));
+        }
+      }
+      MetadataField::Clear => {
+        tag.remove_key(&key);
+      }
+    }
+    Ok(())
+  }
+
   fn apply_year_field(tag: &mut Tag, field: &MetadataField<i32>) -> Result<()> {
     match field {
       MetadataField::Unchanged => {}
@@ -284,7 +312,7 @@ impl FileTagsService {
     Self::verify_text_field(tag, ItemKey::Genre, &patch.genre)?;
     Self::verify_text_field(tag, ItemKey::Label, &patch.label)?;
     Self::verify_text_field(tag, ItemKey::CatalogNumber, &patch.catalog_number)?;
-    Self::verify_text_field(tag, ItemKey::TrackArtistUrl, &patch.url)?;
+    Self::verify_url_field(tag, &patch.url)?;
     Self::verify_year_field(tag, &patch.year)?;
     Self::verify_bpm_field(tag, &patch.bpm)?;
     Self::verify_text_field(tag, ItemKey::InitialKey, &patch.key)?;
@@ -305,6 +333,25 @@ impl FileTagsService {
     if actual != expected {
       return Err(CrateError::FileTags(format!(
         "Audio tag write for {key:?} was not retained by the file format"
+      )));
+    }
+    Ok(())
+  }
+
+  /// Verify the WOAR write through `url_item_value`, which also recognises
+  /// `ItemValue::Locator` items — `Tag::get_string` used by `verify_text_field` matches
+  /// only `Text` and would reject a correctly-written URL frame.
+  fn verify_url_field(tag: Option<&Tag>, field: &MetadataField<String>) -> Result<()> {
+    let expected = match field {
+      MetadataField::Unchanged => return Ok(()),
+      MetadataField::Set(value) => Some(value.as_str()),
+      MetadataField::Clear => None,
+    };
+    let actual = Self::url_item_value(tag);
+    if actual != expected {
+      return Err(CrateError::FileTags(format!(
+        "Audio tag write for {:?} was not retained by the file format",
+        ItemKey::TrackArtistUrl
       )));
     }
     Ok(())
@@ -426,6 +473,25 @@ impl FileTagsService {
       .and_then(|t| t.get_string(&ItemKey::InitialKey))
       .map(|s| s.trim().to_string())
   }
+
+  /// Extract the store page URL from the `ItemKey::TrackArtistUrl` item (ID3v2 WOAR).
+  ///
+  /// lofty classifies WOAR as a URL frame, whose canonical value is
+  /// `ItemValue::Locator`. `Tag::get_string` only matches `ItemValue::Text`, so the value
+  /// variants are inspected directly: `Locator` for correctly-written ID3v2/APE tags and
+  /// `Text` as a fallback, because non-URL containers persist a Locator as a plain string
+  /// and Crate's own pre-fix writes stored `Text` in memory-only tags.
+  fn url_item_value(tag: Option<&Tag>) -> Option<&str> {
+    tag.and_then(|tag| {
+      tag
+        .items()
+        .find(|item| item.key() == &ItemKey::TrackArtistUrl)
+        .and_then(|item| match item.value() {
+          ItemValue::Locator(s) | ItemValue::Text(s) => Some(s.as_str()),
+          _ => None,
+        })
+    })
+  }
 }
 
 // =============================================================================
@@ -481,8 +547,9 @@ mod tests {
     assert_eq!(FileTagsService::extract_key(Some(&tag)), None);
   }
 
-  /// A `Set(url)` patch writes the store page URL into the ID3v2 WOAR frame, and a
-  /// `Clear` patch removes it again (ItemKey::TrackArtistUrl ⇄ "WOAR" in lofty).
+  /// A `Set(url)` patch writes the store page URL into the ID3v2 WOAR frame as an
+  /// `ItemValue::Locator`, and a `Clear` patch removes it again
+  /// (ItemKey::TrackArtistUrl ⇄ "WOAR" in lofty).
   #[test]
   fn metadata_patch_roundtrips_url_through_the_woar_frame() {
     let mut tag = Tag::new(TagType::Id3v2);
@@ -491,31 +558,86 @@ mod tests {
       ..Default::default()
     };
 
-    FileTagsService::apply_text_field(&mut tag, ItemKey::TrackArtistUrl, &patch.url).unwrap();
+    FileTagsService::apply_url_field(&mut tag, &patch.url).unwrap();
     assert_eq!(
-      tag.get_string(&ItemKey::TrackArtistUrl).as_deref(),
+      FileTagsService::url_item_value(Some(&tag)),
       Some("https://www.beatport.com/track/x/1")
     );
+    // The written item is the Locator variant lofty requires for URL frames.
+    assert!(matches!(
+      tag.get(&ItemKey::TrackArtistUrl).map(|item| item.value()),
+      Some(ItemValue::Locator(_))
+    ));
 
-    FileTagsService::apply_text_field(&mut tag, ItemKey::TrackArtistUrl, &MetadataField::Clear)
-      .unwrap();
-    assert_eq!(tag.get_string(&ItemKey::TrackArtistUrl), None);
+    FileTagsService::apply_url_field(&mut tag, &MetadataField::Clear).unwrap();
+    assert_eq!(FileTagsService::url_item_value(Some(&tag)), None);
   }
 
   /// An `Unchanged` patch state must not create or remove a WOAR frame.
   #[test]
   fn unchanged_url_patch_leaves_the_woar_frame_untouched() {
     let mut tag = Tag::new(TagType::Id3v2);
-    tag.insert_text(
+    tag.insert(TagItem::new(
       ItemKey::TrackArtistUrl,
-      "https://existing.example".to_string(),
-    );
+      ItemValue::Locator("https://existing.example".to_string()),
+    ));
 
-    FileTagsService::apply_text_field(&mut tag, ItemKey::TrackArtistUrl, &MetadataField::Unchanged)
-      .unwrap();
+    FileTagsService::apply_url_field(&mut tag, &MetadataField::Unchanged).unwrap();
     assert_eq!(
-      tag.get_string(&ItemKey::TrackArtistUrl).as_deref(),
+      FileTagsService::url_item_value(Some(&tag)),
       Some("https://existing.example")
     );
+  }
+
+  /// Bytes of the tiny silent mono MP3 committed under `test_assets/`. Tests operate on
+  /// unique temporary copies so the fixture itself is never mutated.
+  const WOAR_SAMPLE_MP3: &[u8] = include_bytes!("../../test_assets/woar-sample.mp3");
+
+  /// Disambiguates the temporary copies taken from the fixture within one test binary.
+  static WOAR_TEST_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+  /// Regression: `Set(url)` must survive a real `save_to_path`. lofty treats WOAR as a
+  /// URL frame and rejects `ItemValue::Text` at save time with
+  /// `ID3v2: Attempted to write an invalid frame. ID: "WOAR", Value: "Text"`, which broke
+  /// the whole tagger apply flow. `Clear(url)` must then remove the frame from the file.
+  #[test]
+  fn url_patch_saves_woar_to_a_real_mp3_file() {
+    let path = std::env::temp_dir().join(format!(
+      "crate-woar-test-{}-{}.mp3",
+      std::process::id(),
+      WOAR_TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    ));
+    std::fs::write(&path, WOAR_SAMPLE_MP3).unwrap();
+
+    let service = FileTagsService::new();
+    let url = "https://beatport.com/track/1";
+
+    let set_patch = TrackMetadataPatch {
+      url: MetadataField::Set(url.to_string()),
+      ..Default::default()
+    };
+    service.write_metadata_patch(&path, &set_patch).unwrap();
+
+    let tagged = FileTagsService::probe_file(&path).expect("fixture should re-parse after write");
+    let tag = tagged
+      .primary_tag()
+      .or_else(|| tagged.first_tag())
+      .expect("written tag");
+    assert_eq!(FileTagsService::url_item_value(Some(tag)), Some(url));
+
+    let clear_patch = TrackMetadataPatch {
+      url: MetadataField::Clear,
+      ..Default::default()
+    };
+    service.write_metadata_patch(&path, &clear_patch).unwrap();
+
+    let tagged = FileTagsService::probe_file(&path).expect("fixture should re-parse after clear");
+    let tag = tagged
+      .primary_tag()
+      .or_else(|| tagged.first_tag())
+      .expect("remaining tag");
+    assert_eq!(FileTagsService::url_item_value(Some(tag)), None);
+
+    std::fs::remove_file(&path).unwrap();
   }
 }
