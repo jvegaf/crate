@@ -113,9 +113,8 @@ INDEPENDENT VERIFICATION (fresh verifier, read-only, VERDICT: **PASS**, 0 defect
 
 ## Follow-ups (informational, not defects)
 
-- `DiscoveryTrackContextMenu.svelte:54-56` opens `release.url` with the same icon but a static
-  label — the natural next candidate for `getStoreName` reuse (it would need its own keys, since
-  discogs/soundcloud/youtube dominate there).
+- Shipped as follow-up commit 5c695f4 (see below): both discovery menus now use `getStoreName`; it
+  needed NO new keys, and the fallback deliberately keeps the old generic wording.
 - Protocol-relative stored URLs (`//artist.bandcamp.com/…`) classify correctly but would not launch a
   browser through `openUrl`; unreachable today because no producer emits that shape.
 
@@ -142,7 +141,26 @@ no PR split is required. Running count for this feature: 134.
 
 All tasks done, gates green, independent verification PASS with zero defects.
 
+## Follow-up shipped: dynamic label in discovery menus
+
+Requested by the user after this feature closed. Commit **5c695f4**
+`feat(discovery): open release pages with a dynamic store label` — 2 files, +13/−4:
+
+- `DiscoveryContextMenu.svelte:55-63` and `DiscoveryTrackContextMenu.svelte:26-29,54-58` now derive
+  `getStoreName(release.url)`; known store → `contextMenu.viewOnStore`, otherwise the menu keeps its
+  original generic label (`discovery.openInBrowser` / `discovery.openReleaseInBrowser`).
+- Design decision, corrected from the earlier follow-up note: **no new locale keys were needed**, and
+  the `viewInStore` ("View in store") fallback was deliberately NOT reused — discovery sources are
+  `bandcamp | soundcloud | youtube | discogs | other` (`src-tauri/src/services/discovery/mod.rs:189-201`),
+  so calling a YouTube or SoundCloud page a "store" would be false wording.
+- `discovery.openInBrowser` stayed untouched on purpose: `DiscoveryRow.svelte:306` and
+  `FollowingRow.svelte:129` consume the same key outside these menus.
+- Route: direct inline (small, understood work — the writer trigger was evaluated and did not fire);
+  no separate task doc for ~13 mechanical lines, recorded here instead.
+- Gates: vitest 62/62, `yarn check:svelte` at baseline parity, `check:svelte:mobile` 0/0,
+  `lint:check` 0, `format:check` clean, `src-tauri/` untouched. RDD off → no review opened.
+
 ## Next step
 
-Optional follow-up, not started: reuse `getStoreName` in `DiscoveryTrackContextMenu.svelte:54-56`,
-which still opens `release.url` with a static label.
+None pending on this feature; the discovery follow-up is delivered. Manual smoke test with `yarn dev`
+remains the only uncovered path (browser handoff).
