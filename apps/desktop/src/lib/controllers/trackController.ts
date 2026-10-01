@@ -60,6 +60,9 @@ export interface TrackController {
 	// Color operations
 	setColor: (trackIds: string[], color: TrackColor | null) => Promise<void>
 	setColorFromContextMenu: (color: TrackColor | null, tracks: Track[]) => Promise<void>
+
+	// Rating operations
+	setRating: (trackId: string, rating: number) => Promise<void>
 }
 
 // =============================================================================
@@ -382,6 +385,13 @@ export function createTrackController(
 		await libraryStore.setTrackColors(trackIds, color)
 	}
 
+	/**
+	 * Set the rating for a track (0 clears the rating)
+	 */
+	async function setRating(trackId: string, rating: number): Promise<void> {
+		await libraryStore.setTrackRating(trackId, rating)
+	}
+
 	return {
 		play,
 		handleSelectionChange,
@@ -394,5 +404,6 @@ export function createTrackController(
 		removeFromLibraryClick,
 		setColor,
 		setColorFromContextMenu,
+		setRating,
 	}
 }

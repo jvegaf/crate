@@ -32,7 +32,7 @@ export const TRACKLIST_COLUMN_DEFINITIONS: TracklistColumnDefinition[] = [
 	{ id: 'year', labelKey: 'library.columns.year', width: '56px', sortable: false, defaultVisible: false },
 	{ id: 'date_added', labelKey: 'library.columns.dateAdded', width: '110px', sortable: true, defaultVisible: false },
 	{ id: 'tags', labelKey: 'library.columns.tags', width: '1fr', sortable: false, defaultVisible: true },
-	{ id: 'rating', labelKey: 'library.columns.rating', width: '60px', sortable: false, defaultVisible: true },
+	{ id: 'rating', labelKey: 'library.columns.rating', width: '72px', sortable: false, defaultVisible: true },
 ]
 
 const definitionsById = new Map(TRACKLIST_COLUMN_DEFINITIONS.map((definition) => [definition.id, definition]))

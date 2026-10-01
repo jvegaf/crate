@@ -35,6 +35,7 @@
 		onContextMenu?: (e: MouseEvent, track: Track) => void
 		onEmptySpaceContextMenu?: (e: MouseEvent) => void
 		onTrackColorChange?: (trackIds: string[], color: TrackColor | null) => void
+		onTrackRatingChange?: (trackId: string, rating: number) => void
 		onCancelAnalysis?: (trackId: string) => void
 		onToggleEditor?: () => void
 		scrollOffset?: number
@@ -67,6 +68,7 @@
 		onContextMenu,
 		onEmptySpaceContextMenu,
 		onTrackColorChange,
+		onTrackRatingChange,
 		onCancelAnalysis,
 		onToggleEditor,
 		scrollOffset = 0,
@@ -133,6 +135,7 @@
 			{onContextMenu}
 			{onEmptySpaceContextMenu}
 			{onTrackColorChange}
+			{onTrackRatingChange}
 			{onCancelAnalysis}
 			{onScrollChange}
 		/>

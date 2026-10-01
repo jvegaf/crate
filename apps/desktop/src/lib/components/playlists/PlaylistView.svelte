@@ -65,6 +65,7 @@
 		onBreadcrumbNavigate: (item: BreadcrumbItem) => void
 		onBreadcrumbContextMenu: (e: MouseEvent, item: BreadcrumbItem) => void
 		onTrackColorChange?: (trackIds: string[], color: TrackColor | null) => void
+		onTrackRatingChange?: (trackId: string, rating: number) => void
 		onCancelAnalysis?: (trackId: string) => void
 		onToggleEditor?: () => void
 		scrollOffset?: number
@@ -111,6 +112,7 @@
 		onBreadcrumbNavigate,
 		onBreadcrumbContextMenu,
 		onTrackColorChange,
+		onTrackRatingChange,
 		onCancelAnalysis,
 		onToggleEditor,
 		scrollOffset = 0,
@@ -277,6 +279,7 @@
 				{onContextMenu}
 				onEmptySpaceContextMenu={handleEmptySpaceContextMenu}
 				{onTrackColorChange}
+				{onTrackRatingChange}
 				{onCancelAnalysis}
 				{onScrollChange}
 			/>

@@ -241,7 +241,7 @@
 					{/if}
 				</button>
 			{:else if column.labelKey}
-				<div class="w-full text-left">
+				<div class="w-full {column.id === 'rating' ? 'text-center' : 'text-left'}">
 					{$translate(column.labelKey)}
 				</div>
 			{:else}

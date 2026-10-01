@@ -686,6 +686,7 @@
 					onBreadcrumbNavigate={handleBreadcrumbNavigate}
 					onBreadcrumbContextMenu={handleBreadcrumbContextMenu}
 					onTrackColorChange={trackController.setColor}
+					onTrackRatingChange={trackController.setRating}
 					onCancelAnalysis={handleCancelAnalysis}
 					onToggleEditor={() => uiLayoutStore.toggleRightSidebar()}
 					scrollOffset={$playlistScrollOffsets.get(playlist.id) ?? 0}
@@ -761,6 +762,7 @@
 			onContextMenu={handleTrackContextMenu}
 			onEmptySpaceContextMenu={(e) => orchestratorLayer?.getContextMenuOrchestrator()?.openLibraryViewMenu(e)}
 			onTrackColorChange={trackController.setColor}
+			onTrackRatingChange={trackController.setRating}
 			onCancelAnalysis={handleCancelAnalysis}
 			onToggleEditor={() => uiLayoutStore.toggleRightSidebar()}
 			scrollOffset={$scrollOffset}

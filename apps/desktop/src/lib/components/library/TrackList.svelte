@@ -27,6 +27,7 @@
 		onContextMenu?: (e: MouseEvent, track: Track) => void
 		onEmptySpaceContextMenu?: (e: MouseEvent) => void
 		onTrackColorChange?: (trackIds: string[], color: TrackColor | null) => void
+		onTrackRatingChange?: (trackId: string, rating: number) => void
 		onCancelAnalysis?: (trackId: string) => void
 		onScrollChange?: (offset: number) => void
 	}
@@ -46,6 +47,7 @@
 		onContextMenu,
 		onEmptySpaceContextMenu,
 		onTrackColorChange,
+		onTrackRatingChange,
 		onCancelAnalysis,
 		onScrollChange,
 	}: Props = $props()
@@ -201,6 +203,7 @@
 							ondblclick={() => handleTrackDoubleClick(track)}
 							oncontextmenu={(e) => handleTrackContextMenu(track, e)}
 							onColorChange={(color) => handleColorChange(track, color)}
+							onRatingChange={(rating) => onTrackRatingChange?.(track.id, rating)}
 							onCancelAnalysis={() => onCancelAnalysis?.(track.id)}
 						/>
 					</div>

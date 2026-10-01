@@ -9,6 +9,7 @@
 		formatDate,
 		getTrackDisplayName,
 		getTrackDisplayArtist,
+		nextRatingSelection,
 	} from '$shared/utils'
 	import { getTrackOriginFolder, visibleTracklistColumns, tracklistGridTemplate } from '$shared/utils/tracklistColumns'
 	import { TagChip } from '$lib/components/tags'
@@ -39,6 +40,7 @@
 		ondblclick?: (e: MouseEvent) => void
 		oncontextmenu?: (e: MouseEvent) => void
 		onColorChange?: (color: TrackColor | null) => void
+		onRatingChange?: (rating: number) => void
 		onCancelAnalysis?: () => void
 	}
 
@@ -54,11 +56,13 @@
 		ondblclick,
 		oncontextmenu,
 		onColorChange,
+		onRatingChange,
 		onCancelAnalysis,
 	}: Props = $props()
 
 	let showArtworkModal = $state(false)
 	let isHoveringColorCell = $state(false)
+	let hoverRating = $state(0)
 	let isTagDragHovered = $state(false)
 
 	// Clear hover when tag drag ends
@@ -270,9 +274,28 @@
 			</div>
 		{:else if column.id === 'rating'}
 			<!-- Rating -->
-			<div role="img" aria-label={`${track.rating}/5`} class="flex items-center gap-0.5 text-base leading-none">
+			<div
+				role="presentation"
+				class="flex items-center justify-center gap-0.5 text-base leading-none"
+				onpointerleave={() => (hoverRating = 0)}
+			>
 				{#each ratingStars as star (star)}
-					<span aria-hidden="true" class={track.rating >= star ? 'text-warning' : 'text-text-tertiary/50'}>★</span>
+					<button
+						type="button"
+						aria-label={track.rating === star ? 'Clear rating' : `Set rating to ${star} stars`}
+						class="cursor-pointer leading-none {(hoverRating || track.rating) >= star
+							? 'text-warning'
+							: 'text-text-tertiary/50'}"
+						onpointerenter={() => (hoverRating = star)}
+						onclick={(e) => {
+							e.stopPropagation()
+							onRatingChange?.(nextRatingSelection(track.rating, star))
+						}}
+						ondblclick={(e) => e.stopPropagation()}
+						onkeydown={(e) => e.stopPropagation()}
+					>
+						★
+					</button>
 				{/each}
 			</div>
 		{/if}

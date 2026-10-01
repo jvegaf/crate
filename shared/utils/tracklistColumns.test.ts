@@ -164,7 +164,7 @@ describe('normalizeTracklistColumns', () => {
 
 describe('tracklistGridTemplate', () => {
 	it('preserves the existing tracklist layout for defaults', () => {
-		expect(tracklistGridTemplate(defaultTracklistColumns())).toBe('24px 40px 1fr 1fr 80px 60px 80px 1fr 60px')
+		expect(tracklistGridTemplate(defaultTracklistColumns())).toBe('24px 40px 1fr 1fr 80px 60px 80px 1fr 72px')
 	})
 
 	it('always retains a fluid track for representative hide and show combinations', () => {

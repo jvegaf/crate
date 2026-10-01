@@ -247,6 +247,23 @@ function createLibraryStore() {
 		},
 
 		/**
+		 * Set the rating (0-5) for a single track, via the update_track command
+		 */
+		async setTrackRating(trackId: string, rating: number) {
+			const clamped = Math.max(0, Math.min(5, Math.round(rating)))
+			try {
+				const updated = await libraryApi.updateTrack(trackId, { rating: clamped })
+				this.updateTracksInState([updated])
+
+				// Notify sync store about track changes (for auto-sync)
+				syncStore.notifyTrackChanges([trackId])
+			} catch (error) {
+				console.error('Failed to update rating:', error)
+				toastStore.error('Failed to update rating')
+			}
+		},
+
+		/**
 		 * Load tracks for a specific playlist
 		 */
 		async loadPlaylistTracks(playlistId: string) {
