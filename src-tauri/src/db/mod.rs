@@ -18,24 +18,24 @@ use handle::ReaderPool;
 const READER_POOL_SIZE: usize = 3;
 
 pub struct Database {
-    conn: Arc<Mutex<Connection>>,
-    readers: Option<Arc<ReaderPool>>,
+  conn: Arc<Mutex<Connection>>,
+  readers: Option<Arc<ReaderPool>>,
 }
 
 /// Check whether a database file is unencrypted by attempting to read its header.
 /// An unencrypted SQLite database starts with "SQLite format 3\0".
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn is_unencrypted(db_path: &std::path::Path) -> bool {
-    std::fs::read(db_path)
-        .map(|bytes| bytes.starts_with(b"SQLite format 3\0"))
-        .unwrap_or(false)
+  std::fs::read(db_path)
+    .map(|bytes| bytes.starts_with(b"SQLite format 3\0"))
+    .unwrap_or(false)
 }
 
 /// Migrate an existing unencrypted database to an encrypted one using `sqlcipher_export`.
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn migrate_to_encrypted(db_path: &std::path::Path, key: &str) -> Result<()> {
-    let conn = Connection::open(db_path)?;
-    let encrypted_path = db_path.with_extension("db.encrypted");
+  let conn = Connection::open(db_path)?;
+  let encrypted_path = db_path.with_extension("db.encrypted");
 
   conn.execute_batch(&format!(
     "ATTACH DATABASE '{}' AS encrypted KEY '{}';
@@ -53,17 +53,17 @@ fn migrate_to_encrypted(db_path: &std::path::Path, key: &str) -> Result<()> {
 /// Migrate a pre-existing unencrypted database to encrypted form, if needed (desktop only).
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn migrate_if_unencrypted(db_path: &std::path::Path, key: &str) -> Result<()> {
-    if db_path.exists() && is_unencrypted(db_path) {
-        log::info!("Migrating unencrypted database to encrypted format");
-        migrate_to_encrypted(db_path, key)?;
-    }
-    Ok(())
+  if db_path.exists() && is_unencrypted(db_path) {
+    log::info!("Migrating unencrypted database to encrypted format");
+    migrate_to_encrypted(db_path, key)?;
+  }
+  Ok(())
 }
 
 /// Mobile databases are encrypted from creation, so there is never anything to migrate.
 #[cfg(any(target_os = "ios", target_os = "android"))]
 fn migrate_if_unencrypted(_db_path: &std::path::Path, _key: &str) -> Result<()> {
-    Ok(())
+  Ok(())
 }
 
 /// Apply the per-connection pragma set. The SQLCipher `key` MUST be the first statement
@@ -79,141 +79,129 @@ fn migrate_if_unencrypted(_db_path: &std::path::Path, _key: &str) -> Result<()> 
 /// all three files. Current backup (row-level JSON), cloud sync (bucket blobs), and
 /// device export (separate DB file) are unaffected.
 fn configure_connection(conn: &Connection, key: &str, writer: bool) -> Result<bool> {
-    conn.pragma_update(None, "key", key)?;
-    let mut wal_active = true;
-    if writer {
-        let mode: String =
-            conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
-        wal_active = mode.eq_ignore_ascii_case("wal");
-        if wal_active {
-            conn.pragma_update(None, "synchronous", "NORMAL")?;
-        } else {
-            log::warn!("journal_mode=WAL not applied (got {mode}); reader pool disabled");
-        }
+  conn.pragma_update(None, "key", key)?;
+  let mut wal_active = true;
+  if writer {
+    let mode: String =
+      conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+    wal_active = mode.eq_ignore_ascii_case("wal");
+    if wal_active {
+      conn.pragma_update(None, "synchronous", "NORMAL")?;
+    } else {
+      log::warn!("journal_mode=WAL not applied (got {mode}); reader pool disabled");
     }
-    conn.pragma_update(None, "busy_timeout", 5000)?;
-    conn.execute("PRAGMA foreign_keys = ON", [])?;
-    Ok(wal_active)
+  }
+  conn.pragma_update(None, "busy_timeout", 5000)?;
+  conn.execute("PRAGMA foreign_keys = ON", [])?;
+  Ok(wal_active)
 }
 
 /// Open the read-only reader pool in parallel threads (each open pays the SQLCipher
 /// KDF). Best-effort: any failure disables the pool rather than failing startup.
 fn open_reader_pool(db_path: &std::path::Path, key: &str) -> Option<Arc<ReaderPool>> {
-    let handles: Vec<_> = (0..READER_POOL_SIZE)
-        .map(|_| {
-            let path = db_path.to_path_buf();
-            let key = key.to_string();
-            std::thread::spawn(move || -> Result<Connection> {
-                let conn = Connection::open_with_flags(
-                    &path,
-                    OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-                )?;
-                configure_connection(&conn, &key, false)?;
-                Ok(conn)
-            })
-        })
-        .collect();
-    let mut conns = Vec::with_capacity(READER_POOL_SIZE);
-    for h in handles {
-        match h.join() {
-            Ok(Ok(conn)) => conns.push(conn),
-            Ok(Err(e)) => {
-                log::warn!("db: reader connection open failed ({e}); reader pool disabled");
-                return None;
-            }
-            Err(_) => {
-                log::warn!("db: reader connection open panicked; reader pool disabled");
-                return None;
-            }
-        }
+  let handles: Vec<_> = (0..READER_POOL_SIZE)
+    .map(|_| {
+      let path = db_path.to_path_buf();
+      let key = key.to_string();
+      std::thread::spawn(move || -> Result<Connection> {
+        let conn = Connection::open_with_flags(
+          &path,
+          OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        configure_connection(&conn, &key, false)?;
+        Ok(conn)
+      })
+    })
+    .collect();
+  let mut conns = Vec::with_capacity(READER_POOL_SIZE);
+  for h in handles {
+    match h.join() {
+      Ok(Ok(conn)) => conns.push(conn),
+      Ok(Err(e)) => {
+        log::warn!("db: reader connection open failed ({e}); reader pool disabled");
+        return None;
+      }
+      Err(_) => {
+        log::warn!("db: reader connection open panicked; reader pool disabled");
+        return None;
+      }
     }
-    Some(Arc::new(ReaderPool::new(conns)))
+  }
+  Some(Arc::new(ReaderPool::new(conns)))
 }
 
 impl Database {
-    pub fn new(db_path: PathBuf) -> Result<Self> {
-        Self::new_inner(db_path, true)
-    }
+  pub fn new(db_path: PathBuf) -> Result<Self> {
+    Self::new_inner(db_path, true)
+  }
 
-    /// Writer-only open (no reader pool): for short-lived headless contexts (the Android
-    /// WorkManager sync) where pooled readers would never be used but each would still
-    /// pay the SQLCipher KDF.
-    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
-    pub fn new_writer_only(db_path: PathBuf) -> Result<Self> {
-        Self::new_inner(db_path, false)
-    }
+  /// Writer-only open (no reader pool): for short-lived headless contexts (the Android
+  /// WorkManager sync) where pooled readers would never be used but each would still
+  /// pay the SQLCipher KDF.
+  #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+  pub fn new_writer_only(db_path: PathBuf) -> Result<Self> {
+    Self::new_inner(db_path, false)
+  }
 
-    fn new_inner(db_path: PathBuf, open_readers: bool) -> Result<Self> {
-        // Ensure parent directory exists
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let app_data_dir = db_path.parent().ok_or_else(|| {
-            CrateError::KeyStorage("database path has no parent directory".to_string())
-        })?;
-        let key = key_provider::for_platform(app_data_dir).get_or_create_key()?;
-
-        // If an existing database is unencrypted, migrate it (desktop only). Mobile
-        // databases are encrypted from creation, so this is a no-op there.
-        migrate_if_unencrypted(&db_path, &key)?;
-
-        let conn = Connection::open(&db_path)?;
-        let wal_active = configure_connection(&conn, &key, true)?;
-        log::info!(
-            "db: opened writer (journal_mode={})",
-            if wal_active { "wal" } else { "legacy" }
-        );
-
-        let db = Self {
-            conn: Arc::new(Mutex::new(conn)),
-            readers: None,
-        };
-
-        // Run migrations on the writer BEFORE opening readers (a read-only connection
-        // can't create the schema, and WAL's `-shm` needs a live writer first).
-        db.migrate()?;
-
-        let readers = if wal_active && open_readers {
-            open_reader_pool(&db_path, &key)
-        } else {
-            None
-        };
-        Ok(Self { readers, ..db })
+  fn new_inner(db_path: PathBuf, open_readers: bool) -> Result<Self> {
+    // Ensure parent directory exists
+    if let Some(parent) = db_path.parent() {
+      std::fs::create_dir_all(parent)?;
     }
 
     let app_data_dir = db_path
       .parent()
       .ok_or_else(|| CrateError::KeyStorage("database path has no parent directory".to_string()))?;
-    // Compile-time-selected provider: file (desktop) / Keychain (iOS) / Keystore (Android).
-    let key = key::provision_key(app_data_dir)?;
+    let key = key_provider::for_platform(app_data_dir).get_or_create_key()?;
 
-    // If a pre-#134 desktop install left an unencrypted database on disk, migrate it in
-    // place. Mobile databases are born encrypted, so this path — and its `std::fs::rename`
-    // — is compiled out entirely on mobile.
-    #[cfg(feature = "desktop")]
-    if db_path.exists() && is_unencrypted(&db_path) {
-      log::info!("Migrating unencrypted database to encrypted format");
-      migrate_to_encrypted(&db_path, &key)?;
-    }
+    // If an existing database is unencrypted, migrate it (desktop only). Mobile
+    // databases are encrypted from creation, so this is a no-op there.
+    migrate_if_unencrypted(&db_path, &key)?;
 
-    /// The read/write-split handle: pooled snapshot reads + the shared writer.
-    pub fn handle(&self) -> Db {
-        Db::new(self.conn.clone(), self.readers.clone())
-    }
+    let conn = Connection::open(&db_path)?;
+    let wal_active = configure_connection(&conn, &key, true)?;
+    log::info!(
+      "db: opened writer (journal_mode={})",
+      if wal_active { "wal" } else { "legacy" }
+    );
 
-    fn migrate(&self) -> Result<()> {
-        let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-        run_migrations(&conn)
-    }
+    let db = Self {
+      conn: Arc::new(Mutex::new(conn)),
+      readers: None,
+    };
+
+    // Run migrations on the writer BEFORE opening readers (a read-only connection
+    // can't create the schema, and WAL's `-shm` needs a live writer first).
+    db.migrate()?;
+
+    let readers = if wal_active && open_readers {
+      open_reader_pool(&db_path, &key)
+    } else {
+      None
+    };
+    Ok(Self { readers, ..db })
+  }
+
+  pub fn connection(&self) -> Arc<Mutex<Connection>> {
+    self.conn.clone()
+  }
+
+  /// The read/write-split handle: pooled snapshot reads + the shared writer.
+  pub fn handle(&self) -> Db {
+    Db::new(self.conn.clone(), self.readers.clone())
+  }
+
+  fn migrate(&self) -> Result<()> {
+    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    run_migrations(&conn)
+  }
 }
 
 impl Clone for Database {
-    fn clone(&self) -> Self {
-        Self {
-            conn: self.conn.clone(),
-            readers: self.readers.clone(),
-        }
+  fn clone(&self) -> Self {
+    Self {
+      conn: self.conn.clone(),
+      readers: self.readers.clone(),
     }
   }
 }
@@ -325,6 +313,8 @@ mod tests {
       ("discovery_tracks", "_hlc"),
       ("discovery_release_tags", "_hlc"),
       ("playlist_discovery_releases", "_hlc"),
+      ("playlist_discovery_tracks", "_hlc"),
+      ("discovery_track_tags", "_hlc"),
     ] {
       assert!(
         column_exists(conn, tbl, col),
@@ -347,40 +337,10 @@ mod tests {
     let latest = schema::get_migrations().len() as i32;
     assert_eq!(version(&conn), latest);
 
-    /// Every sync table + rooting/`_hlc` column that migrations 3–4 must create.
-    fn assert_sync_schema(conn: &Connection) {
-        for t in [
-            "library_roots",
-            "sync_root_mappings",
-            "sync_tombstones",
-            "sync_dirty_buckets",
-            "sync_state",
-        ] {
-            assert!(table_exists(conn, t), "expected table `{t}` to exist");
-        }
-        for (tbl, col) in [
-            ("tracks", "_hlc"),
-            ("tracks", "library_root_id"),
-            ("tracks", "relative_path"),
-            ("playlists", "_hlc"),
-            ("playlist_tracks", "_hlc"),
-            ("cues", "_hlc"),
-            ("tag_categories", "_hlc"),
-            ("tags", "_hlc"),
-            ("track_tags", "_hlc"),
-            ("discovery_releases", "_hlc"),
-            ("discovery_tracks", "_hlc"),
-            ("discovery_release_tags", "_hlc"),
-            ("playlist_discovery_releases", "_hlc"),
-            ("playlist_discovery_tracks", "_hlc"),
-            ("discovery_track_tags", "_hlc"),
-        ] {
-            assert!(
-                column_exists(conn, tbl, col),
-                "expected column `{tbl}.{col}` to exist"
-            );
-        }
-    }
+    // Re-running must be a version-gated no-op, never an error.
+    run_migrations(&conn).unwrap();
+    assert_eq!(version(&conn), latest);
+  }
 
   #[test]
   fn repairs_bitrates_written_as_bit_depths() {
@@ -389,7 +349,7 @@ mod tests {
       conn
         .execute(
           "INSERT INTO tracks (id, file_path, duration_ms, date_added, date_modified, bitrate) \
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
           rusqlite::params![
             id,
             format!("/music/bitrate-repair-{suffix}.mp3"),
