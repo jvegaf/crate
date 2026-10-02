@@ -5,6 +5,7 @@
 	import { missingTrackIds } from '$lib/stores'
 	import { translate } from '$shared/i18n'
 	import { getStoreName } from '$shared/utils'
+	import { extractBeatportTrackId } from '$shared/utils/beatport'
 	import { openUrl } from '@tauri-apps/plugin-opener'
 	import { get } from 'svelte/store'
 
@@ -25,6 +26,7 @@
 		onRelocate?: (track: Track) => void
 		onEditMetadata: (track: Track) => void
 		onFindTags?: (tracks: Track[]) => void
+		onShowBeatportRecommendations?: (track: Track) => void
 		onSetColor?: (color: TrackColor | null) => void
 		onAnalyze?: () => void
 	}
@@ -46,6 +48,7 @@
 		onRelocate,
 		onEditMetadata,
 		onFindTags,
+		onShowBeatportRecommendations,
 		onSetColor,
 		onAnalyze,
 	}: Props = $props()
@@ -68,6 +71,9 @@
 		// Only show as selected if all tracks have the same color
 		return selectedTracks.every((t) => t.color === firstColor) ? firstColor : null
 	})
+
+	// Recommendations only make sense for a single track with a Beatport track-page URL.
+	const beatportTrackId = $derived(selectedTracks.length === 1 ? extractBeatportTrackId(selectedTracks[0].url) : null)
 
 	// Build menu items
 	const menuItems = $derived.by<ContextMenuItem[]>(() => {
@@ -135,6 +141,16 @@
 						: get(translate)('contextMenu.viewInStore'),
 					icon: 'external-link',
 					action: () => openUrl(storeUrl).catch(() => {}),
+				})
+			}
+			// Beatport recommendations — single track whose URL is a Beatport track page.
+			if (onShowBeatportRecommendations && beatportTrackId !== null) {
+				const track = selectedTracks[0]
+				items.push({
+					id: 'beatport-recommendations',
+					label: get(translate)('contextMenu.beatportRecommendations'),
+					icon: 'music-note',
+					action: () => onShowBeatportRecommendations(track),
 				})
 			}
 			items.push({

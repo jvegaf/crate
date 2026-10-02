@@ -57,6 +57,7 @@
 		onTrackRelocate: (track: Track) => void
 		onTrackEditMetadata: (track: Track) => void
 		onTrackFindTags: (tracks: Track[]) => void
+		onTrackBeatportRecommendations?: (track: Track) => void
 		onTrackSetColor: (color: TrackColor | null, tracks: Track[]) => void
 		onTrackAnalyze: (tracks: Track[]) => void
 
@@ -147,6 +148,7 @@
 		onTrackRelocate,
 		onTrackEditMetadata,
 		onTrackFindTags,
+		onTrackBeatportRecommendations,
 		onTrackSetColor,
 		onTrackAnalyze,
 		onPlaylistCreatePlaylist,
@@ -431,6 +433,11 @@
 	function handleTrackFindTags(tracks: Track[]) {
 		closeAll()
 		onTrackFindTags(tracks)
+	}
+
+	function handleTrackBeatportRecommendations(track: Track) {
+		closeAll()
+		onTrackBeatportRecommendations?.(track)
 	}
 
 	function handleTrackSetColor(color: TrackColor | null) {
@@ -727,6 +734,7 @@
 		onRelocate={handleTrackRelocate}
 		onEditMetadata={handleTrackEditMetadata}
 		onFindTags={handleTrackFindTags}
+		onShowBeatportRecommendations={handleTrackBeatportRecommendations}
 		onSetColor={handleTrackSetColor}
 		onAnalyze={handleTrackAnalyze}
 	/>

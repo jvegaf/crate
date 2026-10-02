@@ -42,6 +42,7 @@
 		| { type: 'relocate'; track: Track }
 		| { type: 'trackMetadata'; track: Track }
 		| { type: 'tagSearch'; tracks: Track[] }
+		| { type: 'beatportRecommendations'; trackId: number }
 		| {
 				type: 'moveConflict'
 				movingItem: Playlist
@@ -91,7 +92,7 @@
 	import { TagInputModal } from '$lib/components/tags'
 	import { DeviceInfoModal, ReformatDeviceModal } from '$lib/components/devices'
 	import { SettingsModal } from '$lib/components/settings'
-	import { RelocateTrackModal } from '$lib/components/library'
+	import { BeatportRecommendationsModal, RelocateTrackModal } from '$lib/components/library'
 	import { TagBatchModal, TagSearchModal } from '$lib/components/tagger'
 	import TrackMetadataModal, { type CrateArtworkChange } from './TrackMetadataModal.svelte'
 	import { SmartPlaylistModal } from '$lib/components/playlists'
@@ -335,6 +336,10 @@
 
 	export function openTagSearchModal(tracks: Track[]) {
 		activeModal = { type: 'tagSearch', tracks }
+	}
+
+	export function openBeatportRecommendationsModal(trackId: number) {
+		activeModal = { type: 'beatportRecommendations', trackId }
 	}
 
 	export function openMoveConflictModal(movingItem: Playlist, existingItem: Playlist, targetParentId: string | null) {
@@ -1107,6 +1112,11 @@
 	{:else}
 		<TagBatchModal open={true} tracks={activeModal.tracks} onClose={closeAll} onApplied={handleTagBatchApplied} />
 	{/if}
+{/if}
+
+<!-- Beatport Recommendations Modal -->
+{#if activeModal.type === 'beatportRecommendations'}
+	<BeatportRecommendationsModal open={true} trackId={activeModal.trackId} onClose={closeAll} />
 {/if}
 
 <!-- Move Conflict Modal -->

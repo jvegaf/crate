@@ -33,6 +33,7 @@
 	import { toastStore } from '$shared/stores/toast'
 	import { discoveryPlaylistStore } from '$shared/stores/discoveryPlaylist'
 	import { translate } from '$shared/i18n'
+	import { extractBeatportTrackId } from '$shared/utils/beatport'
 	import { setMenuItemEnabled } from '$shared/api/app'
 	import { openUrl } from '@tauri-apps/plugin-opener'
 	import * as discoveryApi from '$shared/api/discovery'
@@ -208,6 +209,14 @@
 	onTrackRelocate={(track) => modalOrchestrator.openRelocateModal(track)}
 	onTrackEditMetadata={(track) => modalOrchestrator.openTrackMetadataModal(track)}
 	onTrackFindTags={(tracks) => modalOrchestrator.openTagSearchModal(tracks)}
+	onTrackBeatportRecommendations={(track) => {
+		// The menu only offers this item when the id parses; re-extract to hand the
+		// modal the number instead of the whole track.
+		const beatportTrackId = extractBeatportTrackId(track.url)
+		if (beatportTrackId !== null) {
+			modalOrchestrator.openBeatportRecommendationsModal(beatportTrackId)
+		}
+	}}
 	onTrackSetColor={trackController.setColorFromContextMenu}
 	onTrackAnalyze={handleTrackAnalyze}
 	onPlaylistCreatePlaylist={(p) => modalOrchestrator.openCreatePlaylistModal(p.id)}
