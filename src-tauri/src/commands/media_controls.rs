@@ -22,30 +22,14 @@ pub async fn update_now_playing(
       format!("file://{p}")
     }
   });
-  let duration = duration_ms.map(Duration::from_millis);
 
-  media_controls.set_metadata(
-    title.as_deref(),
-    artist.as_deref(),
-    album.as_deref(),
-    cover_url.as_deref(),
-    duration,
-  );
-    let cover_url = artwork_path.map(|p| {
-        if p.starts_with("http://") || p.starts_with("https://") {
-            p
-        } else {
-            format!("file://{p}")
-        }
-    });
-
-    media_controls.set_metadata(&NowPlayingMetadata {
-        title,
-        artist,
-        album,
-        cover_url,
-        duration: duration_ms.map(Duration::from_millis),
-    });
+  media_controls.set_metadata(&NowPlayingMetadata {
+    title,
+    artist,
+    album,
+    cover_url,
+    duration: duration_ms.map(Duration::from_millis),
+  });
 
   Ok(())
 }
@@ -53,33 +37,22 @@ pub async fn update_now_playing(
 #[tauri::command]
 pub async fn update_playback_state(
   is_playing: bool,
+  position_ms: Option<u64>,
   media_controls: State<'_, MediaControlsService>,
 ) -> Result<()> {
-  let playback = if is_playing {
-    MediaPlayback::Playing { progress: None }
+  let status = if is_playing {
+    PlaybackStatus::Playing
   } else {
-    MediaPlayback::Paused { progress: None }
+    PlaybackStatus::Paused
   };
-  media_controls.set_playback(playback);
-    is_playing: bool,
-    position_ms: Option<u64>,
-    media_controls: State<'_, MediaControlsService>,
-) -> Result<()> {
-    let status = if is_playing {
-        PlaybackStatus::Playing
-    } else {
-        PlaybackStatus::Paused
-    };
-    media_controls.set_playback(status, position_ms.map(Duration::from_millis));
+  media_controls.set_playback(status, position_ms.map(Duration::from_millis));
 
   Ok(())
 }
 
 #[tauri::command]
 pub async fn clear_now_playing(media_controls: State<'_, MediaControlsService>) -> Result<()> {
-  media_controls.set_playback(MediaPlayback::Stopped);
-  media_controls.set_metadata(None, None, None, None, None);
-    media_controls.clear();
+  media_controls.clear();
 
   Ok(())
 }

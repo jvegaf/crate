@@ -6,16 +6,16 @@ use super::{is_compilation, FetchedMetadata, FetchedTrack};
 /// Returns `true` for `*.bandcamp.com` URLs that are artist/label pages
 /// (i.e. NOT individual album or track pages).
 pub(super) fn is_bandcamp_page_url(url: &str) -> bool {
-    let lower = url.to_lowercase();
-    if !lower.contains("bandcamp.com") {
-        return false;
-    }
-    // Fan profiles (bandcamp.com/<username>) are collection accounts, not artist/label pages.
-    if super::bandcamp_fan::is_bandcamp_fan_url(url) {
-        return false;
-    }
-    // If the path contains /album/ or /track/, it's a release page
-    !lower.contains("/album/") && !lower.contains("/track/")
+  let lower = url.to_lowercase();
+  if !lower.contains("bandcamp.com") {
+    return false;
+  }
+  // Fan profiles (bandcamp.com/<username>) are collection accounts, not artist/label pages.
+  if super::bandcamp_fan::is_bandcamp_fan_url(url) {
+    return false;
+  }
+  // If the path contains /album/ or /track/, it's a release page
+  !lower.contains("/album/") && !lower.contains("/track/")
 }
 
 /// Scan a Bandcamp artist/label page for releases.
@@ -35,17 +35,17 @@ pub(super) async fn scan_bandcamp_page(
     .await
     .map_err(|e| CrateError::Discovery(format!("Failed to fetch Bandcamp page: {e}")))?;
 
-    // Surface a 429 explicitly so the follow watch loop can back off instead of hammering.
-    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(CrateError::Discovery(
-            "Bandcamp rate limit exceeded (429)".into(),
-        ));
-    }
+  // Surface a 429 explicitly so the follow watch loop can back off instead of hammering.
+  if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+    return Err(CrateError::Discovery(
+      "Bandcamp rate limit exceeded (429)".into(),
+    ));
+  }
 
-    // Check if we were redirected to an album/track page (common for single-release artists)
-    let final_url = response.url().to_string();
-    let final_lower = final_url.to_lowercase();
-    let redirected_to_release = final_lower.contains("/album/") || final_lower.contains("/track/");
+  // Check if we were redirected to an album/track page (common for single-release artists)
+  let final_url = response.url().to_string();
+  let final_lower = final_url.to_lowercase();
+  let redirected_to_release = final_lower.contains("/album/") || final_lower.contains("/track/");
 
   let html = response
     .text()
@@ -592,134 +592,16 @@ fn extract_schema_type(value: &serde_json::Value) -> Option<&'static str> {
 }
 
 pub(super) fn parse_bandcamp_json_ld(html: &str) -> Option<FetchedMetadata> {
-    // Find <script type="application/ld+json"> blocks
-    let mut search_from = 0;
-    while let Some(start) = html[search_from..].find("<script type=\"application/ld+json\">") {
-        let abs_start = search_from + start + "<script type=\"application/ld+json\">".len();
-        if let Some(end) = html[abs_start..].find("</script>") {
-            let json_str = &html[abs_start..abs_start + end];
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json_str) {
-                let schema_type = match extract_schema_type(&value) {
-                    Some(t) => t,
-                    None => {
-                        search_from = abs_start + end;
-                        continue;
-                    }
-                };
-                {
-                    // For MusicRecording (individual track pages), Bandcamp puts the
-                    // page owner in byArtist and the actual track artist in inAlbum.byArtist.
-                    // Prefer inAlbum.byArtist.name, falling back to byArtist.name.
-                    let artist = value
-                        .get("inAlbum")
-                        .and_then(|a| a.get("byArtist"))
-                        .and_then(|a| a.get("name"))
-                        .and_then(|n| n.as_str())
-                        .map(|s| s.to_string())
-                        .or_else(|| {
-                            value
-                                .get("byArtist")
-                                .and_then(|a| a.get("name"))
-                                .and_then(|n| n.as_str())
-                                .map(|s| s.to_string())
-                        });
-
-                    let title = value
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .map(|s| s.to_string());
-
-                    let artwork_url = value
-                        .get("image")
-                        .and_then(|i| i.as_str())
-                        .map(|s| s.to_string());
-
-                    let release_date = value
-                        .get("datePublished")
-                        .and_then(|d| d.as_str())
-                        .map(|s| s.to_string());
-
-                    let label = value
-                        .get("recordLabel")
-                        .or_else(|| {
-                            // Some Bandcamp pages nest recordLabel inside albumRelease items
-                            value
-                                .get("albumRelease")
-                                .and_then(|r| r.as_array())
-                                .and_then(|arr| arr.iter().find_map(|rel| rel.get("recordLabel")))
-                        })
-                        .or_else(|| value.get("publisher"))
-                        .and_then(|l| l.get("name"))
-                        .and_then(|n| n.as_str())
-                        .map(|s| s.to_string())
-                        .filter(|label_name| {
-                            // Skip if publisher name matches artist (self-released)
-                            artist.as_ref().is_none_or(|a| {
-                                if a.eq_ignore_ascii_case(label_name) {
-                                    return false;
-                                }
-                                // Also check if publisher matches any comma-separated
-                                // artist part (e.g. "Apellum, Gansi" with publisher "Apellum")
-                                !a.split(", ")
-                                    .any(|part| part.eq_ignore_ascii_case(label_name))
-                            })
-                        });
-
-                    // Parse tracks from albumRelease or track.itemListElement
-                    let mut tracks = parse_bandcamp_tracks(&value, &artist);
-
-                    // For MusicRecording (individual track pages), create a single
-                    // track from the root-level name/duration when no track list exists
-                    if tracks.is_empty() && schema_type == "MusicRecording" {
-                        if let Some(name) = title.clone() {
-                            let duration_ms = value
-                                .get("duration")
-                                .and_then(|d| d.as_str())
-                                .and_then(parse_iso_duration);
-                            tracks.push(FetchedTrack {
-                                name,
-                                position: 1,
-                                duration_ms,
-                                video_id: None,
-                                // The page URL IS this track's URL; release-URL fallback covers it.
-                                url: None,
-                            });
-                        }
-                    }
-
-                    // For MusicRecording (individual track pages), extract parent album info
-                    let (parent_url, parent_album_title) = if schema_type == "MusicRecording" {
-                        let p_url = value
-                            .get("inAlbum")
-                            .and_then(|a| {
-                                a.get("@id")
-                                    .or_else(|| a.get("url"))
-                                    .and_then(|u| u.as_str())
-                            })
-                            .map(|s| s.to_string());
-                        let p_title = value
-                            .get("inAlbum")
-                            .and_then(|a| a.get("name"))
-                            .and_then(|n| n.as_str())
-                            .map(|s| s.to_string());
-                        (p_url, p_title)
-                    } else {
-                        (None, None)
-                    };
-
-                    return Some(FetchedMetadata {
-                        artist,
-                        title,
-                        label,
-                        release_date,
-                        artwork_url,
-                        tracks,
-                        source_type: String::new(),
-                        parent_url,
-                        parent_album_title,
-                    });
-                }
-            }
+  // Find <script type="application/ld+json"> blocks
+  let mut search_from = 0;
+  while let Some(start) = html[search_from..].find("<script type=\"application/ld+json\">") {
+    let abs_start = search_from + start + "<script type=\"application/ld+json\">".len();
+    if let Some(end) = html[abs_start..].find("</script>") {
+      let json_str = &html[abs_start..abs_start + end];
+      if let Ok(value) = serde_json::from_str::<serde_json::Value>(json_str) {
+        let schema_type = match extract_schema_type(&value) {
+          Some(t) => t,
+          None => {
             search_from = abs_start + end;
             continue;
           }
@@ -799,6 +681,8 @@ pub(super) fn parse_bandcamp_json_ld(html: &str) -> Option<FetchedMetadata> {
                 position: 1,
                 duration_ms,
                 video_id: None,
+                // The page URL IS this track's URL; release-URL fallback covers it.
+                url: None,
               });
             }
           }
@@ -889,23 +773,23 @@ fn parse_bandcamp_tracks(
           .and_then(|d| d.as_str())
           .and_then(parse_iso_duration);
 
-                // Per-track page URL — same `@id`-then-`url` fallback as `inAlbum` above.
-                let url = track_item
-                    .get("@id")
-                    .or_else(|| track_item.get("url"))
-                    .and_then(|u| u.as_str())
-                    .map(|s| s.to_string());
+        // Per-track page URL — same `@id`-then-`url` fallback as `inAlbum` above.
+        let url = track_item
+          .get("@id")
+          .or_else(|| track_item.get("url"))
+          .and_then(|u| u.as_str())
+          .map(|s| s.to_string());
 
-                Some(FetchedTrack {
-                    name,
-                    position,
-                    duration_ms,
-                    video_id: None,
-                    url,
-                })
-            })
-            .collect();
-    }
+        Some(FetchedTrack {
+          name,
+          position,
+          duration_ms,
+          video_id: None,
+          url,
+        })
+      })
+      .collect();
+  }
 
   Vec::new()
 }

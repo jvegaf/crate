@@ -234,36 +234,27 @@ impl PlaylistService {
     let mut track_ids = Vec::new();
     let mut release_ids = Vec::new();
 
-        for (playlist_id, context) in &rows {
-            if context == "discovery" {
-                // Member tracks' parent releases, plus whole releases still pending expansion.
-                let mut rel_stmt = conn.prepare(
-                    "SELECT dt.release_id FROM playlist_discovery_tracks pdt \
+    for (playlist_id, context) in &rows {
+      if context == "discovery" {
+        // Member tracks' parent releases, plus whole releases still pending expansion.
+        let mut rel_stmt = conn.prepare(
+          "SELECT dt.release_id FROM playlist_discovery_tracks pdt \
                      JOIN discovery_tracks dt ON dt.id = pdt.track_id WHERE pdt.playlist_id = ?1 \
                      UNION \
                      SELECT release_id FROM playlist_discovery_releases WHERE playlist_id = ?1",
-                )?;
-                let ids: Vec<String> = rel_stmt
-                    .query_map([playlist_id], |row| row.get(0))?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                release_ids.extend(ids);
-            } else {
-                let mut trk_stmt =
-                    conn.prepare("SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1")?;
-                let ids: Vec<String> = trk_stmt
-                    .query_map([playlist_id], |row| row.get(0))?
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                track_ids.extend(ids);
-            }
-        }
-
-        // Deduplicate
-        track_ids.sort();
-        track_ids.dedup();
-        release_ids.sort();
-        release_ids.dedup();
-
-        Ok((track_ids, release_ids))
+        )?;
+        let ids: Vec<String> = rel_stmt
+          .query_map([playlist_id], |row| row.get(0))?
+          .collect::<std::result::Result<Vec<_>, _>>()?;
+        release_ids.extend(ids);
+      } else {
+        let mut trk_stmt =
+          conn.prepare("SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1")?;
+        let ids: Vec<String> = trk_stmt
+          .query_map([playlist_id], |row| row.get(0))?
+          .collect::<std::result::Result<Vec<_>, _>>()?;
+        track_ids.extend(ids);
+      }
     }
 
     // Deduplicate
@@ -272,15 +263,8 @@ impl PlaylistService {
     release_ids.sort();
     release_ids.dedup();
 
-        // Foreign key cascade deletes child playlists + junction entries; the
-        // tombstone drives the same cascade on peers.
-        let hlc = dirty::next_hlc(&conn)?;
-        dirty::record_tombstone(&conn, buckets::PLAYLISTS, id, &hlc)?;
-        conn.execute("DELETE FROM playlists WHERE id = ?1", [id])?;
-        dirty::mark_dirty(&conn, buckets::PLAYLISTS)?;
-        dirty::mark_dirty(&conn, buckets::PLAYLIST_TRACKS)?;
-        dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_RELEASES)?;
-        dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_TRACKS)?;
+    Ok((track_ids, release_ids))
+  }
 
   pub fn delete_playlist(&self, id: &str) -> Result<()> {
     let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
@@ -293,6 +277,7 @@ impl PlaylistService {
     dirty::mark_dirty(&conn, buckets::PLAYLISTS)?;
     dirty::mark_dirty(&conn, buckets::PLAYLIST_TRACKS)?;
     dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_RELEASES)?;
+    dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_TRACKS)?;
 
     Ok(())
   }

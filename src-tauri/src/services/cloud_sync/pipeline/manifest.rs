@@ -39,25 +39,15 @@ pub struct ManifestDiff {
 /// Compute this device's manifest over the buckets this node syncs (every bucket on
 /// desktop; the discovery-only subset on mobile — see [`buckets::synced_buckets`]).
 pub fn compute_local_manifest(conn: &Connection, device_id: &str) -> Result<Manifest> {
-    let mut buckets_map = BTreeMap::new();
-    let mut manifest_hlc = String::new();
-    for bucket in buckets::synced_buckets() {
-        let bytes = rows::serialize_bucket(conn, &bucket)?;
-        let blob_hash = rows::bucket_hash(&bytes);
-        let count = count_live_rows(conn, &bucket)?;
-        let hlc = rows::bucket_max_hlc(conn, &bucket)?;
-        if hlc > manifest_hlc {
-            manifest_hlc = hlc.clone();
-        }
-        buckets_map.insert(
-            bucket.as_str(),
-            BucketEntry {
-                object_key: format!("{}-{}.jsonl.gz", bucket.as_str(), blob_hash),
-                blob_hash,
-                count,
-                hlc,
-            },
-        );
+  let mut buckets_map = BTreeMap::new();
+  let mut manifest_hlc = String::new();
+  for bucket in buckets::synced_buckets() {
+    let bytes = rows::serialize_bucket(conn, &bucket)?;
+    let blob_hash = rows::bucket_hash(&bytes);
+    let count = count_live_rows(conn, &bucket)?;
+    let hlc = rows::bucket_max_hlc(conn, &bucket)?;
+    if hlc > manifest_hlc {
+      manifest_hlc = hlc.clone();
     }
     buckets_map.insert(
       bucket.as_str(),
@@ -109,15 +99,15 @@ pub fn diff_manifest(local: &Manifest, remote: &Manifest) -> ManifestDiff {
 /// buckets it manages. On desktop (full scope) `local` already has every bucket, so this
 /// is a no-op.
 pub fn preserve_unmanaged(mut local: Manifest, remote: Option<&Manifest>) -> Manifest {
-    if let Some(remote) = remote {
-        for (name, entry) in &remote.buckets {
-            local
-                .buckets
-                .entry(name.clone())
-                .or_insert_with(|| entry.clone());
-        }
+  if let Some(remote) = remote {
+    for (name, entry) in &remote.buckets {
+      local
+        .buckets
+        .entry(name.clone())
+        .or_insert_with(|| entry.clone());
     }
-    local
+  }
+  local
 }
 
 fn count_live_rows(conn: &Connection, bucket: &Bucket) -> Result<u64> {
@@ -192,36 +182,36 @@ mod tests {
     assert_eq!(d.to_download, vec!["playlists".to_string()]);
   }
 
-    #[test]
-    fn one_sided_buckets_go_the_right_way() {
-        let local = manifest_with(&[("playlists", "h1")]);
-        let remote = manifest_with(&[("tags", "h2")]);
-        let d = diff_manifest(&local, &remote);
-        assert_eq!(d.to_upload, vec!["playlists".to_string()]);
-        assert_eq!(d.to_download, vec!["tags".to_string()]);
-    }
+  #[test]
+  fn one_sided_buckets_go_the_right_way() {
+    let local = manifest_with(&[("playlists", "h1")]);
+    let remote = manifest_with(&[("tags", "h2")]);
+    let d = diff_manifest(&local, &remote);
+    assert_eq!(d.to_upload, vec!["playlists".to_string()]);
+    assert_eq!(d.to_download, vec!["tags".to_string()]);
+  }
 
-    #[test]
-    fn preserve_unmanaged_carries_forward_remote_only_buckets() {
-        // A scoped (mobile-like) local manifest holds only a discovery bucket.
-        let local = manifest_with(&[("discovery_releases", "d1")]);
-        // The shared remote also has a library bucket this node does not manage.
-        let remote = manifest_with(&[("discovery_releases", "d0"), ("tracks/3", "t9")]);
+  #[test]
+  fn preserve_unmanaged_carries_forward_remote_only_buckets() {
+    // A scoped (mobile-like) local manifest holds only a discovery bucket.
+    let local = manifest_with(&[("discovery_releases", "d1")]);
+    // The shared remote also has a library bucket this node does not manage.
+    let remote = manifest_with(&[("discovery_releases", "d0"), ("tracks/3", "t9")]);
 
-        let merged = preserve_unmanaged(local, Some(&remote));
+    let merged = preserve_unmanaged(local, Some(&remote));
 
-        // Local wins for the bucket it manages...
-        assert_eq!(merged.buckets["discovery_releases"].blob_hash, "d1");
-        // ...and the unmanaged remote bucket is carried forward unchanged (no orphan).
-        assert_eq!(merged.buckets["tracks/3"].blob_hash, "t9");
-        assert_eq!(merged.buckets.len(), 2);
-    }
+    // Local wins for the bucket it manages...
+    assert_eq!(merged.buckets["discovery_releases"].blob_hash, "d1");
+    // ...and the unmanaged remote bucket is carried forward unchanged (no orphan).
+    assert_eq!(merged.buckets["tracks/3"].blob_hash, "t9");
+    assert_eq!(merged.buckets.len(), 2);
+  }
 
-    #[test]
-    fn preserve_unmanaged_without_remote_is_noop() {
-        let local = manifest_with(&[("discovery_releases", "d1")]);
-        let merged = preserve_unmanaged(local, None);
-        assert_eq!(merged.buckets.len(), 1);
-        assert_eq!(merged.buckets["discovery_releases"].blob_hash, "d1");
-    }
+  #[test]
+  fn preserve_unmanaged_without_remote_is_noop() {
+    let local = manifest_with(&[("discovery_releases", "d1")]);
+    let merged = preserve_unmanaged(local, None);
+    assert_eq!(merged.buckets.len(), 1);
+    assert_eq!(merged.buckets["discovery_releases"].blob_hash, "d1");
+  }
 }

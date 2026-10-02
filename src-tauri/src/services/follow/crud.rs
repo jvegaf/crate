@@ -253,45 +253,43 @@ impl FollowService {
     Ok(())
   }
 
-    /// Local watch-state fields for the check gate. Returns an error only if the state
-    /// row is missing (a source with no state row yet is treated as never-checked by the
-    /// caller, so it always scans).
-    pub fn get_check_gate(&self, source_id: &str) -> Result<CheckGate> {
-        let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-        conn.query_row(
-            "SELECT last_checked_at, COALESCE(health, 'unknown'), last_error, consecutive_failures \
+  /// Local watch-state fields for the check gate. Returns an error only if the state
+  /// row is missing (a source with no state row yet is treated as never-checked by the
+  /// caller, so it always scans).
+  pub fn get_check_gate(&self, source_id: &str) -> Result<CheckGate> {
+    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    conn
+      .query_row(
+        "SELECT last_checked_at, COALESCE(health, 'unknown'), last_error, consecutive_failures \
              FROM followed_source_state WHERE source_id = ?1",
-            [source_id],
-            |r| {
-                Ok(CheckGate {
-                    last_checked_at: r.get(0)?,
-                    health: r.get(1)?,
-                    last_error: r.get(2)?,
-                    consecutive_failures: r.get(3)?,
-                })
-            },
-        )
-        .map_err(Into::into)
-    }
+        [source_id],
+        |r| {
+          Ok(CheckGate {
+            last_checked_at: r.get(0)?,
+            health: r.get(1)?,
+            last_error: r.get(2)?,
+            consecutive_failures: r.get(3)?,
+          })
+        },
+      )
+      .map_err(Into::into)
+  }
 
-    /// URL → status map of everything seen under a source (baseline/surfaced/dismissed).
-    pub fn get_seen_urls(
-        &self,
-        source_id: &str,
-    ) -> Result<std::collections::HashMap<String, String>> {
-        let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-        let mut stmt = conn.prepare(
-            "SELECT seen_url, status FROM followed_source_releases WHERE source_id = ?1",
-        )?;
-        let rows = stmt.query_map([source_id], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-        })?;
-        let mut map = std::collections::HashMap::new();
-        for row in rows {
-            let (u, s) = row?;
-            map.insert(u, s);
-        }
-        Ok(map)
+  /// URL → status map of everything seen under a source (baseline/surfaced/dismissed).
+  pub fn get_seen_urls(
+    &self,
+    source_id: &str,
+  ) -> Result<std::collections::HashMap<String, String>> {
+    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    let mut stmt =
+      conn.prepare("SELECT seen_url, status FROM followed_source_releases WHERE source_id = ?1")?;
+    let rows = stmt.query_map([source_id], |r| {
+      Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+      let (u, s) = row?;
+      map.insert(u, s);
     }
     Ok(map)
   }

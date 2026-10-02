@@ -55,42 +55,81 @@ fn is_conflict(status: StatusCode, body: &str) -> bool {
 
 #[async_trait]
 impl ManifestStore for FirebaseManifest {
-    async fn read(&self, s: &AuthSession) -> Result<Option<(Manifest, ManifestEtag)>> {
-        let url = format!(
-            "{}/{}",
-            self.inner.firestore_base(),
-            Self::manifest_doc_path(&s.uid)
-        );
-        let resp = self
-            .inner
-            .authed(reqwest::Method::GET, &url, s)
-            .await
-            .send()
-            .await
-            .map_err(|e| rest::send_error("manifest read request", e))?;
-        if resp.status() == StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        if !resp.status().is_success() {
-            return Err(rest::http_error("manifest read", resp).await);
-        }
-        let doc: Value = resp
-            .json()
-            .await
-            .map_err(|e| CrateError::CloudSync(format!("manifest read decode: {e}")))?;
-        let manifest: Manifest = rest::parse_json_field(&doc)?;
-        let etag = rest::update_time(&doc)
-            .map(ManifestEtag::token)
-            .ok_or_else(|| CrateError::CloudSync("manifest doc missing updateTime".into()))?;
-        Ok(Some((manifest, etag)))
+  async fn read(&self, s: &AuthSession) -> Result<Option<(Manifest, ManifestEtag)>> {
+    let url = format!(
+      "{}/{}",
+      self.inner.firestore_base(),
+      Self::manifest_doc_path(&s.uid)
+    );
+    let resp = self
+      .inner
+      .authed(reqwest::Method::GET, &url, s)
+      .await
+      .send()
+      .await
+      .map_err(|e| rest::send_error("manifest read request", e))?;
+    if resp.status() == StatusCode::NOT_FOUND {
+      return Ok(None);
+    }
+    if !resp.status().is_success() {
+      return Err(rest::http_error("manifest read", resp).await);
+    }
+    let doc: Value = resp
+      .json()
+      .await
+      .map_err(|e| CrateError::CloudSync(format!("manifest read decode: {e}")))?;
+    let manifest: Manifest = rest::parse_json_field(&doc)?;
+    let etag = rest::update_time(&doc)
+      .map(ManifestEtag::token)
+      .ok_or_else(|| CrateError::CloudSync("manifest doc missing updateTime".into()))?;
+    Ok(Some((manifest, etag)))
+  }
+
+  async fn write(
+    &self,
+    s: &AuthSession,
+    manifest: &Manifest,
+    expected: Option<&ManifestEtag>,
+    gc_enqueue: &[GcEntry],
+  ) -> Result<ManifestEtag> {
+    let manifest_name = self.inner.doc_name(&Self::manifest_doc_path(&s.uid));
+
+    let precondition = match expected {
+      Some(etag) => {
+        let token = etag_token(etag)?;
+        json!({ "updateTime": token })
+      }
+      None => json!({ "exists": false }),
+    };
+
+    let manifest_fields = rest::json_fields(manifest)?;
+    let mut writes = vec![json!({
+        "update": {
+            "name": manifest_name,
+            "fields": manifest_fields,
+        },
+        "currentDocument": precondition,
+    })];
+
+    for entry in gc_enqueue {
+      let gc_id = uuid::Uuid::new_v4().to_string();
+      let gc_name = self
+        .inner
+        .doc_name(&format!("users/{}/gc_queue/{gc_id}", s.uid));
+      let gc_fields = rest::json_fields(entry)?;
+      writes.push(json!({
+          "update": {
+              "name": gc_name,
+              "fields": gc_fields,
+          }
+      }));
     }
 
     let commit_url = format!("{}:commit", self.inner.firestore_base());
     let resp = self
       .inner
-      .client
-      .post(&commit_url)
-      .bearer_auth(&s.access_token)
+      .authed(reqwest::Method::POST, &commit_url, s)
+      .await
       .json(&json!({ "writes": writes }))
       .send()
       .await
@@ -145,9 +184,8 @@ impl ManifestStore for FirebaseManifest {
     );
     let resp = self
       .inner
-      .client
-      .get(&url)
-      .bearer_auth(&s.access_token)
+      .authed(reqwest::Method::GET, &url, s)
+      .await
       .send()
       .await
       .map_err(|e| rest::send_error("gc list request", e))?;
@@ -169,45 +207,12 @@ impl ManifestStore for FirebaseManifest {
           Ok(e) => e,
           Err(_) => continue,
         };
-
-        let manifest_fields = rest::json_fields(manifest)?;
-        let mut writes = vec![json!({
-            "update": {
-                "name": manifest_name,
-                "fields": manifest_fields,
-            },
-            "currentDocument": precondition,
-        })];
-
-        for entry in gc_enqueue {
-            let gc_id = uuid::Uuid::new_v4().to_string();
-            let gc_name = self
-                .inner
-                .doc_name(&format!("users/{}/gc_queue/{gc_id}", s.uid));
-            let gc_fields = rest::json_fields(entry)?;
-            writes.push(json!({
-                "update": {
-                    "name": gc_name,
-                    "fields": gc_fields,
-                }
-            }));
-        }
-
-        let commit_url = format!("{}:commit", self.inner.firestore_base());
-        let resp = self
-            .inner
-            .authed(reqwest::Method::POST, &commit_url, s)
-            .await
-            .json(&json!({ "writes": writes }))
-            .send()
-            .await
-            .map_err(|e| rest::send_error("manifest commit request", e))?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            let text = resp.text().await.unwrap_or_default();
-            if is_conflict(status, &text) {
-                return Err(CrateError::CloudSyncConflict);
+        if entry.delete_after <= due_before {
+          if let Some(name) = doc.get("name").and_then(|n| n.as_str()) {
+            let id = name.rsplit('/').next().unwrap_or(name).to_string();
+            out.push((GcEntryId(id), entry));
+            if out.len() >= limit {
+              break;
             }
           }
         }
@@ -225,9 +230,8 @@ impl ManifestStore for FirebaseManifest {
     );
     let resp = self
       .inner
-      .client
-      .delete(&url)
-      .bearer_auth(&s.access_token)
+      .authed(reqwest::Method::DELETE, &url, s)
+      .await
       .send()
       .await
       .map_err(|e| rest::send_error("gc ack request", e))?;
@@ -237,94 +241,21 @@ impl ManifestStore for FirebaseManifest {
     Ok(())
   }
 
-    async fn dequeue_gc(
-        &self,
-        s: &AuthSession,
-        due_before: SystemTime,
-        limit: usize,
-    ) -> Result<Vec<(GcEntryId, GcEntry)>> {
-        // List the gc_queue collection and filter client-side by `delete_after`.
-        let url = format!(
-            "{}/users/{}/gc_queue?pageSize=300",
-            self.inner.firestore_base(),
-            s.uid
-        );
-        let resp = self
-            .inner
-            .authed(reqwest::Method::GET, &url, s)
-            .await
-            .send()
-            .await
-            .map_err(|e| rest::send_error("gc list request", e))?;
-        if resp.status() == StatusCode::NOT_FOUND {
-            return Ok(vec![]);
-        }
-        if !resp.status().is_success() {
-            return Err(rest::http_error("gc list", resp).await);
-        }
-        let body: Value = resp
-            .json()
-            .await
-            .map_err(|e| CrateError::CloudSync(format!("gc list decode: {e}")))?;
-
-        let mut out = Vec::new();
-        if let Some(docs) = body.get("documents").and_then(|d| d.as_array()) {
-            for doc in docs {
-                let entry: GcEntry = match rest::parse_json_field(doc) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-                if entry.delete_after <= due_before {
-                    if let Some(name) = doc.get("name").and_then(|n| n.as_str()) {
-                        let id = name.rsplit('/').next().unwrap_or(name).to_string();
-                        out.push((GcEntryId(id), entry));
-                        if out.len() >= limit {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        Ok(out)
-    }
-
-    async fn ack_gc(&self, s: &AuthSession, id: GcEntryId) -> Result<()> {
-        let url = format!(
-            "{}/users/{}/gc_queue/{}",
-            self.inner.firestore_base(),
-            s.uid,
-            rest::percent_encode(&id.0)
-        );
-        let resp = self
-            .inner
-            .authed(reqwest::Method::DELETE, &url, s)
-            .await
-            .send()
-            .await
-            .map_err(|e| rest::send_error("gc ack request", e))?;
-        if !resp.status().is_success() && resp.status() != StatusCode::NOT_FOUND {
-            return Err(rest::http_error("gc ack", resp).await);
-        }
-        Ok(())
-    }
-
-    async fn delete(&self, s: &AuthSession) -> Result<()> {
-        let url = format!(
-            "{}/{}",
-            self.inner.firestore_base(),
-            Self::manifest_doc_path(&s.uid)
-        );
-        let resp = self
-            .inner
-            .authed(reqwest::Method::DELETE, &url, s)
-            .await
-            .send()
-            .await
-            .map_err(|e| rest::send_error("manifest delete request", e))?;
-        if !resp.status().is_success() && resp.status() != StatusCode::NOT_FOUND {
-            return Err(rest::http_error("manifest delete", resp).await);
-        }
-        Ok(())
+  async fn delete(&self, s: &AuthSession) -> Result<()> {
+    let url = format!(
+      "{}/{}",
+      self.inner.firestore_base(),
+      Self::manifest_doc_path(&s.uid)
+    );
+    let resp = self
+      .inner
+      .authed(reqwest::Method::DELETE, &url, s)
+      .await
+      .send()
+      .await
+      .map_err(|e| rest::send_error("manifest delete request", e))?;
+    if !resp.status().is_success() && resp.status() != StatusCode::NOT_FOUND {
+      return Err(rest::http_error("manifest delete", resp).await);
     }
     Ok(())
   }

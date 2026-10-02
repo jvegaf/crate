@@ -144,91 +144,7 @@ pub fn stamp_unstamped_rows(conn: &Connection, node_id: NodeId) -> Result<()> {
     return Ok(());
   }
 
-    let tx = conn.unchecked_transaction()?;
-
-    // Tables with no timestamp column: all unstamped rows share the epoch HLC.
-    let epoch = Hlc::new(0, 0, node_id).format();
-    for table in [
-        "cues",
-        "tags",
-        "tag_categories",
-        "track_tags",
-        "discovery_release_tags",
-        "discovery_track_tags",
-        "discovery_release_sources",
-        "discovery_tracks",
-        "library_roots",
-    ] {
-        tx.execute(
-            &format!("UPDATE {table} SET _hlc = ?1 WHERE _hlc = ''"),
-            [&epoch],
-        )?;
-    }
-
-    // Timestamped tables: derive each row's wall-clock from its date column(s).
-    stamp_timestamped(
-        &tx,
-        "tracks",
-        &["date_modified", "date_added"],
-        &["id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "playlists",
-        &["date_modified", "date_created"],
-        &["id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "discovery_releases",
-        &["date_modified", "date_added"],
-        &["id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "playlist_tracks",
-        &["date_added"],
-        &["playlist_id", "track_id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "playlist_discovery_releases",
-        &["date_added"],
-        &["playlist_id", "release_id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "playlist_discovery_tracks",
-        &["date_added"],
-        &["playlist_id", "track_id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "followed_sources",
-        &["date_modified", "date_added"],
-        &["id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "collection_accounts",
-        &["date_modified", "date_added"],
-        &["id"],
-        node_id,
-    )?;
-    stamp_timestamped(
-        &tx,
-        "collection_items",
-        &["date_modified", "date_added"],
-        &["id"],
-        node_id,
-    )?;
+  let tx = conn.unchecked_transaction()?;
 
   // Tables with no timestamp column: all unstamped rows share the epoch HLC.
   let epoch = Hlc::new(0, 0, node_id).format();
@@ -238,6 +154,7 @@ pub fn stamp_unstamped_rows(conn: &Connection, node_id: NodeId) -> Result<()> {
     "tag_categories",
     "track_tags",
     "discovery_release_tags",
+    "discovery_track_tags",
     "discovery_release_sources",
     "discovery_tracks",
     "library_roots",
@@ -286,7 +203,28 @@ pub fn stamp_unstamped_rows(conn: &Connection, node_id: NodeId) -> Result<()> {
   )?;
   stamp_timestamped(
     &tx,
+    "playlist_discovery_tracks",
+    &["date_added"],
+    &["playlist_id", "track_id"],
+    node_id,
+  )?;
+  stamp_timestamped(
+    &tx,
     "followed_sources",
+    &["date_modified", "date_added"],
+    &["id"],
+    node_id,
+  )?;
+  stamp_timestamped(
+    &tx,
+    "collection_accounts",
+    &["date_modified", "date_added"],
+    &["id"],
+    node_id,
+  )?;
+  stamp_timestamped(
+    &tx,
+    "collection_items",
     &["date_modified", "date_added"],
     &["id"],
     node_id,

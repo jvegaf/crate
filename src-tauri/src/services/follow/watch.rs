@@ -67,17 +67,28 @@ pub async fn establish_baseline(
         if src.artwork_url.is_none() && src.artwork_path.is_none() {
           let _ = follow.set_artwork(&source_id, Some(avatar));
         }
-        Err(e) => {
-            let health = health_for_error(&e.to_string());
-            let _ = follow.mark_checked(&source_id, health, Some(&e.to_string()));
-            Err(e)
+      }
+      // Display name — the release-derived name can be the artist instead of the
+      // label, or missing when metadata wasn't fetched. Prefer the page name that
+      // matches the follow's type; only overwrite when it actually differs.
+      if let Some(src) = source.as_ref() {
+        let scanned_name = if src.follow_type == "label" {
+          page.page_label.as_deref().or(page.page_artist.as_deref())
+        } else {
+          page.page_artist.as_deref().or(page.page_label.as_deref())
+        };
+        if let Some(name) = scanned_name {
+          if !name.is_empty() && src.name.as_deref() != Some(name) {
+            let _ = follow.set_name(&source_id, name);
+          }
         }
       }
       let urls: Vec<String> = page.releases.into_iter().map(|r| r.url).collect();
       follow.record_baseline(&source_id, &urls)
     }
     Err(e) => {
-      let _ = follow.mark_checked(&source_id, FollowHealth::Error, Some(&e.to_string()));
+      let health = health_for_error(&e.to_string());
+      let _ = follow.mark_checked(&source_id, health, Some(&e.to_string()));
       Err(e)
     }
   }
@@ -144,145 +155,52 @@ pub async fn relink_source(
 /// it isn't already in Discovery, else just attach this source's provenance. Returns
 /// the per-source result plus the ids of any newly-created releases.
 pub async fn check_one(
-    conn: Arc<Mutex<Connection>>,
-    app: AppHandle,
-    app_data_dir: PathBuf,
-    source: SourceToCheck,
-    force: bool,
+  conn: Arc<Mutex<Connection>>,
+  app: AppHandle,
+  app_data_dir: PathBuf,
+  source: SourceToCheck,
+  force: bool,
 ) -> (SourceCheckResult, Vec<String>) {
   let follow = FollowService::new(conn.clone(), app_data_dir.clone());
   let name = source.name.clone();
 
-    // Rate-limit gate: skip the network scan entirely if this source is inside its
-    // failure-backoff window, or (on automatic sweeps) was scanned within the re-scan
-    // cooldown. This is the cache that stops repeated sweeps from hammering
-    // Bandcamp/SoundCloud/Discogs into a rate limit. A missing state row → never checked
-    // → scan. Returns the last known health/error unchanged (no DB write, no clock reset).
-    if let Ok(gate) = follow.get_check_gate(&source.id) {
-        if should_skip_scan(Utc::now(), &gate, force, RESCAN_COOLDOWN_SECS) {
-            return (
-                SourceCheckResult {
-                    source_id: source.id,
-                    name,
-                    new_count: 0,
-                    health: gate.health,
-                    error: gate.last_error,
-                },
-                Vec::new(),
-            );
-        }
-    }
-
-    // Baseline pass: a source with no local baseline (new follow, or synced from another
-    // device) records the page as known and surfaces nothing — this is the anti-flood guard.
-    if !source.baseline_established {
-        let res = establish_baseline(
-            conn.clone(),
-            app.clone(),
-            app_data_dir.clone(),
-            source.id.clone(),
-            source.url.clone(),
-        )
-        .await;
-        let (health, error) = match res {
-            Ok(()) => ("ok".to_string(), None),
-            Err(e) => (
-                health_for_error(&e.to_string()).to_string(),
-                Some(e.to_string()),
-            ),
-        };
-        return (
-            SourceCheckResult {
-                source_id: source.id,
-                name,
-                new_count: 0,
-                health,
-                error,
-            },
-            Vec::new(),
-        );
-    }
-
-    let page = match scan_for_baseline(&source.url, &app).await {
-        Ok(p) => p,
-        Err(e) => {
-            let health = health_for_error(&e.to_string());
-            let _ = follow.mark_checked(&source.id, health, Some(&e.to_string()));
-            return (
-                SourceCheckResult {
-                    source_id: source.id,
-                    name,
-                    new_count: 0,
-                    health: health.to_string(),
-                    error: Some(e.to_string()),
-                },
-                Vec::new(),
-            );
-        }
-    };
-
-    let seen = follow.get_seen_urls(&source.id).unwrap_or_default();
-    let new_releases = diff::compute_new_urls(&page.releases, &seen);
-
-    let discovery = DiscoveryService::new(conn.clone(), app_data_dir.clone());
-    let mut new_count = 0usize;
-    let mut release_ids = Vec::new();
-
-    for scanned in new_releases {
-        let url = scanned.url.clone(); // already normalized by scan_page
-        let release_id = match follow.release_id_for_url(&url).unwrap_or(None) {
-            // Already in Discovery (manually added, or surfaced by another follow this
-            // sweep): dedup — attach provenance below, don't duplicate or re-flag "new".
-            Some(rid) => rid,
-            None => {
-                let create = DiscoveryReleaseCreate {
-                    url: url.clone(),
-                    source_type: Some(source.source_type.clone()),
-                    artist: scanned.artist.clone(),
-                    title: scanned.title.clone(),
-                    label: None,
-                    release_date: scanned.release_date.clone(),
-                    artwork_url: scanned.artwork_url.clone(),
-                    notes: None,
-                    parent_url: None,
-                    // Discovered via this followed source — stamp its page so the row
-                    // reflects the follow and re-imports stay linked.
-                    source_page_url: Some(source.url.clone()),
-                    tracks: None,
-                };
-                match discovery.create_release(create) {
-                    Ok(rel) => {
-                        let _ = follow.mark_surfaced(&rel.id);
-                        new_count += 1;
-                        release_ids.push(rel.id.clone());
-                        rel.id
-                    }
-                    Err(e) => {
-                        log::warn!("follow: failed to surface {url}: {e}");
-                        continue;
-                    }
-                }
-            }
-        };
-        let _ = follow.add_provenance(&release_id, &source.id);
-        let _ = follow.record_seen(&source.id, &url, "surfaced", Some(&release_id));
-    }
-
-    let _ = follow.mark_checked(&source.id, FollowHealth::Ok, None);
-    (
+  // Rate-limit gate: skip the network scan entirely if this source is inside its
+  // failure-backoff window, or (on automatic sweeps) was scanned within the re-scan
+  // cooldown. This is the cache that stops repeated sweeps from hammering
+  // Bandcamp/SoundCloud/Discogs into a rate limit. A missing state row → never checked
+  // → scan. Returns the last known health/error unchanged (no DB write, no clock reset).
+  if let Ok(gate) = follow.get_check_gate(&source.id) {
+    if should_skip_scan(Utc::now(), &gate, force, RESCAN_COOLDOWN_SECS) {
+      return (
         SourceCheckResult {
-            source_id: source.id,
-            name,
-            new_count,
-            health: "ok".to_string(),
-            error: None,
+          source_id: source.id,
+          name,
+          new_count: 0,
+          health: gate.health,
+          error: gate.last_error,
         },
-        release_ids,
+        Vec::new(),
+      );
+    }
+  }
+
+  // Baseline pass: a source with no local baseline (new follow, or synced from another
+  // device) records the page as known and surfaces nothing — this is the anti-flood guard.
+  if !source.baseline_established {
+    let res = establish_baseline(
+      conn.clone(),
+      app.clone(),
+      app_data_dir.clone(),
+      source.id.clone(),
+      source.url.clone(),
     )
     .await;
     let (health, error) = match res {
       Ok(()) => ("ok".to_string(), None),
-      Err(e) => ("error".to_string(), Some(e.to_string())),
+      Err(e) => (
+        health_for_error(&e.to_string()).to_string(),
+        Some(e.to_string()),
+      ),
     };
     return (
       SourceCheckResult {
@@ -299,13 +217,14 @@ pub async fn check_one(
   let page = match scan_for_baseline(&source.url, &app).await {
     Ok(p) => p,
     Err(e) => {
-      let _ = follow.mark_checked(&source.id, FollowHealth::Error, Some(&e.to_string()));
+      let health = health_for_error(&e.to_string());
+      let _ = follow.mark_checked(&source.id, health, Some(&e.to_string()));
       return (
         SourceCheckResult {
           source_id: source.id,
           name,
           new_count: 0,
-          health: "error".to_string(),
+          health: health.to_string(),
           error: Some(e.to_string()),
         },
         Vec::new(),
@@ -380,59 +299,45 @@ pub async fn check_all(
   app: AppHandle,
   app_data_dir: PathBuf,
 ) -> Result<FollowedReleasesFound> {
-    let Ok(_sweep) = SWEEP_LOCK.try_lock() else {
-        log::info!("follow: sweep already in progress — skipping duplicate check_all");
-        return Ok(FollowedReleasesFound {
-            total_new: 0,
-            by_source: Vec::new(),
-            release_ids: Vec::new(),
-            checked_at: chrono::Utc::now().to_rfc3339(),
-        });
-    };
+  let Ok(_sweep) = SWEEP_LOCK.try_lock() else {
+    log::info!("follow: sweep already in progress — skipping duplicate check_all");
+    return Ok(FollowedReleasesFound {
+      total_new: 0,
+      by_source: Vec::new(),
+      release_ids: Vec::new(),
+      checked_at: chrono::Utc::now().to_rfc3339(),
+    });
+  };
 
-    let follow = FollowService::new(conn.clone(), app_data_dir.clone());
-    let sources = follow.enabled_sources()?;
+  let follow = FollowService::new(conn.clone(), app_data_dir.clone());
+  let sources = follow.enabled_sources()?;
 
-    let mut by_source = Vec::new();
-    let mut release_ids = Vec::new();
-    for source in sources {
-        // Only pay the inter-source rate-limit spacing when this source will actually be
-        // scanned — a gated-out source makes no network call, so it needs no delay.
-        let will_scan = follow
-            .get_check_gate(&source.id)
-            .map(|g| !should_skip_scan(Utc::now(), &g, false, RESCAN_COOLDOWN_SECS))
-            .unwrap_or(true);
-        if will_scan {
-            let base_ms = match source.source_type.as_str() {
-                "discogs" => 8000,
-                "soundcloud" => 2000,
-                _ => 1500,
-            };
-            tokio::time::sleep(metadata::jittered_delay(base_ms)).await;
-        }
-
-        let (result, ids) = check_one(
-            conn.clone(),
-            app.clone(),
-            app_data_dir.clone(),
-            source,
-            false,
-        )
-        .await;
-        release_ids.extend(ids);
-        by_source.push(result);
+  let mut by_source = Vec::new();
+  let mut release_ids = Vec::new();
+  for source in sources {
+    // Only pay the inter-source rate-limit spacing when this source will actually be
+    // scanned — a gated-out source makes no network call, so it needs no delay.
+    let will_scan = follow
+      .get_check_gate(&source.id)
+      .map(|g| !should_skip_scan(Utc::now(), &g, false, RESCAN_COOLDOWN_SECS))
+      .unwrap_or(true);
+    if will_scan {
+      let base_ms = match source.source_type.as_str() {
+        "discogs" => 8000,
+        "soundcloud" => 2000,
+        _ => 1500,
+      };
+      tokio::time::sleep(metadata::jittered_delay(base_ms)).await;
     }
 
-    let total_new: usize = by_source.iter().map(|r| r.new_count).sum();
-    let found = FollowedReleasesFound {
-        total_new,
-        by_source,
-        release_ids,
-        checked_at: chrono::Utc::now().to_rfc3339(),
-    };
-    tokio::time::sleep(metadata::jittered_delay(base_ms)).await;
-
-    let (result, ids) = check_one(conn.clone(), app.clone(), app_data_dir.clone(), source).await;
+    let (result, ids) = check_one(
+      conn.clone(),
+      app.clone(),
+      app_data_dir.clone(),
+      source,
+      false,
+    )
+    .await;
     release_ids.extend(ids);
     by_source.push(result);
   }
@@ -469,53 +374,41 @@ pub fn start_watching(app_handle: AppHandle, conn: Arc<Mutex<Connection>>, app_d
         fire_release_day_notifications(conn.clone(), &app_handle, app_data_dir.clone()).await;
       }
 
-            let should_check = if first {
-                run_on_launch
-            } else {
-                interval.is_some()
-            };
-            if should_check {
-                // Mobile: an automatic sweep landing while the app is backgrounded (easy to
-                // hit — the launch sweep fires 30s after boot, and background audio keeps the
-                // process and its timers alive) burns background CPU that iOS hard-kills at
-                // 80% over 60s. Wait for the webview to be foregrounded first — bounded, and
-                // fail-OPEN so a stale flag degrades to a delayed sweep rather than a silently
-                // dead cadence (the background summary notification relies on sweeps still
-                // running eventually).
-                #[cfg(feature = "mobile")]
-                {
-                    use std::sync::atomic::Ordering;
-                    let cap = Duration::from_secs(15 * 60);
-                    let mut waited = Duration::ZERO;
-                    while !app_handle
-                        .state::<crate::AppForegroundFlag>()
-                        .0
-                        .load(Ordering::Relaxed)
-                        && waited < cap
-                    {
-                        tokio::time::sleep(Duration::from_secs(30)).await;
-                        waited += Duration::from_secs(30);
-                    }
-                }
-                if let Ok(found) =
-                    check_all(conn.clone(), app_handle.clone(), app_data_dir.clone()).await
-                {
-                    // Foreground/background split: a backgrounded app gets a native
-                    // summary notification; a focused app gets the in-app toast that the
-                    // `followed-releases-found` event drives on the frontend.
-                    if settings.new_releases_summary
-                        && found.total_new > 0
-                        && !window_focused(&app_handle)
-                    {
-                        fire_summary_notification(&app_handle, &found);
-                    }
-                }
-            }
-            first = false;
-
-            // Sleep until the next sweep. Cadences with no interval (On launch / Manual)
-            // still loop slowly so release-day reminders fire and settings changes apply.
-            tokio::time::sleep(interval.unwrap_or(Duration::from_secs(3600))).await;
+      let should_check = if first {
+        run_on_launch
+      } else {
+        interval.is_some()
+      };
+      if should_check {
+        // Mobile: an automatic sweep landing while the app is backgrounded (easy to
+        // hit — the launch sweep fires 30s after boot, and background audio keeps the
+        // process and its timers alive) burns background CPU that iOS hard-kills at
+        // 80% over 60s. Wait for the webview to be foregrounded first — bounded, and
+        // fail-OPEN so a stale flag degrades to a delayed sweep rather than a silently
+        // dead cadence (the background summary notification relies on sweeps still
+        // running eventually).
+        #[cfg(feature = "mobile")]
+        {
+          use std::sync::atomic::Ordering;
+          let cap = Duration::from_secs(15 * 60);
+          let mut waited = Duration::ZERO;
+          while !app_handle
+            .state::<crate::AppForegroundFlag>()
+            .0
+            .load(Ordering::Relaxed)
+            && waited < cap
+          {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            waited += Duration::from_secs(30);
+          }
+        }
+        if let Ok(found) = check_all(conn.clone(), app_handle.clone(), app_data_dir.clone()).await {
+          // Foreground/background split: a backgrounded app gets a native
+          // summary notification; a focused app gets the in-app toast that the
+          // `followed-releases-found` event drives on the frontend.
+          if settings.new_releases_summary && found.total_new > 0 && !window_focused(&app_handle) {
+            fire_summary_notification(&app_handle, &found);
+          }
         }
       }
       first = false;
@@ -530,12 +423,12 @@ pub fn start_watching(app_handle: AppHandle, conn: Arc<Mutex<Connection>>, app_d
 /// `(run_on_launch, periodic_interval)` for a cadence. "Daily" is on-launch + every 24h.
 /// Shared with the collection refresh loop, which reuses `FollowCheckCadence`.
 pub(crate) fn cadence_schedule(cadence: FollowCheckCadence) -> (bool, Option<Duration>) {
-    match cadence {
-        FollowCheckCadence::Manual => (false, None),
-        FollowCheckCadence::OnLaunch => (true, None),
-        FollowCheckCadence::Hourly => (true, Some(Duration::from_secs(3600))),
-        FollowCheckCadence::Daily => (true, Some(Duration::from_secs(86_400))),
-    }
+  match cadence {
+    FollowCheckCadence::Manual => (false, None),
+    FollowCheckCadence::OnLaunch => (true, None),
+    FollowCheckCadence::Hourly => (true, Some(Duration::from_secs(3600))),
+    FollowCheckCadence::Daily => (true, Some(Duration::from_secs(86_400))),
+  }
 }
 
 fn window_focused(app: &AppHandle) -> bool {

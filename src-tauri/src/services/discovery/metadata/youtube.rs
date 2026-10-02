@@ -55,15 +55,15 @@ pub(crate) fn parse_youtube_url(url: &str) -> YouTubeUrl {
 
 /// YouTube innertube client configuration for the player API.
 pub(crate) struct YtClientConfig {
-    pub client_name: &'static str,
-    pub client_id: &'static str,
-    pub client_version: &'static str,
-    pub user_agent: &'static str,
-    /// Whether the CDN serves this client's stream URLs to any user-agent. When false, the
-    /// proxy must replay `user_agent` on every CDN request or the CDN answers 403.
-    pub browser_compatible: bool,
-    /// Extra context fields for native app clients (device info, OS version, etc.).
-    pub extra_context: Option<&'static [(&'static str, &'static str)]>,
+  pub client_name: &'static str,
+  pub client_id: &'static str,
+  pub client_version: &'static str,
+  pub user_agent: &'static str,
+  /// Whether the CDN serves this client's stream URLs to any user-agent. When false, the
+  /// proxy must replay `user_agent` on every CDN request or the CDN answers 403.
+  pub browser_compatible: bool,
+  /// Extra context fields for native app clients (device info, OS version, etc.).
+  pub extra_context: Option<&'static [(&'static str, &'static str)]>,
 }
 
 /// The visionOS YouTube app presents itself with a Safari user-agent.
@@ -122,23 +122,23 @@ pub(crate) fn build_yt_client_with_config(
   config: &YtClientConfig,
   jar: Option<Arc<reqwest::cookie::Jar>>,
 ) -> Result<reqwest::Client> {
-    let mut builder = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .user_agent(config.user_agent);
-    if let Some(jar) = jar {
-        builder = builder.cookie_provider(jar);
-    }
-    builder
-        .build()
-        .map_err(|e| CrateError::Discovery(format!("Failed to create YouTube client: {e}")))
+  let mut builder = reqwest::Client::builder()
+    .timeout(Duration::from_secs(15))
+    .user_agent(config.user_agent);
+  if let Some(jar) = jar {
+    builder = builder.cookie_provider(jar);
+  }
+  builder
+    .build()
+    .map_err(|e| CrateError::Discovery(format!("Failed to create YouTube client: {e}")))
 }
 
 /// Create a new cookie jar pre-seeded with the YouTube consent cookie.
 fn new_yt_cookie_jar() -> Arc<reqwest::cookie::Jar> {
-    let jar = reqwest::cookie::Jar::default();
-    let yt_url = "https://www.youtube.com".parse::<reqwest::Url>().unwrap();
-    jar.add_cookie_str(YT_CONSENT_COOKIE, &yt_url);
-    Arc::new(jar)
+  let jar = reqwest::cookie::Jar::default();
+  let yt_url = "https://www.youtube.com".parse::<reqwest::Url>().unwrap();
+  jar.add_cookie_str(YT_CONSENT_COOKIE, &yt_url);
+  Arc::new(jar)
 }
 
 // =============================================================================
@@ -154,9 +154,9 @@ fn new_yt_cookie_jar() -> Arc<reqwest::cookie::Jar> {
 /// set alongside it succeeds. So the process keeps one browser-like session and reuses it.
 #[derive(Clone)]
 pub(crate) struct YtSession {
-    pub jar: Arc<reqwest::cookie::Jar>,
-    pub visitor_data: String,
-    established_at: Instant,
+  pub jar: Arc<reqwest::cookie::Jar>,
+  pub visitor_data: String,
+  established_at: Instant,
 }
 
 static YT_SESSION: OnceLock<tokio::sync::Mutex<Option<YtSession>>> = OnceLock::new();
@@ -166,20 +166,20 @@ static YT_SESSION: OnceLock<tokio::sync::Mutex<Option<YtSession>>> = OnceLock::n
 const YT_SESSION_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
 fn session_slot() -> &'static tokio::sync::Mutex<Option<YtSession>> {
-    YT_SESSION.get_or_init(|| tokio::sync::Mutex::new(None))
+  YT_SESSION.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
 /// Return the shared session, establishing one on first use or after it expires.
 pub(crate) async fn yt_session() -> YtSession {
-    let mut slot = session_slot().lock().await;
-    if let Some(session) = slot.as_ref() {
-        if session.established_at.elapsed() < YT_SESSION_TTL {
-            return session.clone();
-        }
+  let mut slot = session_slot().lock().await;
+  if let Some(session) = slot.as_ref() {
+    if session.established_at.elapsed() < YT_SESSION_TTL {
+      return session.clone();
     }
-    let session = establish_session().await;
-    *slot = Some(session.clone());
-    session
+  }
+  let session = establish_session().await;
+  *slot = Some(session.clone());
+  session
 }
 
 /// Replace the shared session after YouTube answered a player request with a bot check,
@@ -187,78 +187,80 @@ pub(crate) async fn yt_session() -> YtSession {
 /// another caller already replaced it, the replacement is returned as-is so concurrent
 /// failures don't trigger a bootstrap storm.
 pub(crate) async fn reset_yt_session(stale: &YtSession) -> YtSession {
-    let mut slot = session_slot().lock().await;
-    if let Some(current) = slot.as_ref() {
-        if current.established_at != stale.established_at {
-            return current.clone();
-        }
+  let mut slot = session_slot().lock().await;
+  if let Some(current) = slot.as_ref() {
+    if current.established_at != stale.established_at {
+      return current.clone();
     }
-    let session = establish_session().await;
-    *slot = Some(session.clone());
-    session
+  }
+  let session = establish_session().await;
+  *slot = Some(session.clone());
+  session
 }
 
 /// Load youtube.com like a browser would to obtain a YouTube-issued visitor identity and its
 /// accompanying cookies. Falls back to a synthetic identity if the page can't be read, which
 /// keeps extraction attempting (and logging) rather than failing outright.
 async fn establish_session() -> YtSession {
-    let jar = new_yt_cookie_jar();
-    let visitor_data = match fetch_visitor_data(&jar).await {
-        Ok(vd) => {
-            log::info!("Established YouTube session with page-issued visitorData");
-            vd
-        }
-        Err(e) => {
-            log::warn!("Could not obtain YouTube visitorData from the homepage ({e}); using a synthetic identity");
-            generate_visitor_data()
-        }
-    };
-    YtSession {
-        jar,
-        visitor_data,
-        established_at: Instant::now(),
+  let jar = new_yt_cookie_jar();
+  let visitor_data = match fetch_visitor_data(&jar).await {
+    Ok(vd) => {
+      log::info!("Established YouTube session with page-issued visitorData");
+      vd
     }
+    Err(e) => {
+      log::warn!(
+        "Could not obtain YouTube visitorData from the homepage ({e}); using a synthetic identity"
+      );
+      generate_visitor_data()
+    }
+  };
+  YtSession {
+    jar,
+    visitor_data,
+    established_at: Instant::now(),
+  }
 }
 
 async fn fetch_visitor_data(jar: &Arc<reqwest::cookie::Jar>) -> Result<String> {
-    let client = build_yt_client_with_config(&YT_CLIENTS[0], Some(jar.clone()))?;
-    let html = client
-        .get("https://www.youtube.com/")
-        .header("Accept-Language", "en-US,en;q=0.9")
-        .send()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to fetch YouTube homepage: {e}")))?
-        .text()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to read YouTube homepage: {e}")))?;
-    parse_visitor_data(&html)
-        .ok_or_else(|| CrateError::Discovery("No VISITOR_DATA in YouTube homepage".into()))
+  let client = build_yt_client_with_config(&YT_CLIENTS[0], Some(jar.clone()))?;
+  let html = client
+    .get("https://www.youtube.com/")
+    .header("Accept-Language", "en-US,en;q=0.9")
+    .send()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Failed to fetch YouTube homepage: {e}")))?
+    .text()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Failed to read YouTube homepage: {e}")))?;
+  parse_visitor_data(&html)
+    .ok_or_else(|| CrateError::Discovery("No VISITOR_DATA in YouTube homepage".into()))
 }
 
 /// Extract `"VISITOR_DATA":"..."` from a YouTube page's inline `ytcfg`.
 pub(crate) fn parse_visitor_data(html: &str) -> Option<String> {
-    let marker = "\"VISITOR_DATA\":\"";
-    let start = html.find(marker)? + marker.len();
-    let end = html[start..].find('"')?;
-    let value = &html[start..start + end];
-    if value.is_empty() {
-        None
-    } else {
-        Some(value.to_string())
-    }
+  let marker = "\"VISITOR_DATA\":\"";
+  let start = html.find(marker)? + marker.len();
+  let end = html[start..].find('"')?;
+  let value = &html[start..start + end];
+  if value.is_empty() {
+    None
+  } else {
+    Some(value.to_string())
+  }
 }
 
 /// Generate a randomized delay with jitter around a base duration.
 /// Returns a `Duration` of `base_ms ± (0..base_ms/2)`, clamped to a minimum of 500ms.
 pub(crate) fn jittered_delay(base_ms: u64) -> Duration {
-    use rand::Rng;
-    let jitter = rand::rng().random_range(0..=(base_ms / 2));
-    let delay = if rand::rng().random_bool(0.5) {
-        base_ms.saturating_add(jitter)
-    } else {
-        base_ms.saturating_sub(jitter)
-    };
-    Duration::from_millis(delay.max(500))
+  use rand::Rng;
+  let jitter = rand::rng().random_range(0..=(base_ms / 2));
+  let delay = if rand::rng().random_bool(0.5) {
+    base_ms.saturating_add(jitter)
+  } else {
+    base_ms.saturating_sub(jitter)
+  };
+  Duration::from_millis(delay.max(500))
 }
 
 /// Encode a u64 as a protobuf-style LEB128 varint.
@@ -316,19 +318,19 @@ fn generate_visitor_data() -> String {
 /// an explicit header because reqwest drops jar cookies whenever a request sets `Cookie`
 /// itself, and the bot check wants the cookies that came with `visitor_data`.
 pub(crate) async fn fetch_yt_player_response_with_config(
-    client: &reqwest::Client,
-    video_id: &str,
-    config: &YtClientConfig,
-    visitor_data: &str,
+  client: &reqwest::Client,
+  video_id: &str,
+  config: &YtClientConfig,
+  visitor_data: &str,
 ) -> Result<serde_json::Value> {
-    let mut client_ctx = serde_json::json!({
-        "clientName": config.client_name,
-        "clientVersion": config.client_version,
-        "hl": "en",
-        "timeZone": "UTC",
-        "utcOffsetMinutes": 0,
-        "visitorData": visitor_data,
-    });
+  let mut client_ctx = serde_json::json!({
+      "clientName": config.client_name,
+      "clientVersion": config.client_version,
+      "hl": "en",
+      "timeZone": "UTC",
+      "utcOffsetMinutes": 0,
+      "visitorData": visitor_data,
+  });
 
   // Add extra context fields for native app clients (device info, OS version, etc.)
   if let Some(extras) = config.extra_context {
@@ -350,41 +352,41 @@ pub(crate) async fn fetch_yt_player_response_with_config(
     );
   }
 
-    let body = serde_json::json!({
-        "videoId": video_id,
-        "contentCheckOk": true,
-        "racyCheckOk": true,
-        "context": {
-            "client": client_ctx
-        },
-        "playbackContext": {
-            "contentPlaybackContext": {
-                "html5Preference": "HTML5_PREF_WANTS"
-            }
-        }
-    });
+  let body = serde_json::json!({
+      "videoId": video_id,
+      "contentCheckOk": true,
+      "racyCheckOk": true,
+      "context": {
+          "client": client_ctx
+      },
+      "playbackContext": {
+          "contentPlaybackContext": {
+              "html5Preference": "HTML5_PREF_WANTS"
+          }
+      }
+  });
 
-    client
-        .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
-        .header("Origin", "https://www.youtube.com")
-        .header("X-YouTube-Client-Name", config.client_id)
-        .header("X-YouTube-Client-Version", config.client_version)
-        .header("X-Goog-Visitor-Id", visitor_data)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to fetch YouTube player data: {e}")))?
-        .json()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to parse YouTube player response: {e}")))
+  client
+    .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+    .header("Origin", "https://www.youtube.com")
+    .header("X-YouTube-Client-Name", config.client_id)
+    .header("X-YouTube-Client-Version", config.client_version)
+    .header("X-Goog-Visitor-Id", visitor_data)
+    .json(&body)
+    .send()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Failed to fetch YouTube player data: {e}")))?
+    .json()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Failed to parse YouTube player response: {e}")))
 }
 
 /// Call YouTube's internal player API using the primary client config and the shared session.
 async fn fetch_yt_player_response(video_id: &str) -> Result<serde_json::Value> {
-    let session = yt_session().await;
-    let config = &YT_CLIENTS[0];
-    let client = build_yt_client_with_config(config, Some(session.jar))?;
-    fetch_yt_player_response_with_config(&client, video_id, config, &session.visitor_data).await
+  let session = yt_session().await;
+  let config = &YT_CLIENTS[0];
+  let client = build_yt_client_with_config(config, Some(session.jar))?;
+  fetch_yt_player_response_with_config(&client, video_id, config, &session.visitor_data).await
 }
 
 /// Extract `var ytInitialData = {...}` from YouTube page HTML.
@@ -448,277 +450,205 @@ pub(crate) struct YouTubeVideo {
 /// flat run of `lockupViewModel`s. Both are read so the parser survives YouTube rolling the
 /// change out (or back) per page variant.
 pub(crate) fn extract_playlist_videos(yt_data: &serde_json::Value) -> Vec<YouTubeVideo> {
-    let items = yt_data
-        .get("contents")
-        .and_then(|c| c.get("twoColumnBrowseResultsRenderer"))
-        .and_then(|r| r.get("tabs"))
-        .and_then(|t| t.as_array())
-        .and_then(|tabs| tabs.first())
-        .and_then(|tab| tab.get("tabRenderer"))
-        .and_then(|tr| tr.get("content"))
-        .and_then(|c| c.get("sectionListRenderer"))
-        .and_then(|slr| slr.get("contents"))
-        .and_then(|c| c.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|s| s.get("itemSectionRenderer"))
-        .and_then(|isr| isr.get("contents"))
-        .and_then(|c| c.as_array());
+  let items = yt_data
+    .get("contents")
+    .and_then(|c| c.get("twoColumnBrowseResultsRenderer"))
+    .and_then(|r| r.get("tabs"))
+    .and_then(|t| t.as_array())
+    .and_then(|tabs| tabs.first())
+    .and_then(|tab| tab.get("tabRenderer"))
+    .and_then(|tr| tr.get("content"))
+    .and_then(|c| c.get("sectionListRenderer"))
+    .and_then(|slr| slr.get("contents"))
+    .and_then(|c| c.as_array())
+    .and_then(|arr| arr.first())
+    .and_then(|s| s.get("itemSectionRenderer"))
+    .and_then(|isr| isr.get("contents"))
+    .and_then(|c| c.as_array());
 
-    let Some(items) = items else {
-        return Vec::new();
-    };
+  let Some(items) = items else {
+    return Vec::new();
+  };
 
-    let mut videos = Vec::new();
-    for item in items {
-        if let Some(list) = item
-            .get("playlistVideoListRenderer")
-            .and_then(|r| r.get("contents"))
-            .and_then(|c| c.as_array())
-        {
-            videos.extend(list.iter().filter_map(parse_playlist_video_renderer));
-        } else if let Some(lockup) = item.get("lockupViewModel") {
-            let position = videos.len() as i32 + 1;
-            videos.extend(parse_lockup_video(lockup, position));
-        }
+  let mut videos = Vec::new();
+  for item in items {
+    if let Some(list) = item
+      .get("playlistVideoListRenderer")
+      .and_then(|r| r.get("contents"))
+      .and_then(|c| c.as_array())
+    {
+      videos.extend(list.iter().filter_map(parse_playlist_video_renderer));
+    } else if let Some(lockup) = item.get("lockupViewModel") {
+      let position = videos.len() as i32 + 1;
+      videos.extend(parse_lockup_video(lockup, position));
     }
-    videos
+  }
+  videos
 }
 
 fn parse_playlist_video_renderer(item: &serde_json::Value) -> Option<YouTubeVideo> {
-    let renderer = item.get("playlistVideoRenderer")?;
-    let video_id = renderer
-        .get("videoId")
-        .and_then(|v| v.as_str())?
-        .to_string();
-    let title = renderer
-        .get("title")
-        .and_then(|t| t.get("runs"))
-        .and_then(|r| r.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|r| r.get("text"))
-        .and_then(|t| t.as_str())
-        .unwrap_or("Untitled")
-        .to_string();
-    let position = renderer
-        .get("index")
-        .and_then(|i| i.get("simpleText"))
-        .and_then(|s| s.as_str())
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(0);
-    let duration_ms = renderer
-        .get("lengthSeconds")
-        .and_then(|l| l.as_str())
-        .and_then(|s| s.parse::<i64>().ok())
-        .map(|s| s * 1000);
+  let renderer = item.get("playlistVideoRenderer")?;
+  let video_id = renderer
+    .get("videoId")
+    .and_then(|v| v.as_str())?
+    .to_string();
+  let title = renderer
+    .get("title")
+    .and_then(|t| t.get("runs"))
+    .and_then(|r| r.as_array())
+    .and_then(|arr| arr.first())
+    .and_then(|r| r.get("text"))
+    .and_then(|t| t.as_str())
+    .unwrap_or("Untitled")
+    .to_string();
+  let position = renderer
+    .get("index")
+    .and_then(|i| i.get("simpleText"))
+    .and_then(|s| s.as_str())
+    .and_then(|s| s.parse::<i32>().ok())
+    .unwrap_or(0);
+  let duration_ms = renderer
+    .get("lengthSeconds")
+    .and_then(|l| l.as_str())
+    .and_then(|s| s.parse::<i64>().ok())
+    .map(|s| s * 1000);
 
-    Some(YouTubeVideo {
-        video_id,
-        title,
-        position,
-        duration_ms,
-    })
+  Some(YouTubeVideo {
+    video_id,
+    title,
+    position,
+    duration_ms,
+  })
 }
 
 /// Lockups carry no playlist index, so the caller supplies the running position.
 fn parse_lockup_video(lockup: &serde_json::Value, position: i32) -> Option<YouTubeVideo> {
-    let content_type = lockup.get("contentType").and_then(|t| t.as_str());
-    if content_type.is_some_and(|t| t != "LOCKUP_CONTENT_TYPE_VIDEO") {
-        return None;
-    }
-    let video_id = lockup
-        .get("contentId")
-        .and_then(|v| v.as_str())?
-        .to_string();
-    let title = lockup
-        .get("metadata")
-        .and_then(|m| m.get("lockupMetadataViewModel"))
-        .and_then(|m| m.get("title"))
-        .and_then(|t| t.get("content"))
-        .and_then(|t| t.as_str())
-        .unwrap_or("Untitled")
-        .to_string();
+  let content_type = lockup.get("contentType").and_then(|t| t.as_str());
+  if content_type.is_some_and(|t| t != "LOCKUP_CONTENT_TYPE_VIDEO") {
+    return None;
+  }
+  let video_id = lockup
+    .get("contentId")
+    .and_then(|v| v.as_str())?
+    .to_string();
+  let title = lockup
+    .get("metadata")
+    .and_then(|m| m.get("lockupMetadataViewModel"))
+    .and_then(|m| m.get("title"))
+    .and_then(|t| t.get("content"))
+    .and_then(|t| t.as_str())
+    .unwrap_or("Untitled")
+    .to_string();
 
-    // The duration is the thumbnail's bottom-corner badge ("3:39"), which lives under one of
-    // two overlay shapes depending on the page variant.
-    let duration_ms = lockup
-        .get("contentImage")
-        .and_then(|c| c.get("thumbnailViewModel"))
-        .and_then(|t| t.get("overlays"))
-        .and_then(|o| o.as_array())
-        .and_then(|overlays| {
-            overlays.iter().find_map(|overlay| {
-                let badges = overlay
-                    .get("thumbnailBottomOverlayViewModel")
-                    .and_then(|b| b.get("badges"))
-                    .or_else(|| {
-                        overlay
-                            .get("thumbnailOverlayBadgeViewModel")
-                            .and_then(|b| b.get("thumbnailBadges"))
-                    })?
-                    .as_array()?;
-                badges.iter().find_map(|badge| {
-                    badge
-                        .get("thumbnailBadgeViewModel")
-                        .and_then(|b| b.get("text"))
-                        .and_then(|t| t.as_str())
-                        .and_then(parse_duration_text)
-                })
-            })
-        });
+  // The duration is the thumbnail's bottom-corner badge ("3:39"), which lives under one of
+  // two overlay shapes depending on the page variant.
+  let duration_ms = lockup
+    .get("contentImage")
+    .and_then(|c| c.get("thumbnailViewModel"))
+    .and_then(|t| t.get("overlays"))
+    .and_then(|o| o.as_array())
+    .and_then(|overlays| {
+      overlays.iter().find_map(|overlay| {
+        let badges = overlay
+          .get("thumbnailBottomOverlayViewModel")
+          .and_then(|b| b.get("badges"))
+          .or_else(|| {
+            overlay
+              .get("thumbnailOverlayBadgeViewModel")
+              .and_then(|b| b.get("thumbnailBadges"))
+          })?
+          .as_array()?;
+        badges.iter().find_map(|badge| {
+          badge
+            .get("thumbnailBadgeViewModel")
+            .and_then(|b| b.get("text"))
+            .and_then(|t| t.as_str())
+            .and_then(parse_duration_text)
+        })
+      })
+    });
 
-    Some(YouTubeVideo {
-        video_id,
-        title,
-        position,
-        duration_ms,
-    })
+  Some(YouTubeVideo {
+    video_id,
+    title,
+    position,
+    duration_ms,
+  })
 }
 
 /// Parse a "H:MM:SS" / "M:SS" badge into milliseconds. Non-duration badges ("LIVE",
 /// "SHORTS") yield `None`.
 pub(crate) fn parse_duration_text(text: &str) -> Option<i64> {
-    let parts: Vec<&str> = text.trim().split(':').collect();
-    if parts.is_empty() || parts.len() > 3 {
-        return None;
-    }
-    let mut seconds: i64 = 0;
-    for part in parts {
-        let value: i64 = part.parse().ok()?;
-        seconds = seconds * 60 + value;
-    }
-    Some(seconds * 1000)
+  let parts: Vec<&str> = text.trim().split(':').collect();
+  if parts.is_empty() || parts.len() > 3 {
+    return None;
+  }
+  let mut seconds: i64 = 0;
+  for part in parts {
+    let value: i64 = part.parse().ok()?;
+    seconds = seconds * 60 + value;
+  }
+  Some(seconds * 1000)
 }
 
 /// Extract `(title, owner)` from a playlist page's header, which is either the legacy
 /// `playlistHeaderRenderer` or the newer `pageHeaderRenderer` view-model tree.
 pub(crate) fn parse_playlist_header(
-    yt_data: &serde_json::Value,
+  yt_data: &serde_json::Value,
 ) -> (Option<String>, Option<String>) {
-    let header = yt_data.get("header");
+  let header = yt_data.get("header");
 
-    if let Some(h) = header.and_then(|h| h.get("playlistHeaderRenderer")) {
-        let title = h
-            .get("title")
-            .and_then(|t| t.get("simpleText"))
-            .and_then(|s| s.as_str())
-            .map(|s| s.to_string());
-        let owner = h
-            .get("ownerText")
-            .and_then(|o| o.get("runs"))
-            .and_then(|r| r.as_array())
-            .and_then(|arr| arr.first())
-            .and_then(|r| r.get("text"))
-            .and_then(|t| t.as_str())
-            .map(|s| s.to_string());
-        return (title, owner);
-    }
+  if let Some(h) = header.and_then(|h| h.get("playlistHeaderRenderer")) {
+    let title = h
+      .get("title")
+      .and_then(|t| t.get("simpleText"))
+      .and_then(|s| s.as_str())
+      .map(|s| s.to_string());
+    let owner = h
+      .get("ownerText")
+      .and_then(|o| o.get("runs"))
+      .and_then(|r| r.as_array())
+      .and_then(|arr| arr.first())
+      .and_then(|r| r.get("text"))
+      .and_then(|t| t.as_str())
+      .map(|s| s.to_string());
+    return (title, owner);
+  }
 
-    if let Some(h) = header.and_then(|h| h.get("pageHeaderRenderer")) {
-        let title = h
-            .get("pageTitle")
-            .and_then(|t| t.as_str())
-            .map(|s| s.to_string());
-        // The owner is the avatar-stack row of the header's metadata.
-        let owner = h
-            .get("content")
-            .and_then(|c| c.get("pageHeaderViewModel"))
-            .and_then(|v| v.get("metadata"))
-            .and_then(|m| m.get("contentMetadataViewModel"))
-            .and_then(|m| m.get("metadataRows"))
-            .and_then(|r| r.as_array())
-            .and_then(|rows| {
-                rows.iter().find_map(|row| {
-                    row.get("metadataParts")?
-                        .as_array()?
-                        .iter()
-                        .find_map(|part| {
-                            part.get("avatarStack")?
-                                .get("avatarStackViewModel")?
-                                .get("text")?
-                                .get("content")?
-                                .as_str()
-                                .map(|s| s.to_string())
-                        })
-                })
-            });
-        return (title, owner);
-    }
-
-    (None, None)
-}
-
-pub(super) async fn fetch_youtube(client: &reqwest::Client, url: &str) -> Result<FetchedMetadata> {
-    let parsed = parse_youtube_url(url);
-
-    // Playlist path (including video+playlist URLs — treat as playlist)
-    if let Some(ref playlist_id) = parsed.playlist_id {
-        return fetch_youtube_playlist(client, playlist_id).await;
-    }
-
-    // Single video path
-    if let Some(ref video_id) = parsed.video_id {
-        return fetch_youtube_single(client, url, video_id).await;
-    }
-
-    Err(CrateError::Discovery(
-        "Could not parse YouTube URL: no video or playlist ID found".into(),
-    ))
-}
-
-async fn fetch_youtube_playlist(
-    client: &reqwest::Client,
-    playlist_id: &str,
-) -> Result<FetchedMetadata> {
-    let playlist_url = format!("https://www.youtube.com/playlist?list={playlist_id}");
-    let html = client
-        .get(&playlist_url)
-        .header("Cookie", YT_CONSENT_COOKIE)
-        .send()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to fetch YouTube playlist page: {e}")))?
-        .text()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to read YouTube playlist page: {e}")))?;
-
-    let yt_data = parse_yt_initial_data(&html).ok_or_else(|| {
-        CrateError::Discovery("Could not find ytInitialData on playlist page".into())
-    })?;
-
-    let (title, artist) = parse_playlist_header(&yt_data);
-    let videos = extract_playlist_videos(&yt_data);
-
-    // Use first video's thumbnail as artwork
-    let artwork_url = videos
-        .first()
-        .map(|v| format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", v.video_id));
-
-    let raw_tracks: Vec<FetchedTrack> = videos
-        .into_iter()
-        .enumerate()
-        .map(|(idx, v)| FetchedTrack {
-            name: v.title,
-            position: if v.position > 0 {
-                v.position
-            } else {
-                (idx + 1) as i32
-            },
-            duration_ms: v.duration_ms,
-            video_id: Some(v.video_id),
-            url: None,
+  if let Some(h) = header.and_then(|h| h.get("pageHeaderRenderer")) {
+    let title = h
+      .get("pageTitle")
+      .and_then(|t| t.as_str())
+      .map(|s| s.to_string());
+    // The owner is the avatar-stack row of the header's metadata.
+    let owner = h
+      .get("content")
+      .and_then(|c| c.get("pageHeaderViewModel"))
+      .and_then(|v| v.get("metadata"))
+      .and_then(|m| m.get("contentMetadataViewModel"))
+      .and_then(|m| m.get("metadataRows"))
+      .and_then(|r| r.as_array())
+      .and_then(|rows| {
+        rows.iter().find_map(|row| {
+          row
+            .get("metadataParts")?
+            .as_array()?
+            .iter()
+            .find_map(|part| {
+              part
+                .get("avatarStack")?
+                .get("avatarStackViewModel")?
+                .get("text")?
+                .get("content")?
+                .as_str()
+                .map(|s| s.to_string())
+            })
         })
-        .collect();
+      });
+    return (title, owner);
+  }
 
-    let (tracks, inferred_artist) = strip_youtube_track_artist_prefix(raw_tracks, &artist);
-    let artist = artist.or(inferred_artist);
-
-    Ok(FetchedMetadata {
-        artist,
-        title,
-        position,
-        duration_ms,
-      })
-    })
-    .collect()
+  (None, None)
 }
 
 pub(super) async fn fetch_youtube(client: &reqwest::Client, url: &str) -> Result<FetchedMetadata> {
@@ -757,26 +687,7 @@ async fn fetch_youtube_playlist(
   let yt_data = parse_yt_initial_data(&html)
     .ok_or_else(|| CrateError::Discovery("Could not find ytInitialData on playlist page".into()))?;
 
-  // Extract playlist metadata from header
-  let header = yt_data
-    .get("header")
-    .and_then(|h| h.get("playlistHeaderRenderer"));
-
-  let title = header
-    .and_then(|h| h.get("title"))
-    .and_then(|t| t.get("simpleText"))
-    .and_then(|s| s.as_str())
-    .map(|s| s.to_string());
-
-  let artist = header
-    .and_then(|h| h.get("ownerText"))
-    .and_then(|o| o.get("runs"))
-    .and_then(|r| r.as_array())
-    .and_then(|arr| arr.first())
-    .and_then(|r| r.get("text"))
-    .and_then(|t| t.as_str())
-    .map(|s| s.to_string());
-
+  let (title, artist) = parse_playlist_header(&yt_data);
   let videos = extract_playlist_videos(&yt_data);
 
   // Use first video's thumbnail as artwork
@@ -796,6 +707,7 @@ async fn fetch_youtube_playlist(
       },
       duration_ms: v.duration_ms,
       video_id: Some(v.video_id),
+      url: None,
     })
     .collect();
 
@@ -829,31 +741,30 @@ fn strip_youtube_track_artist_prefix(
     return (tracks, None);
   }
 
-    // First try: strip the existing playlist artist prefix (mirrors SoundCloud playlist logic)
-    if let Some(ref a) = existing_artist {
-        let prefix = format!("{a} - ");
-        let stripped: Vec<FetchedTrack> = tracks
-            .iter()
-            .map(|t| FetchedTrack {
-                name: t
-                    .name
-                    .strip_prefix(&prefix)
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| t.name.clone()),
-                position: t.position,
-                duration_ms: t.duration_ms,
-                video_id: t.video_id.clone(),
-                url: t.url.clone(),
-            })
-            .collect();
-        let stripped_count = stripped
-            .iter()
-            .zip(tracks.iter())
-            .filter(|(s, o)| s.name != o.name)
-            .count();
-        if stripped_count * 2 >= tracks.len() {
-            return (stripped, None);
-        }
+  // First try: strip the existing playlist artist prefix (mirrors SoundCloud playlist logic)
+  if let Some(ref a) = existing_artist {
+    let prefix = format!("{a} - ");
+    let stripped: Vec<FetchedTrack> = tracks
+      .iter()
+      .map(|t| FetchedTrack {
+        name: t
+          .name
+          .strip_prefix(&prefix)
+          .map(|s| s.to_string())
+          .unwrap_or_else(|| t.name.clone()),
+        position: t.position,
+        duration_ms: t.duration_ms,
+        video_id: t.video_id.clone(),
+        url: t.url.clone(),
+      })
+      .collect();
+    let stripped_count = stripped
+      .iter()
+      .zip(tracks.iter())
+      .filter(|(s, o)| s.name != o.name)
+      .count();
+    if stripped_count * 2 >= tracks.len() {
+      return (stripped, None);
     }
   }
 
@@ -918,18 +829,30 @@ async fn fetch_youtube_single(
 
   let artwork_url = Some(format!("https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"));
 
-    // Get duration from youtubei player API
-    let duration_ms = match fetch_yt_player_response(video_id).await {
-        Ok(player) => player
-            .get("videoDetails")
-            .and_then(|vd| vd.get("lengthSeconds"))
-            .and_then(|l| l.as_str())
-            .and_then(|s| s.parse::<i64>().ok())
-            .map(|s| s * 1000),
-        Err(e) => {
-            log::warn!("Failed to get YouTube video duration: {e}");
-            None
-        }
+  // Get duration from youtubei player API
+  let duration_ms = match fetch_yt_player_response(video_id).await {
+    Ok(player) => player
+      .get("videoDetails")
+      .and_then(|vd| vd.get("lengthSeconds"))
+      .and_then(|l| l.as_str())
+      .and_then(|s| s.parse::<i64>().ok())
+      .map(|s| s * 1000),
+    Err(e) => {
+      log::warn!("Failed to get YouTube video duration: {e}");
+      None
+    }
+  };
+
+  // Parse "Artist - Title" from the video title (mirrors SoundCloud single handling).
+  // When found, the parsed artist takes precedence over the channel name.
+  let (artist, track_name, title) =
+    match title.as_deref().and_then(|t| t.find(" - ").map(|i| (t, i))) {
+      Some((t, idx)) => (
+        Some(t[..idx].to_string()),
+        Some(t[idx + 3..].to_string()),
+        Some(t[idx + 3..].to_string()),
+      ),
+      None => (artist, title.clone(), title),
     };
 
   let tracks = if let Some(name) = track_name {
@@ -938,32 +861,21 @@ async fn fetch_youtube_single(
       position: 1,
       duration_ms,
       video_id: Some(video_id.to_string()),
+      url: None,
     }]
   } else {
     Vec::new()
   };
 
-    let tracks = if let Some(name) = track_name {
-        vec![FetchedTrack {
-            name,
-            position: 1,
-            duration_ms,
-            video_id: Some(video_id.to_string()),
-            url: None,
-        }]
-    } else {
-        Vec::new()
-    };
-
-    Ok(FetchedMetadata {
-        artist,
-        title,
-        label: None,
-        release_date: None,
-        artwork_url,
-        tracks,
-        source_type: String::new(),
-        parent_url: None,
-        parent_album_title: None,
-    })
+  Ok(FetchedMetadata {
+    artist,
+    title,
+    label: None,
+    release_date: None,
+    artwork_url,
+    tracks,
+    source_type: String::new(),
+    parent_url: None,
+    parent_album_title: None,
+  })
 }

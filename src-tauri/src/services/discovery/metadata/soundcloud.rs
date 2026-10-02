@@ -86,37 +86,26 @@ pub(super) fn parse_sc_hydration(html: &str) -> Option<FetchedMetadata> {
       position: 1,
       duration_ms,
       video_id: None,
+      url: sound_data
+        .get("permalink_url")
+        .and_then(|u| u.as_str())
+        .map(|s| s.to_string()),
     }]
   } else {
     Vec::new()
   };
 
-    let tracks = if let Some(name) = title.clone() {
-        vec![FetchedTrack {
-            name,
-            position: 1,
-            duration_ms,
-            video_id: None,
-            url: sound_data
-                .get("permalink_url")
-                .and_then(|u| u.as_str())
-                .map(|s| s.to_string()),
-        }]
-    } else {
-        Vec::new()
-    };
-
-    Some(FetchedMetadata {
-        artist,
-        title,
-        label,
-        release_date,
-        artwork_url,
-        tracks,
-        source_type: String::new(),
-        parent_url: None,
-        parent_album_title: None,
-    })
+  Some(FetchedMetadata {
+    artist,
+    title,
+    label,
+    release_date,
+    artwork_url,
+    tracks,
+    source_type: String::new(),
+    parent_url: None,
+    parent_album_title: None,
+  })
 }
 
 /// Check if a SoundCloud URL is a set/playlist URL
@@ -196,47 +185,40 @@ pub(super) fn parse_sc_playlist_hydration(html: &str) -> Option<FetchedMetadata>
     .and_then(|a| a.as_str())
     .map(|s| s.replace("-large", "-t500x500"));
 
-    let artwork_url = playlist_data
-        .get("artwork_url")
-        .and_then(|a| a.as_str())
-        .map(|s| s.replace("-large", "-t500x500"));
-
-    // Extract tracks from the playlist
-    let tracks = playlist_data
-        .get("tracks")
-        .and_then(|t| t.as_array())
-        .map(|track_arr| {
-            track_arr
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, track)| {
-                    let raw_name = track.get("title").and_then(|t| t.as_str())?.to_string();
-                    let name = if !is_compilation(&artist) {
-                        artist
-                            .as_ref()
-                            .and_then(|a| {
-                                let prefix = format!("{a} - ");
-                                raw_name.strip_prefix(&prefix).map(|s| s.to_string())
-                            })
-                            .unwrap_or(raw_name)
-                    } else {
-                        raw_name
-                    };
-                    let duration_ms = track.get("duration").and_then(|d| d.as_i64());
-                    Some(FetchedTrack {
-                        name,
-                        position: (idx + 1) as i32,
-                        duration_ms,
-                        video_id: None,
-                        // SoundCloud hydrates only the first handful of set tracks fully; the
-                        // id-stub rest stay None and heal on a later metadata refresh.
-                        url: track
-                            .get("permalink_url")
-                            .and_then(|u| u.as_str())
-                            .map(|s| s.to_string()),
-                    })
-                })
-                .collect::<Vec<_>>()
+  // Extract tracks from the playlist
+  let tracks = playlist_data
+    .get("tracks")
+    .and_then(|t| t.as_array())
+    .map(|track_arr| {
+      track_arr
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, track)| {
+          let raw_name = track.get("title").and_then(|t| t.as_str())?.to_string();
+          let name = if !is_compilation(&artist) {
+            artist
+              .as_ref()
+              .and_then(|a| {
+                let prefix = format!("{a} - ");
+                raw_name.strip_prefix(&prefix).map(|s| s.to_string())
+              })
+              .unwrap_or(raw_name)
+          } else {
+            raw_name
+          };
+          let duration_ms = track.get("duration").and_then(|d| d.as_i64());
+          Some(FetchedTrack {
+            name,
+            position: (idx + 1) as i32,
+            duration_ms,
+            video_id: None,
+            // SoundCloud hydrates only the first handful of set tracks fully; the
+            // id-stub rest stay None and heal on a later metadata refresh.
+            url: track
+              .get("permalink_url")
+              .and_then(|u| u.as_str())
+              .map(|s| s.to_string()),
+          })
         })
         .collect::<Vec<_>>()
     })
@@ -390,22 +372,22 @@ pub(super) async fn scan_soundcloud_page(
 ) -> Result<(Vec<ScannedRelease>, Option<String>, Option<String>)> {
   let client_id = crate::services::discovery::streams::resolve_sc_client_id(client).await?;
 
-    // Resolve the profile URL to a user object.
-    let resolve_resp = client
-        .get("https://api-v2.soundcloud.com/resolve")
-        .query(&[("url", url), ("client_id", client_id.as_str())])
-        .send()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to resolve SoundCloud profile: {e}")))?;
-    if resolve_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(CrateError::Discovery(
-            "SoundCloud rate limit exceeded (429)".into(),
-        ));
-    }
-    let user: serde_json::Value = resolve_resp
-        .json()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to parse SoundCloud profile: {e}")))?;
+  // Resolve the profile URL to a user object.
+  let resolve_resp = client
+    .get("https://api-v2.soundcloud.com/resolve")
+    .query(&[("url", url), ("client_id", client_id.as_str())])
+    .send()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Failed to resolve SoundCloud profile: {e}")))?;
+  if resolve_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+    return Err(CrateError::Discovery(
+      "SoundCloud rate limit exceeded (429)".into(),
+    ));
+  }
+  let user: serde_json::Value = resolve_resp
+    .json()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Failed to parse SoundCloud profile: {e}")))?;
 
   if user.get("kind").and_then(|k| k.as_str()) != Some("user") {
     return Err(CrateError::Discovery(
@@ -427,7 +409,7 @@ pub(super) async fn scan_soundcloud_page(
     .map(|s| s.replace("-large", "-t500x500"));
 
   // Own uploads only (this endpoint excludes reposts).
-  let resp: serde_json::Value = client
+  let tracks_resp = client
     .get(format!(
       "https://api-v2.soundcloud.com/users/{user_id}/tracks"
     ))
@@ -438,7 +420,13 @@ pub(super) async fn scan_soundcloud_page(
     ])
     .send()
     .await
-    .map_err(|e| CrateError::Discovery(format!("Failed to fetch SoundCloud tracks: {e}")))?
+    .map_err(|e| CrateError::Discovery(format!("Failed to fetch SoundCloud tracks: {e}")))?;
+  if tracks_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+    return Err(CrateError::Discovery(
+      "SoundCloud rate limit exceeded (429)".into(),
+    ));
+  }
+  let resp: serde_json::Value = tracks_resp
     .json()
     .await
     .map_err(|e| CrateError::Discovery(format!("Failed to parse SoundCloud tracks: {e}")))?;
@@ -463,65 +451,20 @@ pub(super) async fn scan_soundcloud_page(
         .get("artwork_url")
         .and_then(|a| a.as_str())
         .map(|s| s.replace("-large", "-t500x500"));
-
-    // Own uploads only (this endpoint excludes reposts).
-    let tracks_resp = client
-        .get(format!(
-            "https://api-v2.soundcloud.com/users/{user_id}/tracks"
-        ))
-        .query(&[
-            ("client_id", client_id.as_str()),
-            ("limit", "50"),
-            ("linked_partitioning", "1"),
-        ])
-        .send()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to fetch SoundCloud tracks: {e}")))?;
-    if tracks_resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(CrateError::Discovery(
-            "SoundCloud rate limit exceeded (429)".into(),
-        ));
-    }
-    let resp: serde_json::Value = tracks_resp
-        .json()
-        .await
-        .map_err(|e| CrateError::Discovery(format!("Failed to parse SoundCloud tracks: {e}")))?;
-
-    let mut releases = Vec::new();
-    if let Some(items) = resp.get("collection").and_then(|c| c.as_array()) {
-        for item in items {
-            let Some(permalink) = item.get("permalink_url").and_then(|u| u.as_str()) else {
-                continue;
-            };
-            let title = item
-                .get("title")
-                .and_then(|t| t.as_str())
-                .map(|s| s.to_string());
-            let artist = item
-                .get("user")
-                .and_then(|u| u.get("username"))
-                .and_then(|n| n.as_str())
-                .map(|s| s.to_string())
-                .or_else(|| page_name.clone());
-            let artwork_url = item
-                .get("artwork_url")
-                .and_then(|a| a.as_str())
-                .map(|s| s.replace("-large", "-t500x500"));
-            let release_date = item
-                .get("display_date")
-                .or_else(|| item.get("created_at"))
-                .and_then(|d| d.as_str())
-                .and_then(|s| s.get(..10))
-                .map(|s| s.to_string());
-            releases.push(ScannedRelease {
-                url: permalink.to_string(),
-                artist,
-                title,
-                artwork_url,
-                release_date,
-                already_exists: false,
-            });
-        }
+      let release_date = item
+        .get("display_date")
+        .or_else(|| item.get("created_at"))
+        .and_then(|d| d.as_str())
+        .and_then(|s| s.get(..10))
+        .map(|s| s.to_string());
+      releases.push(ScannedRelease {
+        url: permalink.to_string(),
+        artist,
+        title,
+        artwork_url,
+        release_date,
+        already_exists: false,
+      });
     }
   }
 

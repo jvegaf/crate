@@ -39,11 +39,11 @@ const GC_GRACE: Duration = Duration::from_secs(3600);
 /// merge brought down from peers (so the runtime can tell the UI to reload them — a push
 /// merges the remote union before uploading, so "Sync now" must refresh too).
 pub struct PushOutcome {
-    pub overrides: Vec<OverrideEvent>,
-    pub merged_buckets: Vec<String>,
-    /// The buckets the successful attempt uploaded, with their uncompressed
-    /// serialized size in bytes (for the sync diagnostics log).
-    pub uploaded: Vec<(String, usize)>,
+  pub overrides: Vec<OverrideEvent>,
+  pub merged_buckets: Vec<String>,
+  /// The buckets the successful attempt uploaded, with their uncompressed
+  /// serialized size in bytes (for the sync diagnostics log).
+  pub uploaded: Vec<(String, usize)>,
 }
 
 /// Push all local changes to the cloud. Safe to call repeatedly; clears
@@ -124,6 +124,7 @@ pub async fn push(
         return Ok(PushOutcome {
           overrides,
           merged_buckets,
+          uploaded: prepared.uploaded_summary,
         });
       }
       Err(CrateError::CloudSyncConflict) => {
@@ -131,7 +132,13 @@ pub async fn push(
           "cloud_sync: push CAS conflict (attempt {}/{MAX_RETRIES}), retrying",
           attempt + 1
         );
-        tokio::time::sleep(backoff).await;
+        // Jittered so two devices pushing in lockstep de-synchronize instead of
+        // colliding on every retry.
+        let jitter = {
+          use rand::Rng;
+          rand::rng().random_range(0.5..1.5)
+        };
+        tokio::time::sleep(backoff.mul_f64(jitter)).await;
         backoff = (backoff * 2).min(Duration::from_secs(3));
         continue;
       }
@@ -139,92 +146,9 @@ pub async fn push(
     }
   }
 
-    let store = backend.manifest();
-    let blobs = backend.blobs();
-    let mut backoff = Duration::from_millis(200);
-    let mut overrides = Vec::new();
-    let mut merged_buckets = Vec::new();
-
-    for attempt in 0..MAX_RETRIES {
-        let (remote_manifest, expected) = match store.read(session).await? {
-            Some((m, e)) => (Some(m), Some(e)),
-            None => (None, None),
-        };
-
-        // Pull-then-merge remote-ahead buckets so our write carries the union. A re-merge
-        // of already-applied rows is a no-op, so retries don't double-count overrides (the
-        // runtime dedupes the bucket names before signaling the UI).
-        if let Some(rm) = &remote_manifest {
-            let outcome = pull::pull_and_merge(&conn, &blobs, session, rm).await?;
-            overrides.extend(outcome.overrides);
-            merged_buckets.extend(outcome.buckets);
-        }
-
-        // Recompute the local manifest + serialize the changed buckets (all sync work
-        // happens under the guard; the guard is dropped before any upload). This also
-        // snapshots the dirty rows this attempt claims (see `PreparedPush`).
-        let prepared = prepare_uploads(&conn, session, device_id, remote_manifest.as_ref())?;
-
-        for (key, bytes) in &prepared.uploads {
-            blobs
-                .upload(
-                    session,
-                    key,
-                    Bytes::from(bytes.clone()),
-                    "application/x-ndjson",
-                )
-                .await?;
-        }
-
-        match store
-            .write(
-                session,
-                &prepared.manifest,
-                expected.as_ref(),
-                &prepared.gc_enqueue,
-            )
-            .await
-        {
-            Ok(_) => {
-                // Clear ONLY the rows this snapshot claimed. A mutation that marked a
-                // bucket dirty during the push has a newer `(bucket, marked_at)` pair
-                // that is absent here, so it survives to trigger the next push instead
-                // of being silently wiped.
-                let guard = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-                for (bucket, marked_at) in &prepared.claimed_dirty {
-                    guard.execute(
-                        "DELETE FROM sync_dirty_buckets WHERE bucket = ?1 AND marked_at = ?2",
-                        rusqlite::params![bucket, marked_at],
-                    )?;
-                }
-                return Ok(PushOutcome {
-                    overrides,
-                    merged_buckets,
-                    uploaded: prepared.uploaded_summary,
-                });
-            }
-            Err(CrateError::CloudSyncConflict) => {
-                log::info!(
-                    "cloud_sync: push CAS conflict (attempt {}/{MAX_RETRIES}), retrying",
-                    attempt + 1
-                );
-                // Jittered so two devices pushing in lockstep de-synchronize instead of
-                // colliding on every retry.
-                let jitter = {
-                    use rand::Rng;
-                    rand::rng().random_range(0.5..1.5)
-                };
-                tokio::time::sleep(backoff.mul_f64(jitter)).await;
-                backoff = (backoff * 2).min(Duration::from_secs(3));
-                continue;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // Transient by classification: the claimed dirty rows survive an aborted push, so
-    // the debounce loop retries automatically — this is contention, not a dead end.
-    Err(CrateError::CloudSyncConflict)
+  // Transient by classification: the claimed dirty rows survive an aborted push, so
+  // the debounce loop retries automatically — this is contention, not a dead end.
+  Err(CrateError::CloudSyncConflict)
 }
 
 /// A snapshot taken for one push attempt: the manifest to write, the blobs to upload,
@@ -233,12 +157,12 @@ pub async fn push(
 /// marks a bucket dirty *during* the push (after this snapshot) keeps its trigger and
 /// drives the next push rather than being silently cleared.
 struct PreparedPush {
-    manifest: Manifest,
-    uploads: Vec<(String, Vec<u8>)>,
-    gc_enqueue: Vec<GcEntry>,
-    claimed_dirty: Vec<(String, String)>,
-    /// Plain bucket names + uncompressed sizes of `uploads` (diagnostics).
-    uploaded_summary: Vec<(String, usize)>,
+  manifest: Manifest,
+  uploads: Vec<(String, Vec<u8>)>,
+  gc_enqueue: Vec<GcEntry>,
+  claimed_dirty: Vec<(String, String)>,
+  /// Plain bucket names + uncompressed sizes of `uploads` (diagnostics).
+  uploaded_summary: Vec<(String, usize)>,
 }
 
 /// Recompute the local manifest and serialize every bucket that differs from `remote`.
@@ -250,47 +174,47 @@ fn prepare_uploads(
   device_id: &str,
   remote: Option<&Manifest>,
 ) -> Result<PreparedPush> {
-    let guard = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-    let local = compute_local_manifest(&guard, device_id)?;
-    // A scoped (mobile) node's local manifest omits the library buckets; carry the
-    // remote's entries for them forward so the shared manifest write never drops a peer's
-    // library buckets (which would orphan their blobs). Preserving *before* the diff keeps
-    // those entries equal to the remote, so they are neither uploaded nor downloaded.
-    // No-op on desktop (full scope), where `local` already has every bucket.
-    #[cfg(feature = "mobile")]
-    let local = super::manifest::preserve_unmanaged(local, remote);
-    let base = remote
-        .cloned()
-        .unwrap_or_else(|| Manifest::empty(device_id));
-    let diff = diff_manifest(&local, &base);
+  let guard = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+  let local = compute_local_manifest(&guard, device_id)?;
+  // A scoped (mobile) node's local manifest omits the library buckets; carry the
+  // remote's entries for them forward so the shared manifest write never drops a peer's
+  // library buckets (which would orphan their blobs). Preserving *before* the diff keeps
+  // those entries equal to the remote, so they are neither uploaded nor downloaded.
+  // No-op on desktop (full scope), where `local` already has every bucket.
+  #[cfg(feature = "mobile")]
+  let local = super::manifest::preserve_unmanaged(local, remote);
+  let base = remote
+    .cloned()
+    .unwrap_or_else(|| Manifest::empty(device_id));
+  let diff = diff_manifest(&local, &base);
 
-    let mut uploads = Vec::new();
-    let mut uploaded_summary = Vec::new();
-    let mut gc_enqueue = Vec::new();
-    let delete_after = SystemTime::now() + GC_GRACE;
+  let mut uploads = Vec::new();
+  let mut uploaded_summary = Vec::new();
+  let mut gc_enqueue = Vec::new();
+  let delete_after = SystemTime::now() + GC_GRACE;
 
-    for name in &diff.to_upload {
-        let bucket = Bucket::parse(name)
-            .ok_or_else(|| CrateError::CloudSync(format!("bad bucket {name}")))?;
-        let bytes = rows::serialize_bucket(&guard, &bucket)?;
-        // Soft observability guard only — a hard local block would brick sync for the
-        // account permanently; an oversized upload surfaces as the server's 413 instead.
-        if bytes.len() > 64 * 1024 * 1024 {
-            log::warn!(
-                "cloud_sync: bucket {name} serialized to {} MiB (uncompressed) — approaching upload limits",
-                bytes.len() / (1024 * 1024)
-            );
-        }
-        uploaded_summary.push((name.clone(), bytes.len()));
-        let hash = rows::bucket_hash(&bytes);
-        // Full storage key (BucketEntry.object_key is relative — see manifest.rs).
-        let key = format!(
-            "users/{}/vault/{}-{}.jsonl.gz",
-            session.uid,
-            bucket.as_str(),
-            hash
-        );
-        uploads.push((key, bytes));
+  for name in &diff.to_upload {
+    let bucket =
+      Bucket::parse(name).ok_or_else(|| CrateError::CloudSync(format!("bad bucket {name}")))?;
+    let bytes = rows::serialize_bucket(&guard, &bucket)?;
+    // Soft observability guard only — a hard local block would brick sync for the
+    // account permanently; an oversized upload surfaces as the server's 413 instead.
+    if bytes.len() > 64 * 1024 * 1024 {
+      log::warn!(
+        "cloud_sync: bucket {name} serialized to {} MiB (uncompressed) — approaching upload limits",
+        bytes.len() / (1024 * 1024)
+      );
+    }
+    uploaded_summary.push((name.clone(), bytes.len()));
+    let hash = rows::bucket_hash(&bytes);
+    // Full storage key (BucketEntry.object_key is relative — see manifest.rs).
+    let key = format!(
+      "users/{}/vault/{}-{}.jsonl.gz",
+      session.uid,
+      bucket.as_str(),
+      hash
+    );
+    uploads.push((key, bytes));
 
     // Enqueue the prior blob for GC when this bucket actually changed key.
     if let (Some(prev), Some(now)) = (
@@ -317,13 +241,13 @@ fn prepare_uploads(
     rows
   };
 
-    Ok(PreparedPush {
-        manifest: local,
-        uploads,
-        gc_enqueue,
-        claimed_dirty,
-        uploaded_summary,
-    })
+  Ok(PreparedPush {
+    manifest: local,
+    uploads,
+    gc_enqueue,
+    claimed_dirty,
+    uploaded_summary,
+  })
 }
 
 #[cfg(test)]

@@ -36,24 +36,24 @@ const REFRESH_SKEW: Duration = Duration::from_secs(5 * 60);
 /// `"apple.com"`) + the optional raw OIDC `nonce` directly rather than an
 /// [`IdentityProvider`], so the native Apple path — which has no OAuth-shaped provider — can reuse it.
 pub(super) async fn finish_sign_in(
-    backend: &Arc<dyn CloudBackend>,
-    firebase_provider_id: &str,
-    nonce: Option<&str>,
-    conn: Arc<Mutex<Connection>>,
-    id_token: &str,
+  backend: &Arc<dyn CloudBackend>,
+  firebase_provider_id: &str,
+  nonce: Option<&str>,
+  conn: Arc<Mutex<Connection>>,
+  id_token: &str,
 ) -> Result<AuthSession> {
-    let session = backend
-        .auth()
-        .sign_in_with_idp(firebase_provider_id, id_token, nonce)
-        .await?;
+  let session = backend
+    .auth()
+    .sign_in_with_idp(firebase_provider_id, id_token, nonce)
+    .await?;
 
-    {
-        let guard = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-        token_store::store_refresh_token(&guard, &session.refresh_token)?;
-    }
+  {
+    let guard = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    token_store::store_refresh_token(&guard, &session.refresh_token)?;
+  }
 
-    persist_profile(&conn, &session)?;
-    Ok(session)
+  persist_profile(&conn, &session)?;
+  Ok(session)
 }
 
 /// Run the full desktop sign-in: loopback OAuth for `provider` → Firebase `signInWithIdp` →
@@ -73,28 +73,16 @@ pub async fn sign_in(
     open_url,
   )
   .await?;
-
-  let session = backend
-    .auth()
-    .sign_in_with_idp(provider.firebase_provider_id(), &id_token)
-    .await?;
-    finish_sign_in(
-        backend,
-        provider.firebase_provider_id(),
-        None,
-        conn,
-        &id_token,
-    )
-    .await
+  finish_sign_in(
+    backend,
+    provider.firebase_provider_id(),
+    None,
+    conn,
+    &id_token,
+  )
+  .await
 }
 
-  {
-    let guard = conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-    token_store::store_refresh_token(&guard, &session.refresh_token)?;
-  }
-
-  persist_profile(&conn, &session)?;
-  Ok(session)
 /// Complete a native mobile sign-in: exchange the authorization `code` (captured by the native
 /// `ASWebAuthenticationSession` / Custom Tabs flow on the frontend) + PKCE `verifier` for the
 /// provider ID token, then run the same Firebase + persistence tail as desktop. `redirect_uri`
@@ -102,24 +90,24 @@ pub async fn sign_in(
 /// secret).
 #[cfg(feature = "mobile")]
 pub async fn complete_sign_in_with_code(
-    backend: &Arc<dyn CloudBackend>,
-    provider: &dyn IdentityProvider,
-    conn: Arc<Mutex<Connection>>,
-    client_id: &str,
-    redirect_uri: &str,
-    code: &str,
-    verifier: &str,
+  backend: &Arc<dyn CloudBackend>,
+  provider: &dyn IdentityProvider,
+  conn: Arc<Mutex<Connection>>,
+  client_id: &str,
+  redirect_uri: &str,
+  code: &str,
+  verifier: &str,
 ) -> Result<AuthSession> {
-    let id_token =
-        oauth_flow::complete(provider, client_id, None, redirect_uri, code, verifier).await?;
-    finish_sign_in(
-        backend,
-        provider.firebase_provider_id(),
-        None,
-        conn,
-        &id_token,
-    )
-    .await
+  let id_token =
+    oauth_flow::complete(provider, client_id, None, redirect_uri, code, verifier).await?;
+  finish_sign_in(
+    backend,
+    provider.firebase_provider_id(),
+    None,
+    conn,
+    &id_token,
+  )
+  .await
 }
 
 /// Sign out: best-effort backend sign-out, then clear the stored refresh token.
