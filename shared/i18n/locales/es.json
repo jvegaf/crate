@@ -473,6 +473,7 @@
 	},
 	"contextMenu": {
 		"findTrackTags": "Buscar etiquetas de la pista",
+		"beatportRecommendations": "Recomendaciones de Beatport",
 		"viewInFinder": "Ver en Finder",
 		"viewInExplorer": "Ver en Explorador",
 		"viewInFileManager": "Ver en gestor de archivos",
@@ -559,6 +560,21 @@
 		"relocate": {
 			"title": "Reubicar pista",
 			"message": "Selecciona la nueva ubicación para esta pista."
+		},
+		"beatportRecommendations": {
+			"title": "Recomendaciones de Beatport",
+			"finding": "Buscando pistas similares...",
+			"empty": "No se encontraron recomendaciones",
+			"genre": "Género",
+			"label": "Sello",
+			"bpm": "BPM",
+			"releaseDate": "Fecha de lanzamiento",
+			"openInBeatport": "Abrir en Beatport",
+			"playAllSamples": "Reproducir todas las muestras",
+			"pausePlaylist": "Pausar la lista de reproducción",
+			"previousTrack": "Pista anterior",
+			"nextTrack": "Pista siguiente",
+			"failed": "Error al cargar las recomendaciones de Beatport: {error}"
 		},
 		"albumArt": "Carátula del álbum",
 		"deviceInfo": {

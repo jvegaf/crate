@@ -474,6 +474,7 @@
 	"contextMenu": {
 		"editMetadata": "Edit Metadata...",
 		"findTrackTags": "Find track tags",
+		"beatportRecommendations": "Beatport Recommendations",
 		"viewInFinder": "View in Finder",
 		"viewInExplorer": "View in Explorer",
 		"viewInFileManager": "View in File Manager",
@@ -615,6 +616,21 @@
 		"relocate": {
 			"title": "Relocate Track",
 			"message": "Select the new location for this track."
+		},
+		"beatportRecommendations": {
+			"title": "Beatport Recommendations",
+			"finding": "Finding similar tracks...",
+			"empty": "No recommendations found",
+			"genre": "Genre",
+			"label": "Label",
+			"bpm": "BPM",
+			"releaseDate": "Release Date",
+			"openInBeatport": "Open in Beatport",
+			"playAllSamples": "Play all samples",
+			"pausePlaylist": "Pause playlist",
+			"previousTrack": "Previous track",
+			"nextTrack": "Next track",
+			"failed": "Failed to load Beatport recommendations: {error}"
 		},
 		"albumArt": "Album Art",
 		"deviceInfo": {
