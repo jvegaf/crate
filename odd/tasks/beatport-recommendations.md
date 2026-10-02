@@ -118,6 +118,19 @@ reading that prepares a write goes with the writer).
     before deciding on the remaining 13 locales).
   - Full gates: `yarn check` + `yarn lint:check` + `yarn format:check` + cargo gates;
     structural readback of every claimed file.
+- [x] **T6 — Route samples through the stream proxy** (delegated writer) — DONE 2026-10-02.
+  Evidence: fixes the WebKitGTK/libsoup remote-https fetch hang proven during the audio
+  investigation (file:///fdsrc play fine; remote https hangs). `proxy.rs` gains a validated
+  sample registry (`https://geo-samples.beatport.com` exact-host only, `DefaultHasher` key),
+  `GET /samples/:key` + OPTIONS with the discovery Range discipline (200/206, watch-channel
+  dedupe, `sample:{key}` entries in the shared memory cache), single-GET `download_sample`
+  capped by `MAX_TOTAL_SIZE`; `register_beatport_sample_streams` IPC (None per rejected URL,
+  all-None + warn if proxy state missing); modal builds `streamSrcByTrackId` after fetch with
+  direct-URL fallback (register failure can never toast/close the modal); TEMP DEBUG blocks
+  removed (modal back to `cd05d79` behavior). Gates: `cargo fmt --check` = 3 pre-existing
+  baseline files only, clippy `-D warnings` exit 0, `cargo test --features desktop` 360 passed
+  (+4 new proxy tests); `yarn check:svelte` = baseline (1 error / 2 warnings), lint 0,
+  format clean, vitest 12/12. Proxy setup is NOT desktop-gated, so the command is ungated.
 
 ## Verification (exact commands)
 
@@ -158,17 +171,43 @@ cheap and deterministic. Exact runner: `cargo test --features desktop` and the r
 - 2026-10-02: Commits authorized by user and created on `dev` as five work units:
   `6adcee1` backend command (404+) · `ffd39e4` shared types/util/wrapper (171+) ·
   `cd05d79` modal + i18n en/es + `3xl` size (352+) · `98afbd2` context-menu entry + wiring (44+) ·
-  plus this `docs(odd)` record. Every feature slice stays under the ~400-line review budget (the
-  earlier single-frontend-slice overage was resolved by slicing data layer / screen / entry point);
-  the four feature commits are upstream-pure (no scaffolding paths).
+   plus this `docs(odd)` record. Every feature slice stays under the ~400-line review budget (the
+   earlier single-frontend-slice overage was resolved by slicing data layer / screen / entry point);
+   the four feature commits are upstream-pure (no scaffolding paths).
+- 2026-10-02: T6 (proxy sample route) implemented (delegated writer): `src-tauri/src/proxy.rs`
+  (+registry, /samples route, download_sample, 4 unit tests), `src-tauri/src/lib.rs`
+  (manage ProxyServerState clone, route, command registration), `commands/recommendations.rs`
+  (+`register_beatport_sample_streams`), `shared/api/beatport.ts` (+wrapper),
+  `BeatportRecommendationsModal.svelte` (+proxy src map with direct fallback; TEMP DEBUG removed).
+  Diff ≈ 374 lines (~225 impl + ~67 tests + ~82 frontend/command); uncommitted.
+- 2026-10-02: USER REPORT — samples silent; then "works but ~20 s to first sound" after T6.
+  Evidence chain (all on the user's machine): `playbin uri=https://geo-samples…` hangs at
+  PREROLLED with no error (remote https via libsoup/souphttpsrc is broken there); `file://` and
+  `curl | fdsrc` and `playbin uri=http://127.0.0.1` all play in <0.5 s; curl of the sample is
+  HTTP/2 0.51 s / HTTP/1.1 0.52 s; mp3 decoders present (mpg123 + avdec_mp3); no proxy env vars.
+  `[sample-probe]` Rust logs: proxy served the full 1.4 MB in 648–793 ms. DevTools event probe on
+  the modal's in-DOM `<audio controls>`: `loadstart` only at ~10.2 s (playing at ~10.5 s), while a
+  detached `new Audio(same proxy URL)` reached `playing` in 477 ms. => WebKitGTK resource
+  selection for DOM media elements with `controls`+`preload` is the remaining stall; the
+  previewPlayer detached-Audio pattern is immune.
+- 2026-10-02: FINAL FIX (frontend): modal now drives ONE shared detached `Audio` (src swapped per
+  row; custom compact row player: play/pause + seek-on-click progress bar + live m:ss time,
+  highlight/playlist/transport semantics unchanged); `registerBeatportSampleStreams` awaited before
+  rows render (source is never swapped under a live element); `IconButton` gains an `xl` size
+  (64 px, user-requested double); plain arrow keys while the modal is open: Left/Right seek ±10 s,
+  Down/Up next/previous row (global shortcuts already suppressed by the
+  useAppSetup→isModalOpen chain). Rust `[sample-probe]` logs removed; three unrelated files that
+  got caught by a global `cargo fmt` (build.rs, main.rs, metadata_update.rs — machine rustfmt
+  tab_spaces=2 vs 4-space committed exceptions) reverted before committing. i18n: `seekPreview` +
+  `playbackFailed` en/es. USER CONFIRMED: samples play instantly, playlist and keys work.
+  Gates: clippy -D warnings, 360 tests, svelte-check = baseline, lint, format, vitest 12/12.
 
 ## Next step
 
-Feature complete and committed. Remaining: manual UI pass in `yarn dev` against a Beatport-URL
-track (webview sample playback + 80x80 artwork sizing are the only things no CLI gate can prove).
+Feature complete and committed (see commit ids in Progress above). Remaining: none functional.
 A future upstream proposal needs an issue number and a clean branch from `upstream/develop`
-cherry-picking `6adcee1..98afbd2` (skipping the docs commit). RDD is off in this clone, so no
-review ceremony applies unless the user re-enables it.
+cherry-picking the feature commits (backend + frontend slices, skipping docs commits). RDD is off
+in this clone, so no review ceremony applies unless the user re-enables it.
 
 ## Forecast / delivery
 
