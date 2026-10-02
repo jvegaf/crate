@@ -21,7 +21,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'yarn'
+      - name: Enable Corepack (Yarn version from packageManager)
+        run: corepack enable
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@master
@@ -178,7 +179,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'yarn'
+      - name: Enable Corepack (Yarn version from packageManager)
+        run: corepack enable
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
@@ -199,7 +201,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'yarn'
+      - name: Enable Corepack (Yarn version from packageManager)
+        run: corepack enable
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile

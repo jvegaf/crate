@@ -31,8 +31,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'yarn'
-          cache-dependency-path: docs/yarn.lock
+      - name: Enable Corepack (Yarn version from packageManager)
+        run: corepack enable
 
       - name: Install dependencies
         working-directory: docs
