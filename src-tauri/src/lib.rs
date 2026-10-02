@@ -14,7 +14,8 @@ use std::sync::Arc;
 use db::Database;
 
 /// Port of the localhost stream proxy HTTP server. Managed as Tauri state so that
-/// `fetch_preview_stream` can embed it in the URL it returns to the frontend.
+/// `fetch_preview_stream` and `register_beatport_sample_streams` can embed it in the URLs
+/// they return to the frontend.
 pub(crate) struct ProxyServerPort(pub u16);
 
 /// Tracks in-flight prefetch tasks by release ID to prevent duplicate spawns.
@@ -333,6 +334,7 @@ pub fn run() {
       commands::tagger::set_track_artwork_from_url,
       // Beatport recommendations (shared, not feature-gated: reqwest only).
       commands::recommendations::find_beatport_similar_tracks,
+      commands::recommendations::register_beatport_sample_streams,
       // Follow commands
       commands::follow::follow_source,
       commands::follow::follow_from_entity,
@@ -659,6 +661,8 @@ pub fn run() {
         .map_err(|e| format!("Failed to build proxy client: {e}"))?;
 
       let proxy_state = proxy::ProxyServerState::new(app.handle().clone(), proxy_client);
+      // Manage a clone so commands can register sample URLs into the same state the router serves.
+      app.manage(proxy_state.clone());
 
       tauri::async_runtime::spawn(async move {
         if let Err(e) = std_listener.set_nonblocking(true) {
@@ -677,6 +681,13 @@ pub fn run() {
           .route(
             "/:release_id/:track_position",
             axum::routing::get(proxy::proxy_http_handler)
+              .options(proxy::proxy_cors_preflight_handler),
+          )
+          // Beatport recommendation samples (static prefix wins over the dynamic release route
+          // in matchit, so discovery paths are unaffected).
+          .route(
+            "/samples/:key",
+            axum::routing::get(proxy::sample_http_handler)
               .options(proxy::proxy_cors_preflight_handler),
           )
           .with_state(proxy_state);

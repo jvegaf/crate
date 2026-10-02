@@ -1,10 +1,16 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex};
 
 use crate::error::{CrateError, Result};
 use crate::services::DiscoveryService;
 
 use tauri::Manager;
+
+/// The only host the sample route may proxy: Beatport's public preview-mp3 CDN. Exact host
+/// matching (not suffix) keeps the proxy from being pointed at arbitrary URLs (SSRF).
+const SAMPLE_HOST: &str = "geo-samples.beatport.com";
 
 /// Size of each sequential download chunk (~4 MB).
 /// With n-param transformation, YouTube CDN allows full downloads for ANDROID_VR client URLs.
@@ -27,11 +33,15 @@ struct CachedAudio {
 pub(crate) struct ProxyServerState {
   pub app_handle: tauri::AppHandle,
   pub client: reqwest::Client,
-  /// Cache of fully downloaded audio files, keyed by "{release_id}/{track_position}".
+  /// Cache of fully downloaded audio files, keyed by "{release_id}/{track_position}" for
+  /// discovery previews and "sample:{key}" for Beatport recommendation samples.
   cache: Arc<tokio::sync::RwLock<HashMap<String, Arc<CachedAudio>>>>,
   /// In-flight downloads: maps cache key to a watch receiver that signals completion.
   /// `None` = download in progress, `Some(true)` = success, `Some(false)` = failed.
   downloads: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::watch::Receiver<Option<bool>>>>>,
+  /// Registered sample routes: proxy key → remote https URL. A std `Mutex` is fine here
+  /// because every access locks, clones out, and drops the guard before any `.await`.
+  pub(crate) samples: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl ProxyServerState {
@@ -41,8 +51,48 @@ impl ProxyServerState {
       client,
       cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
       downloads: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+      samples: Arc::new(Mutex::new(HashMap::new())),
     }
   }
+}
+
+/// Validate a sample URL for proxying: exactly `https://{SAMPLE_HOST}` and nothing else, so the
+/// proxy can never be coerced into fetching localhost or attacker-controlled hosts.
+pub(crate) fn validate_sample_url(raw: &str) -> Result<reqwest::Url> {
+  let url = reqwest::Url::parse(raw)
+    .map_err(|e| CrateError::Discovery(format!("Invalid sample URL: {e}")))?;
+  if url.scheme() != "https" || url.host_str() != Some(SAMPLE_HOST) {
+    return Err(CrateError::Discovery(format!(
+      "Sample URL host {raw:?} is not {SAMPLE_HOST} over https"
+    )));
+  }
+  Ok(url)
+}
+
+/// Deterministic short key for a validated sample URL (SipHash-1-3 with the fixed
+/// `DefaultHasher` seed, hex-encoded). Stable across runs; 64-bit collision risk is
+/// irrelevant at the handful-of-samples-per-modal scale.
+pub(crate) fn sample_stream_key(url: &reqwest::Url) -> String {
+  let mut hasher = DefaultHasher::new();
+  url.as_str().hash(&mut hasher);
+  format!("{:016x}", hasher.finish())
+}
+
+/// Register one sample URL and return the localhost proxy URL that serves it, or `None` when the
+/// URL fails validation (the caller falls back to the direct URL). The guard never spans an await.
+pub(crate) fn register_sample(
+  samples: &Mutex<HashMap<String, String>>,
+  port: u16,
+  raw: &str,
+) -> Option<String> {
+  let Ok(url) = validate_sample_url(raw) else {
+    log::warn!("Rejected sample URL for stream proxy registration: {raw}");
+    return None;
+  };
+  let key = sample_stream_key(&url);
+  let mut guard = samples.lock().ok()?;
+  guard.insert(key.clone(), raw.to_string());
+  Some(format!("http://127.0.0.1:{port}/samples/{key}"))
 }
 
 /// Parse a `bytes=start-[end]` Range header value and return `(start, optional_end)`.
@@ -394,5 +444,244 @@ fn serve_range_from_cache(
         .body(axum::body::Body::from(cached.data.clone()))
         .unwrap(),
     )
+  }
+}
+
+/// Top-level axum handler for `GET /samples/{key}`.
+///
+/// Beatport recommendation samples are remote `https://geo-samples.beatport.com` mp3s. The
+/// WebKitGTK webview's own https fetch (libsoup/souphttpsrc) hangs for those URLs on some
+/// systems, so the modal routes them through this proxy instead: reqwest fetches server-side,
+/// the bytes are memory-cached, and Range serving matches the discovery preview behavior.
+pub(crate) async fn sample_http_handler(
+  axum::extract::Path(key): axum::extract::Path<String>,
+  req_headers: axum::http::HeaderMap,
+  axum::extract::State(state): axum::extract::State<ProxyServerState>,
+) -> axum::http::Response<axum::body::Body> {
+  match sample_http_handler_inner(&key, &req_headers, &state).await {
+    Ok(r) => r,
+    Err(e) => {
+      log::error!("Sample proxy error: {e}");
+      axum::http::Response::builder()
+        .status(502)
+        .header("Content-Type", "text/plain")
+        .body(axum::body::Body::from("Internal proxy error"))
+        .unwrap()
+    }
+  }
+}
+
+async fn sample_http_handler_inner(
+  key: &str,
+  req_headers: &axum::http::HeaderMap,
+  state: &ProxyServerState,
+) -> Result<axum::http::Response<axum::body::Body>> {
+  // Resolve the registered URL first — an unknown key is a 404, not a proxy attempt.
+  let remote_url = {
+    let samples = state.samples.lock().map_err(|_| CrateError::LockPoisoned)?;
+    samples.get(key).cloned()
+  };
+  let Some(remote_url) = remote_url else {
+    return Ok(
+      apply_cors_headers(axum::http::Response::builder().status(404))
+        .body(axum::body::Body::from("Unknown sample key"))
+        .unwrap(),
+    );
+  };
+
+  let cache_key = format!("sample:{key}");
+  let incoming_range = req_headers.get("Range").and_then(|v| v.to_str().ok());
+  let has_range_header = incoming_range.is_some();
+  let (start, end_opt) = parse_bytes_range(incoming_range);
+
+  // 1. Serve from memory cache when the full sample is already downloaded.
+  {
+    let cache = state.cache.read().await;
+    if let Some(cached) = cache.get(&cache_key) {
+      return serve_range_from_cache(cached, start, end_opt, has_range_header);
+    }
+  }
+
+  // 2. Dedupe concurrent requests on one download task (same watch-channel pattern as discovery).
+  let mut rx = {
+    let mut downloads = state.downloads.lock().await;
+    if let Some(existing_rx) = downloads.get(&cache_key) {
+      existing_rx.clone()
+    } else {
+      let (tx, rx) = tokio::sync::watch::channel(None);
+      downloads.insert(cache_key.clone(), rx.clone());
+
+      let state_clone = state.clone();
+      let key = cache_key.clone();
+
+      tokio::spawn(async move {
+        let success = match download_sample(&state_clone, &remote_url).await {
+          Ok(cached_audio) => {
+            let entry = Arc::new(cached_audio);
+            let mut cache = state_clone.cache.write().await;
+            while cache.len() >= MAX_CACHE_ENTRIES {
+              if let Some(oldest_key) = cache.keys().next().cloned() {
+                cache.remove(&oldest_key);
+              }
+            }
+            cache.insert(key.clone(), entry);
+            true
+          }
+          Err(e) => {
+            log::warn!("Sample download failed for {key}: {e}");
+            false
+          }
+        };
+
+        let _ = tx.send(Some(success));
+        state_clone.downloads.lock().await.remove(&key);
+      });
+
+      rx
+    }
+  };
+
+  // 3. Wait for the download, then serve exactly like discovery: 200 without a Range header,
+  //    206 with one (unconditional 206 doubles AVFoundation's duration estimate).
+  if rx.changed().await.is_err() {
+    return Err(CrateError::Discovery(
+      "Sample download task dropped unexpectedly".into(),
+    ));
+  }
+
+  if *rx.borrow() != Some(true) {
+    return Ok(
+      axum::http::Response::builder()
+        .status(502)
+        .header("Content-Type", "text/plain")
+        .body(axum::body::Body::from("Sample download failed"))
+        .unwrap(),
+    );
+  }
+
+  let cache = state.cache.read().await;
+  let cached = cache.get(&cache_key).ok_or_else(|| {
+    CrateError::Discovery("Sample download succeeded but cache entry missing".into())
+  })?;
+  serve_range_from_cache(cached, start, end_opt, has_range_header)
+}
+
+/// Download a Beatport sample fully into memory.
+///
+/// A plain single GET is enough: `geo-samples.beatport.com` serves mp3s without the signed-URL /
+/// user-agent games that discovery's chunked `download_stream` exists for. The `MAX_TOTAL_SIZE`
+/// cap rejects anything unreasonably large (samples are ~1–2 MB) before it reaches the cache.
+async fn download_sample(state: &ProxyServerState, url: &str) -> Result<CachedAudio> {
+  let response = state
+    .client
+    .get(url)
+    .send()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Sample request failed: {e:#}")))?;
+
+  let status = response.status();
+  if !status.is_success() {
+    return Err(CrateError::Discovery(format!(
+      "Sample download returned {status}"
+    )));
+  }
+
+  let content_type = response
+    .headers()
+    .get("Content-Type")
+    .and_then(|v| v.to_str().ok())
+    .unwrap_or("audio/mpeg")
+    .to_string();
+
+  let data = response
+    .bytes()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Sample body read failed: {e:#}")))?
+    .to_vec();
+
+  if data.is_empty() {
+    return Err(CrateError::Discovery(
+      "Sample download produced no data".into(),
+    ));
+  }
+  if data.len() as u64 > MAX_TOTAL_SIZE {
+    return Err(CrateError::Discovery(format!(
+      "Sample of {} bytes exceeds the {MAX_TOTAL_SIZE} byte cache limit",
+      data.len()
+    )));
+  }
+
+  log::info!(
+    "Sample cached: {} bytes, content-type: {content_type}",
+    data.len()
+  );
+  Ok(CachedAudio { data, content_type })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  const SAMPLE_URL: &str = "https://geo-samples.beatport.com/media/9208584/LateNight.mp3";
+
+  #[test]
+  fn validate_sample_url_accepts_https_geo_samples() {
+    assert!(validate_sample_url(SAMPLE_URL).is_ok());
+  }
+
+  #[test]
+  fn validate_sample_url_rejects_everything_else() {
+    for bad in [
+      // Wrong scheme, even on the right host.
+      "http://geo-samples.beatport.com/media/1.mp3",
+      // Right scheme, wrong host.
+      "https://www.beatport.com/track/name/123",
+      // Suffix trick must not pass exact-host matching.
+      "https://geo-samples.beatport.com.evil.net/1.mp3",
+      "https://evil.net/?u=https://geo-samples.beatport.com/1.mp3",
+      // SSRF-shaped localhost URLs.
+      "https://localhost:8080/x.mp3",
+      "http://127.0.0.1:1234/samples/abc",
+      // Garbage.
+      "not a url",
+      "",
+    ] {
+      assert!(
+        validate_sample_url(bad).is_err(),
+        "expected rejection for {bad:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn sample_stream_key_is_deterministic_and_unique_per_url() {
+    let a = sample_stream_key(&reqwest::Url::parse(SAMPLE_URL).unwrap());
+    let b = sample_stream_key(&reqwest::Url::parse(SAMPLE_URL).unwrap());
+    let c = sample_stream_key(
+      &reqwest::Url::parse("https://geo-samples.beatport.com/media/1/Other.mp3").unwrap(),
+    );
+    assert_eq!(a, b);
+    assert_ne!(a, c);
+    assert!(a.len() == 16 && a.chars().all(|ch| ch.is_ascii_hexdigit()));
+  }
+
+  #[test]
+  fn register_sample_returns_proxy_url_for_valid_and_none_for_invalid() {
+    let samples = Mutex::new(HashMap::new());
+    let key = sample_stream_key(&reqwest::Url::parse(SAMPLE_URL).unwrap());
+
+    let proxy_url = register_sample(&samples, 4321, SAMPLE_URL).unwrap();
+    assert_eq!(proxy_url, format!("http://127.0.0.1:4321/samples/{key}"));
+    assert_eq!(
+      samples.lock().unwrap().get(&key).map(String::as_str),
+      Some(SAMPLE_URL)
+    );
+
+    assert_eq!(
+      register_sample(&samples, 4321, SAMPLE_URL).unwrap(),
+      proxy_url
+    );
+    assert!(register_sample(&samples, 4321, "https://evil.example.com/a.mp3").is_none());
+    assert_eq!(samples.lock().unwrap().len(), 1);
   }
 }
