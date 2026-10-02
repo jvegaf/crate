@@ -4,6 +4,7 @@
 	"description": "Cross-platform DJ library manager with music discovery, track analysis, and USB export",
 	"type": "module",
 	"private": true,
+	"packageManager": "yarn@4.18.1",
 	"workspaces": [
 		"apps/*"
 	],
