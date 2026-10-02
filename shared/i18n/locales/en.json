@@ -96,33 +96,11 @@
 			}
 		},
 		"library": {
-			"musicFolder": "Music Folder",
-			"musicFolderDescription": "Crate scans this folder and imports the audio files it finds. Each device keeps its own folder.",
-			"musicFolderNotSet": "No folder selected yet",
-			"musicFolderChoose": "Choose folder",
-			"musicFolderChange": "Change folder",
-			"musicFolderRescan": "Rescan",
-			"musicFolderScanning": "Scanning…",
-			"musicFolderProgress": "Importing {current} of {total} tracks…",
-			"musicFolderFound": "Audio files found",
-			"musicFolderImported": "Imported",
-			"musicFolderSkipped": "Already in library",
-			"musicFolderFailed": "Failed",
-			"musicFolderScanError": "Could not scan the folder: {error}",
-			"musicFolderSetError": "Could not use that folder: {error}",
 			"analysis": "Analysis",
 			"keyNotation": "Key Notation",
 			"keyNotationCamelot": "Camelot",
 			"keyNotationStandard": "Standard",
 			"keyNotationDescription": "Choose how musical keys are displayed.",
-			"recalcKeysTitle": "Recalculate Keys",
-			"recalcKeysDesc": "Convert every track key in your library to the currently selected notation. This does not re-run analysis.",
-			"recalcAction": "Convert All Keys",
-			"recalcProgress": "Converting… ({count} done)",
-			"recalcConfirm": "Convert all track keys to the current format?",
-			"recalcComplete": "Converted {count} track(s)",
-			"recalcError": "Key conversion failed.",
-			"autoAnalyzeOnImport": "Auto-analyze on import",
 			"autoAnalyzeOnImport": "Auto-Analyze on Import",
 			"autoAnalyzeOnImportDescription": "Automatically analyze BPM and key when importing tracks.",
 			"sync": "Sync",
@@ -140,7 +118,28 @@
 			"exportFormatPdb": "Rekordbox PDB",
 			"exportFormatPdbDescription": "Legacy format for older CDJs",
 			"exportFormatDeviceLibraryPlus": "Device Library Plus",
-			"exportFormatDeviceLibraryPlusDescription": "For OPUS-QUAD, OMNIS-DUO, XDJ-AZ"
+			"exportFormatDeviceLibraryPlusDescription": "For OPUS-QUAD, OMNIS-DUO, XDJ-AZ",
+			"musicFolder": "Music Folder",
+			"musicFolderDescription": "Crate scans this folder and imports the audio files it finds. Each device keeps its own folder.",
+			"musicFolderNotSet": "No folder selected yet",
+			"musicFolderChoose": "Choose folder",
+			"musicFolderChange": "Change folder",
+			"musicFolderRescan": "Rescan",
+			"musicFolderScanning": "Scanning…",
+			"musicFolderProgress": "Importing {current} of {total} tracks…",
+			"musicFolderFound": "Audio files found",
+			"musicFolderImported": "Imported",
+			"musicFolderSkipped": "Already in library",
+			"musicFolderFailed": "Failed",
+			"musicFolderScanError": "Could not scan the folder: {error}",
+			"musicFolderSetError": "Could not use that folder: {error}",
+			"recalcKeysTitle": "Recalculate Keys",
+			"recalcKeysDesc": "Convert every track key in your library to the currently selected notation. This does not re-run analysis.",
+			"recalcAction": "Convert All Keys",
+			"recalcProgress": "Converting… ({count} done)",
+			"recalcConfirm": "Convert all track keys to the current format?",
+			"recalcComplete": "Converted {count} track(s)",
+			"recalcError": "Key conversion failed."
 		},
 		"discovery": {
 			"metadata": "Metadata",
@@ -375,22 +374,18 @@
 		"columns": {
 			"title": "Title",
 			"artist": "Artist",
+			"bpm": "BPM",
+			"key": "Key",
+			"time": "Time",
+			"tags": "Tags",
 			"album": "Album",
 			"genre": "Genre",
 			"label": "Label",
 			"origin": "Source",
-			"bpm": "BPM",
-			"key": "Key",
-			"time": "Time",
 			"bitrate": "Bitrate",
 			"year": "Year",
 			"dateAdded": "Date Added",
-			"tags": "Tags",
 			"rating": "Rating"
-		},
-		"columnMenu": {
-			"reset": "Reset to default columns",
-			"alwaysVisible": "Always visible"
 		},
 		"track": "track",
 		"tracks": "tracks",
@@ -400,7 +395,11 @@
 		"fileNotFound": "File not found",
 		"dropToImport": "Drop audio files to import",
 		"noColor": "No color",
-		"colorLabel": "Color: {color}"
+		"colorLabel": "Color: {color}",
+		"columnMenu": {
+			"reset": "Reset to default columns",
+			"alwaysVisible": "Always visible"
+		}
 	},
 	"discovery": {
 		"addRelease": "Add Release",
@@ -652,14 +651,9 @@
 		"removeTag": "Remove tag"
 	},
 	"contextMenu": {
-		"editMetadata": "Edit Metadata...",
-		"findTrackTags": "Find track tags",
-		"beatportRecommendations": "Beatport Recommendations",
 		"viewInFinder": "View in Finder",
 		"viewInExplorer": "View in Explorer",
 		"viewInFileManager": "View in File Manager",
-		"viewOnStore": "View on {store}",
-		"viewInStore": "View in store",
 		"addToPlaylist": "Add to Playlist",
 		"setColor": "Set Color",
 		"removeColor": "Remove Color",
@@ -667,10 +661,14 @@
 		"removeFromLibrary": "Remove from Library",
 		"relocate": "Relocate...",
 		"analyze": "Analyze",
-		"stopAnalysis": "Stop analysis",
+		"stopAnalysis": "Stop Analysis",
+		"editMetadata": "Edit Metadata...",
+		"findTrackTags": "Find track tags",
+		"beatportRecommendations": "Beatport Recommendations",
+		"viewOnStore": "View on {store}",
+		"viewInStore": "View in store",
 		"cancel": "Cancel",
 		"ok": "OK"
-		"stopAnalysis": "Stop Analysis"
 	},
 	"modals": {
 		"createPlaylist": {
@@ -731,6 +729,72 @@
 			"removeDiscoveryReleasesFromPlaylistTitle": "Remove from Playlist",
 			"removeDiscoveryReleasesFromPlaylistMessage": "{count, plural, =1 {Remove this release from the playlist?} other {Remove {count} releases from the playlist?}}",
 			"deleteReleasesFromCollection": "Also delete releases from your collection"
+		},
+		"relocate": {
+			"title": "Relocate Track",
+			"cloudSyncedMessage": "This track was added on another device. Choose the local folder that contains its library root to make it playable here.",
+			"missingFileMessage": "The file for this track could not be found at its original location.",
+			"selectRootFolder": "Select Library Root Folder",
+			"selectReplacementFile": "Select Replacement File",
+			"validating": "Validating file...",
+			"unsupportedFormat": "Unsupported audio format.",
+			"hashMatch": "File content matches. Hash verified.",
+			"hashMismatch": "File content does not match the original.",
+			"noOriginalHash": "No original hash available for comparison. The file may still be correct.",
+			"useAnyway": "Use this file anyway",
+			"relocate": "Relocate",
+			"relocating": "Relocating...",
+			"validateFailed": "Failed to validate file",
+			"relocateFailed": "Failed to relocate track"
+		},
+		"albumArt": "Artwork",
+		"deviceInfo": {
+			"title": "Device Info",
+			"diskType": "Disk Type",
+			"fileSystem": "File System",
+			"storage": "Storage",
+			"used": "Used:",
+			"available": "Available:",
+			"total": "Total:",
+			"percentUsed": "% used"
+		},
+		"duplicate": {
+			"title": "Duplicate Track Detected",
+			"progress": "Duplicate {current} of {total}",
+			"message": "This file matches an existing track in your library:",
+			"current": "Current:",
+			"new": "New:",
+			"skip": "Skip",
+			"skipDescription": "Don't import this file. Keep the existing track unchanged.",
+			"updatePath": "Update path",
+			"updatePathDescription": "Keep all existing data (cue points, tags, playlists, play history) but update the file location.",
+			"replace": "Replace",
+			"replaceDescription": "Fresh import from new file. Keeps playlist memberships only. Resets cue points, tags, and play history.",
+			"applyToAll": "Apply to all remaining duplicates ({count})"
+		},
+		"update": {
+			"title": "Update Available",
+			"description": "{version} is ready to install.",
+			"releaseNotes": "What's new",
+			"installAndRestart": "Install and Restart",
+			"later": "Later",
+			"downloading": "Downloading... {progress}%",
+			"installing": "Installing..."
+		},
+		"conflict": {
+			"title": "Name Conflict",
+			"resolving": "Resolving conflict",
+			"remaining": "({count} remaining)",
+			"message": "A {type} named \"{name}\" already exists in this location.",
+			"merge": "Merge",
+			"replace": "Replace",
+			"mergeFolder": "Move contents of this folder into the existing folder. You'll be prompted for any nested conflicts.",
+			"mergePlaylist": "Combine tracks from both playlists into one.",
+			"mergeNotAvailable": "Not available: both items must be the same type to merge.",
+			"replaceDescription": "Delete the existing {type} and move this {item} in its place.",
+			"replaceNotAvailable": "Not available: can only replace items of the same type.",
+			"replaceFolderWarning": "Replacing will permanently delete the existing folder and all its contents.",
+			"replacePlaylistWarning": "Replacing will permanently delete the existing playlist and its track associations."
 		},
 		"trackMetadata": {
 			"title": "Track Metadata",
@@ -795,23 +859,6 @@
 			},
 			"openUrl": "Open in browser"
 		},
-		"relocate": {
-			"title": "Relocate Track",
-			"cloudSyncedMessage": "This track was added on another device. Choose the local folder that contains its library root to make it playable here.",
-			"missingFileMessage": "The file for this track could not be found at its original location.",
-			"selectRootFolder": "Select Library Root Folder",
-			"selectReplacementFile": "Select Replacement File",
-			"validating": "Validating file...",
-			"unsupportedFormat": "Unsupported audio format.",
-			"hashMatch": "File content matches. Hash verified.",
-			"hashMismatch": "File content does not match the original.",
-			"noOriginalHash": "No original hash available for comparison. The file may still be correct.",
-			"useAnyway": "Use this file anyway",
-			"relocate": "Relocate",
-			"relocating": "Relocating...",
-			"validateFailed": "Failed to validate file",
-			"relocateFailed": "Failed to relocate track"
-		},
 		"beatportRecommendations": {
 			"title": "Beatport Recommendations",
 			"finding": "Finding similar tracks...",
@@ -828,56 +875,6 @@
 			"failed": "Failed to load Beatport recommendations: {error}",
 			"seekPreview": "Seek preview",
 			"playbackFailed": "Failed to play sample"
-		},
-		"albumArt": "Album Art",
-		"albumArt": "Artwork",
-		"deviceInfo": {
-			"title": "Device Info",
-			"diskType": "Disk Type",
-			"fileSystem": "File System",
-			"storage": "Storage",
-			"used": "Used:",
-			"available": "Available:",
-			"total": "Total:",
-			"percentUsed": "% used"
-		},
-		"duplicate": {
-			"title": "Duplicate Track Detected",
-			"progress": "Duplicate {current} of {total}",
-			"message": "This file matches an existing track in your library:",
-			"current": "Current:",
-			"new": "New:",
-			"skip": "Skip",
-			"skipDescription": "Don't import this file. Keep the existing track unchanged.",
-			"updatePath": "Update path",
-			"updatePathDescription": "Keep all existing data (cue points, tags, playlists, play history) but update the file location.",
-			"replace": "Replace",
-			"replaceDescription": "Fresh import from new file. Keeps playlist memberships only. Resets cue points, tags, and play history.",
-			"applyToAll": "Apply to all remaining duplicates ({count})"
-		},
-		"update": {
-			"title": "Update Available",
-			"description": "{version} is ready to install.",
-			"releaseNotes": "What's new",
-			"installAndRestart": "Install and Restart",
-			"later": "Later",
-			"downloading": "Downloading... {progress}%",
-			"installing": "Installing..."
-		},
-		"conflict": {
-			"title": "Name Conflict",
-			"resolving": "Resolving conflict",
-			"remaining": "({count} remaining)",
-			"message": "A {type} named \"{name}\" already exists in this location.",
-			"merge": "Merge",
-			"replace": "Replace",
-			"mergeFolder": "Move contents of this folder into the existing folder. You'll be prompted for any nested conflicts.",
-			"mergePlaylist": "Combine tracks from both playlists into one.",
-			"mergeNotAvailable": "Not available: both items must be the same type to merge.",
-			"replaceDescription": "Delete the existing {type} and move this {item} in its place.",
-			"replaceNotAvailable": "Not available: can only replace items of the same type.",
-			"replaceFolderWarning": "Replacing will permanently delete the existing folder and all its contents.",
-			"replacePlaylistWarning": "Replacing will permanently delete the existing playlist and its track associations."
 		}
 	},
 	"toast": {
@@ -915,42 +912,6 @@
 		"deviceNotFound": "Device not found",
 		"deviceReformatted": "Device reformatted as \"{name}\"",
 		"deviceReformatFailed": "Failed to reformat: {error}"
-	},
-	"tagger": {
-		"title": "Find track tags",
-		"searching": "Searching providers…",
-		"enriching": "Loading track details…",
-		"noResults": "No candidate scored high enough.",
-		"providerErrors": "Some providers could not be reached",
-		"selectHint": "Pick the correct match, then apply it",
-		"apply": "Apply tags",
-		"applying": "Applying…",
-		"score": "Match",
-		"batch": {
-			"title": "Find track tags",
-			"subtitle": "{count, plural, =0 {No tracks selected} =1 {1 track selected} other {{count} tracks selected}}",
-			"searching": "Searching providers… ({processed}/{total})",
-			"searchingCurrent": "Searching “{title}” ({processed}/{total})",
-			"applying": "Applying…",
-			"notAvailable": "Not available",
-			"noResults": "No results",
-			"error": "Error",
-			"providerErrors": "Some providers could not be reached",
-			"confirm": "Confirm ({count})",
-			"stats": "{toApply} to apply · {skipped} skipped",
-			"applyFailed": "Some tracks could not be updated ({count})",
-			"autoApplying": "Applying matches automatically… ({processed}/{total})",
-			"autoApplied": "{count, plural, =1 {1 match applied automatically} other {{count} matches applied automatically}}",
-			"autoApplyFailed": "Some automatic matches could not be applied ({count})",
-			"allAutoApplied": "{count, plural, =1 {1 track was matched and applied automatically} other {{count} tracks were matched and applied automatically}}"
-		},
-		"toast": {
-			"applied": "Track tags applied",
-			"searchFailed": "Failed to search track tags",
-			"extendFailed": "Failed to load the track details",
-			"applyFailed": "Failed to apply track tags",
-			"artworkFailed": "Track tags applied, but the artwork could not be saved"
-		}
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Cannot drop a folder into itself",
@@ -1037,13 +998,6 @@
 	"editor": {
 		"trackInfo": "Track Info",
 		"tracksCount": "{count} Tracks",
-		"information": "Information",
-		"additional": "Additional",
-		"tags": "Tags",
-		"addTags": "Add tags",
-		"searchTags": "Search tags",
-		"createTag": "Create \"{name}\"",
-		"noTagsYet": "No tags",
 		"title": "Title",
 		"artist": "Artist",
 		"album": "Album",
@@ -1057,7 +1011,14 @@
 		"replaceArtwork": "Replace Artwork",
 		"reextractFromFile": "Re-extract from file",
 		"showEditor": "Show Editor",
-		"hideEditor": "Hide Editor"
+		"hideEditor": "Hide Editor",
+		"information": "Information",
+		"additional": "Additional",
+		"tags": "Tags",
+		"addTags": "Add tags",
+		"searchTags": "Search tags",
+		"createTag": "Create \"{name}\"",
+		"noTagsYet": "No tags"
 	},
 	"colors": {
 		"pink": "Pink",
@@ -1301,6 +1262,42 @@
 			},
 			"skip": "Skip",
 			"maybeLater": "Maybe later"
+		}
+	},
+	"tagger": {
+		"title": "Find track tags",
+		"searching": "Searching providers…",
+		"enriching": "Loading track details…",
+		"noResults": "No candidate scored high enough.",
+		"providerErrors": "Some providers could not be reached",
+		"selectHint": "Pick the correct match, then apply it",
+		"apply": "Apply tags",
+		"applying": "Applying…",
+		"score": "Match",
+		"batch": {
+			"title": "Find track tags",
+			"subtitle": "{count, plural, =0 {No tracks selected} =1 {1 track selected} other {{count} tracks selected}}",
+			"searching": "Searching providers… ({processed}/{total})",
+			"searchingCurrent": "Searching “{title}” ({processed}/{total})",
+			"applying": "Applying…",
+			"notAvailable": "Not available",
+			"noResults": "No results",
+			"error": "Error",
+			"providerErrors": "Some providers could not be reached",
+			"confirm": "Confirm ({count})",
+			"stats": "{toApply} to apply · {skipped} skipped",
+			"applyFailed": "Some tracks could not be updated ({count})",
+			"autoApplying": "Applying matches automatically… ({processed}/{total})",
+			"autoApplied": "{count, plural, =1 {1 match applied automatically} other {{count} matches applied automatically}}",
+			"autoApplyFailed": "Some automatic matches could not be applied ({count})",
+			"allAutoApplied": "{count, plural, =1 {1 track was matched and applied automatically} other {{count} tracks were matched and applied automatically}}"
+		},
+		"toast": {
+			"applied": "Track tags applied",
+			"searchFailed": "Failed to search track tags",
+			"extendFailed": "Failed to load the track details",
+			"applyFailed": "Failed to apply track tags",
+			"artworkFailed": "Track tags applied, but the artwork could not be saved"
 		}
 	}
 }

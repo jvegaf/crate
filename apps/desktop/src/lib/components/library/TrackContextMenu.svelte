@@ -5,11 +5,10 @@
 	import { missingTrackIds } from '$lib/stores'
 	import { buildPlaylistMenuItems } from '$shared/stores/playlists'
 	import { buildTagMenuItems, commonTagIds, tagsStore } from '$shared/stores/tags'
-	import { joinMenuGroups } from '$shared/utils'
-	import { translate } from '$shared/i18n'
-	import { getStoreName } from '$shared/utils'
+	import { getStoreName, joinMenuGroups } from '$shared/utils'
 	import { extractBeatportTrackId } from '$shared/utils/beatport'
 	import { openUrl } from '@tauri-apps/plugin-opener'
+	import { translate } from '$shared/i18n'
 	import { get } from 'svelte/store'
 
 	type Props = {
@@ -27,12 +26,12 @@
 		onRemoveFromPlaylist: () => void
 		onRemoveFromLibrary: () => void
 		onRelocate?: (track: Track) => void
-		onEditMetadata: (track: Track) => void
-		onFindTags?: (tracks: Track[]) => void
-		onShowBeatportRecommendations?: (track: Track) => void
 		onSetColor?: (color: TrackColor | null) => void
 		onAnalyze?: () => void
 		onToggleTag?: (tagId: string, assigned: boolean) => void
+		onEditMetadata: (track: Track) => void
+		onFindTags?: (tracks: Track[]) => void
+		onShowBeatportRecommendations?: (track: Track) => void
 	}
 
 	let {
@@ -50,12 +49,12 @@
 		onRemoveFromPlaylist,
 		onRemoveFromLibrary,
 		onRelocate,
-		onEditMetadata,
-		onFindTags,
-		onShowBeatportRecommendations,
 		onSetColor,
 		onAnalyze,
 		onToggleTag,
+		onEditMetadata,
+		onFindTags,
+		onShowBeatportRecommendations,
 	}: Props = $props()
 
 	// Platform-specific label for "View in Finder/Explorer"
@@ -76,13 +75,9 @@
 		return selectedTracks.every((t) => t.color === firstColor) ? firstColor : null
 	})
 
+	const assignedTagIds = $derived(commonTagIds(selectedTracks))
 	// Recommendations only make sense for a single track with a Beatport track-page URL.
 	const beatportTrackId = $derived(selectedTracks.length === 1 ? extractBeatportTrackId(selectedTracks[0].url) : null)
-
-	// Build menu items
-	const menuItems = $derived.by<ContextMenuItem[]>(() => {
-		const items: ContextMenuItem[] = []
-	const assignedTagIds = $derived(commonTagIds(selectedTracks))
 	const currentPlaylist = $derived(currentPlaylistId ? playlists.find((p) => p.id === currentPlaylistId) : null)
 
 	// Groups follow the shared convention (.claude/docs/CONTEXT_MENUS.md):
@@ -109,59 +104,37 @@
 				action: () => onRelocate(selectedTracks[0]),
 			})
 		}
-		groups.push(act)
-
 		// "Find track tags..." - ranked provider shortlist. One selection opens the
 		// single-track modal; several open the batch layout with one row each.
 		if (onFindTags) {
-			items.push({
+			act.push({
 				id: 'findTags',
 				label: get(translate)('contextMenu.findTrackTags'),
 				icon: 'tag',
-				action: () => onFindTags?.(selectedTracks),
+				action: () => onFindTags(selectedTracks),
 			})
 		}
-
 		// Single-track metadata editor targets the track captured when this menu opened.
-		if (selectedTracks.length === 1) {
-			items.push({
+		if (single) {
+			act.push({
 				id: 'edit-metadata',
 				label: get(translate)('contextMenu.editMetadata'),
 				icon: 'edit',
 				action: () => onEditMetadata(selectedTracks[0]),
 			})
-			items.push({
-				id: 'reveal-in-explorer',
-				label: revealLabel,
-				icon: 'folder-open',
-				action: onRevealInExplorer,
-			})
-			const storeUrl = selectedTracks[0].url?.trim() ?? ''
-			if (storeUrl) {
-				const store = getStoreName(storeUrl)
-				items.push({
-					id: 'view-in-store',
-					label: store
-						? get(translate)('contextMenu.viewOnStore', { values: { store } })
-						: get(translate)('contextMenu.viewInStore'),
-					icon: 'external-link',
-					action: () => openUrl(storeUrl).catch(() => {}),
-				})
-			}
-			// Beatport recommendations — single track whose URL is a Beatport track page.
+			// Beatport recommendations - single track whose URL is a Beatport track page.
 			if (onShowBeatportRecommendations && beatportTrackId !== null) {
 				const track = selectedTracks[0]
-				items.push({
+				act.push({
 					id: 'beatport-recommendations',
 					label: get(translate)('contextMenu.beatportRecommendations'),
 					icon: 'music-note',
 					action: () => onShowBeatportRecommendations(track),
 				})
 			}
-			items.push({
-				id: 'reveal-divider',
-				label: '',
-				divider: true,
+		}
+		groups.push(act)
+
 		const organize: ContextMenuItem[] = []
 		const playlistItems = buildPlaylistMenuItems(
 			playlists.filter((p) => p.context === 'library'),
@@ -215,6 +188,18 @@
 				icon: 'folder-open',
 				action: onRevealInExplorer,
 			})
+			const storeUrl = selectedTracks[0].url?.trim() ?? ''
+			if (storeUrl) {
+				const store = getStoreName(storeUrl)
+				navigate.push({
+					id: 'view-in-store',
+					label: store
+						? get(translate)('contextMenu.viewOnStore', { values: { store } })
+						: get(translate)('contextMenu.viewInStore'),
+					icon: 'external-link',
+					action: () => openUrl(storeUrl).catch(() => {}),
+				})
+			}
 		}
 		groups.push(navigate)
 

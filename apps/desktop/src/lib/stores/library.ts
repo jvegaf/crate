@@ -1,4 +1,5 @@
 import { writable, derived, get } from 'svelte/store'
+import { translate } from '$shared/i18n'
 import type {
 	Track,
 	TrackColor,
@@ -7,8 +8,6 @@ import type {
 	ImportResultWithDuplicates,
 	LibraryFolderScanResult,
 } from '$shared/types'
-import { translate } from '$shared/i18n'
-import type { Track, TrackColor, TrackFilter, SortConfig, ImportResultWithDuplicates } from '$shared/types'
 import { sortTracks } from '$shared/utils/sorting'
 import * as libraryApi from '$shared/api/library'
 import * as playlistsApi from '$shared/api/playlists'

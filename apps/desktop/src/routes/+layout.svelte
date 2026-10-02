@@ -9,6 +9,7 @@
 	import { WizardTour } from '$lib/components/wizard'
 	import { onMount } from 'svelte'
 	import { get } from 'svelte/store'
+	// @ts-expect-error — PUBLIC_APP_VERSION is set dynamically by vite.config.ts
 	import { PUBLIC_APP_VERSION } from '$env/static/public'
 	import { isDev } from '$lib/stores/app'
 	import { settingsStore, hasCompletedOnboarding, hasCompletedWizard } from '$shared/stores/settings'

@@ -43,7 +43,7 @@ interface UILayoutState {
 const initialState: UILayoutState = {
 	sidebarWidth: getStoredNumber('sidebarWidth', 240),
 	rightSidebarVisible: getStoredBoolean('rightSidebarVisible', false),
-	rightSidebarWidth: getStoredNumber('rightSidebarWidth', 320),
+	rightSidebarWidth: getStoredNumber('rightSidebarWidth', 440),
 	queuePanelVisible: getStoredBoolean('queuePanelVisible', false),
 	activeModal: null,
 	contextMenuOpen: false,
