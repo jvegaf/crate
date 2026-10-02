@@ -1,9 +1,12 @@
 mod bandcamp;
+pub mod bandcamp_fan;
 mod common;
 mod discogs;
 mod soundcloud;
 mod youtube;
 
+#[cfg(test)]
+mod canary;
 #[cfg(test)]
 mod tests;
 
@@ -34,10 +37,13 @@ pub struct FetchedMetadata {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FetchedTrack {
-  pub name: String,
-  pub position: i32,
-  pub duration_ms: Option<i64>,
-  pub video_id: Option<String>,
+    pub name: String,
+    pub position: i32,
+    pub duration_ms: Option<i64>,
+    pub video_id: Option<String>,
+    /// The track's own page URL (Bandcamp `/track/...`, SoundCloud permalink) when the source
+    /// provides one; `None` for YouTube/Discogs — consumers fall back to the release URL.
+    pub url: Option<String>,
 }
 
 pub(super) fn is_compilation(artist: &Option<String>) -> bool {
@@ -49,13 +55,13 @@ pub(super) fn is_compilation(artist: &Option<String>) -> bool {
   )
 }
 
-pub(super) fn build_client() -> Result<reqwest::Client> {
-  reqwest::Client::builder()
-    .connect_timeout(std::time::Duration::from_secs(10))
-    .timeout(std::time::Duration::from_secs(15))
-    .user_agent(CHROME_USER_AGENT)
-    .build()
-    .map_err(|e| CrateError::Discovery(format!("Failed to create HTTP client: {e}")))
+pub(crate) fn build_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(CHROME_USER_AGENT)
+        .build()
+        .map_err(|e| CrateError::Discovery(format!("Failed to create HTTP client: {e}")))
 }
 
 pub async fn fetch_metadata(url: &str) -> Result<FetchedMetadata> {
@@ -100,8 +106,18 @@ pub async fn scan_page(
   log::info!("Starting page scan for URL: {url}");
   let client = build_client()?;
 
-  if bandcamp::is_bandcamp_page_url(url) {
-    let (mut releases, page_name, avatar_url) = bandcamp::scan_bandcamp_page(&client, url).await?;
+    // Fan profiles (bandcamp.com/<username>) would otherwise pass the artist-page check
+    // below and produce a follow of the bare bandcamp.com origin.
+    if bandcamp_fan::is_bandcamp_fan_url(url) {
+        return Err(CrateError::Discovery(
+            "This is a Bandcamp fan page — link it as a collection account in Settings instead"
+                .into(),
+        ));
+    }
+
+    if bandcamp::is_bandcamp_page_url(url) {
+        let (mut releases, page_name, avatar_url) =
+            bandcamp::scan_bandcamp_page(&client, url).await?;
 
     // Normalize URLs and check existing
     let mut already_in_discovery = 0;
@@ -193,7 +209,7 @@ pub async fn scan_page(
 
 // Re-exports for streams.rs, n_transform.rs, and commands/discovery.rs
 pub(crate) use youtube::{
-  build_yt_client_with_config, extract_playlist_videos, extract_query_param,
-  fetch_yt_player_response_with_config, jittered_delay, new_yt_cookie_jar, parse_youtube_url,
-  parse_yt_initial_data, YT_CLIENTS,
+    build_yt_client_with_config, extract_playlist_videos, extract_query_param,
+    fetch_yt_player_response_with_config, jittered_delay, parse_youtube_url, parse_yt_initial_data,
+    reset_yt_session, yt_session, YtClientConfig, YT_CLIENTS,
 };

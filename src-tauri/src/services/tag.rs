@@ -139,8 +139,18 @@ impl TagService {
     self.get_category(id)
   }
 
-  pub fn delete_category(&self, id: &str) -> Result<()> {
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        let hlc = dirty::next_hlc(&conn)?;
+        dirty::record_tombstone(&conn, buckets::TAG_CATEGORIES, id, &hlc)?;
+        conn.execute("DELETE FROM tag_categories WHERE id = ?1", [id])?;
+        // Cascade removes this category's tags + their track/discovery links;
+        // re-serialize those buckets so peers don't re-insert orphaned rows.
+        dirty::mark_dirty(&conn, buckets::TAG_CATEGORIES)?;
+        dirty::mark_dirty(&conn, buckets::TAGS)?;
+        dirty::mark_dirty(&conn, buckets::TRACK_TAGS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASE_TAGS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACK_TAGS)?;
+        Ok(())
+    }
 
     let hlc = dirty::next_hlc(&conn)?;
     dirty::record_tombstone(&conn, buckets::TAG_CATEGORIES, id, &hlc)?;
@@ -370,8 +380,16 @@ impl TagService {
     Ok(())
   }
 
-  pub fn remove_tags(&self, track_ids: Vec<String>, tag_ids: Vec<String>) -> Result<()> {
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        let hlc = dirty::next_hlc(&conn)?;
+        dirty::record_tombstone(&conn, buckets::TAGS, id, &hlc)?;
+        conn.execute("DELETE FROM tags WHERE id = ?1", [id])?;
+        // Cascade removes this tag's track/discovery links; re-serialize them.
+        dirty::mark_dirty(&conn, buckets::TAGS)?;
+        dirty::mark_dirty(&conn, buckets::TRACK_TAGS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASE_TAGS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACK_TAGS)?;
+        Ok(())
+    }
 
     let hlc = dirty::next_hlc(&conn)?;
     for track_id in &track_ids {

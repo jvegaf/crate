@@ -18,6 +18,13 @@ export {
 export { tagsStore, allTags, getTagById, getCategoryById, computeTagStates } from './tags'
 export { taggerStore } from './tagger'
 export { playlistsStore, rootPlaylists, getPlaylistChildren, buildPlaylistTree } from './playlists'
+export {
+	playlistsStore,
+	rootPlaylists,
+	getPlaylistChildren,
+	buildPlaylistTree,
+	collectDescendantIds,
+} from './playlists'
 export type { PlaylistTreeNode } from './playlists'
 export {
 	uiStore,
@@ -54,8 +61,13 @@ export {
 	releaseCount,
 	isDiscoveryLoading,
 	refreshingReleaseIds,
-	newOnly,
+	facetFilters,
+	likedFilter,
+	newFilter,
+	purchasedFilter,
+	downloadedFilter,
 } from './discovery'
+export { offlineCacheStore, fullyCachedIds } from './offlineCache'
 export { expandedReleaseIds } from './expandedReleases'
 export { discoveryPlaylistStore, discoveryPlaylistReleases } from './discoveryPlaylist'
 export {

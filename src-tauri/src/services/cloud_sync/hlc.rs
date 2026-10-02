@@ -107,6 +107,17 @@ impl Hlc {
   }
 }
 
+/// A deterministic HLC strictly greater than `h`: same wall/node, counter + 1
+/// (saturating). `""` (the unstamped sentinel) and malformed strings are treated as
+/// `Hlc::new(0, 0, 0)`. A pure function of its input — no device clock involved — so
+/// every device derives the SAME bumped stamp from the same input, which the
+/// duplicate-collapse paths rely on for byte-identical convergence.
+pub fn bump(h: &str) -> String {
+    let mut hlc = Hlc::parse(h).unwrap_or(Hlc::new(0, 0, 0));
+    hlc.counter = hlc.counter.saturating_add(1);
+    hlc.format()
+}
+
 /// Total order matching the lexicographic order of [`Hlc::format`].
 impl Ord for Hlc {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -206,12 +217,24 @@ mod tests {
     assert!("" < Hlc::new(0, 0, 0).format().as_str());
   }
 
-  #[test]
-  fn receive_is_monotonic() {
-    let mut local = Hlc::new(1000, 5, 1);
-    let remote = Hlc::new(1000, 9, 2);
-    local.receive(&remote, 900);
-    // Same wall on both, now_ms behind: counter = max(5,9)+1.
-    assert_eq!((local.wall_ms, local.counter), (1000, 10));
-  }
+    #[test]
+    fn bump_is_strictly_greater_and_pure() {
+        let h = Hlc::new(1000, 3, 0xAB).format();
+        let bumped = bump(&h);
+        assert!(bumped > h);
+        assert_eq!(Hlc::parse(&bumped).unwrap(), Hlc::new(1000, 4, 0xAB));
+        assert_eq!(bump(&h), bumped, "pure function of its input");
+        // Unstamped/malformed inputs are treated as the zero clock.
+        assert_eq!(bump(""), Hlc::new(0, 1, 0).format());
+        assert!(bump("") > String::new());
+    }
+
+    #[test]
+    fn receive_is_monotonic() {
+        let mut local = Hlc::new(1000, 5, 1);
+        let remote = Hlc::new(1000, 9, 2);
+        local.receive(&remote, 900);
+        // Same wall on both, now_ms behind: counter = max(5,9)+1.
+        assert_eq!((local.wall_ms, local.counter), (1000, 10));
+    }
 }

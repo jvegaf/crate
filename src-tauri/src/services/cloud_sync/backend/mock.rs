@@ -74,21 +74,29 @@ impl CloudBackend for MockCloudBackend {
 
 #[async_trait]
 impl AuthBackend for MockCloudBackend {
-  async fn sign_in_with_idp(&self, _provider_id: &str, _id_token: &str) -> Result<AuthSession> {
-    Ok(mock_session())
-  }
-  async fn refresh(&self, _refresh_token: &str) -> Result<AuthSession> {
-    Ok(mock_session())
-  }
-  async fn sign_out(&self, _session: &AuthSession) -> Result<()> {
-    Ok(())
-  }
-  async fn lookup_profile(
-    &self,
-    _session: &AuthSession,
-  ) -> Result<crate::services::cloud_sync::backend::types::ProfileInfo> {
-    Ok(Default::default())
-  }
+    async fn sign_in_with_idp(
+        &self,
+        _provider_id: &str,
+        _id_token: &str,
+        _nonce: Option<&str>,
+    ) -> Result<AuthSession> {
+        Ok(mock_session())
+    }
+    async fn refresh(&self, _refresh_token: &str) -> Result<AuthSession> {
+        Ok(mock_session())
+    }
+    async fn sign_out(&self, _session: &AuthSession) -> Result<()> {
+        Ok(())
+    }
+    async fn lookup_profile(
+        &self,
+        _session: &AuthSession,
+    ) -> Result<crate::services::cloud_sync::backend::types::ProfileInfo> {
+        Ok(Default::default())
+    }
+    async fn delete_account(&self, _session: &AuthSession) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -180,10 +188,22 @@ impl BlobStore for MockCloudBackend {
       .ok_or_else(|| CrateError::CloudSyncBlobNotFound(key.to_string()))
   }
 
-  async fn delete(&self, _session: &AuthSession, key: &str) -> Result<()> {
-    self.state.lock().await.blobs.remove(key);
-    Ok(())
-  }
+    async fn delete(&self, _session: &AuthSession, key: &str) -> Result<()> {
+        self.state.lock().await.blobs.remove(key);
+        Ok(())
+    }
+
+    async fn list_prefix(&self, _session: &AuthSession, prefix: &str) -> Result<Vec<String>> {
+        Ok(self
+            .state
+            .lock()
+            .await
+            .blobs
+            .keys()
+            .filter(|k| k.starts_with(prefix))
+            .cloned()
+            .collect())
+    }
 }
 
 #[async_trait]

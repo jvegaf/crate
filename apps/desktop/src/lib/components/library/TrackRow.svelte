@@ -300,6 +300,68 @@
 			</div>
 		{/if}
 	{/each}
+	</div>
+
+	<!-- Artwork -->
+	<div class="flex justify-center">
+		<AlbumArt
+			artworkPath={track.artwork_path}
+			size="xs"
+			onclick={handleArtworkClick}
+			class={track.artwork_path ? 'cursor-zoom-in' : ''}
+		/>
+	</div>
+
+	<!-- Title -->
+	<div class="flex items-center truncate font-medium {playing ? 'text-brand-primary' : 'text-text-primary'}">
+		{#if isMissing}
+			<span class="mr-1.5 flex-shrink-0" title={$translate('library.fileNotFound')}>
+				<Icon name="warning" class="h-3.5 w-3.5 text-red-500" />
+			</span>
+			<!--{:else if playing}-->
+			<!--	<span class="mr-1 inline-block w-4 flex-shrink-0">-->
+			<!--		<Icon name="play" class="h-3 w-3 animate-pulse" fill />-->
+			<!--	</span>-->
+		{/if}
+		<span class="truncate">{getTrackDisplayName(track)}</span>
+	</div>
+
+	<!-- Artist -->
+	<div class="truncate text-text-secondary">
+		{getTrackDisplayArtist(track)}
+	</div>
+
+	<!-- BPM -->
+	<div class="text-text-secondary tabular-nums">
+		{formatBpm(track.bpm)}
+	</div>
+
+	<!-- Key -->
+	<div class="flex items-center text-text-secondary">
+		{formatKey(track.key, $keyNotationFormat)}
+	</div>
+
+	<!-- Duration -->
+	<div class="text-text-secondary tabular-nums">
+		{formatDurationCompact(track.duration_ms)}
+	</div>
+
+	<!-- Tags -->
+	<div class="flex h-6 items-center gap-1 overflow-hidden">
+		{#each track.tags
+			.toSorted((a, b) => {
+				const orderA = categorySortOrders?.get(a.category_id) ?? 0
+				const orderB = categorySortOrders?.get(b.category_id) ?? 0
+				if (orderA !== orderB) return orderA - orderB
+				return a.name.localeCompare(b.name)
+			})
+			.slice(0, 3) as tag (tag.id)}
+			<TagChip {tag} size="sm" color={categoryColors?.get(tag.category_id)} />
+		{/each}
+		{#if track.tags.length > 3}
+			<Text variant="caption">+{track.tags.length - 3}</Text>
+		{/if}
+	</div>
 </div>
 
 {#if showArtworkModal}

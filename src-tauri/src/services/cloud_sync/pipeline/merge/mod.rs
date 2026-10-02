@@ -1,5 +1,7 @@
 //! The merge engine: fold a bucket's remote rows into local state, HLC as the
-//! oracle. One transaction per bucket.
+//! oracle. One transaction per [`merge_bucket`] call — callers pass the whole bucket,
+//! or (for large non-self-referential buckets) chunks of it so the DB mutex is
+//! released between batches (see `pull::pull_and_merge`).
 //!
 //! ## Tie-breaks (must match [`super::rows`]'s serialize-time rule)
 //! - **Entities — DELETE-WINS-TIE:** a delete at HLC `>=` the live row wins; a live
@@ -25,6 +27,7 @@ use super::buckets::{Bucket, BucketKind};
 use super::dirty;
 use super::rows::{self, ParsedRow};
 
+mod collapse;
 mod writers;
 
 #[cfg(test)]
@@ -136,25 +139,63 @@ fn merge_entity_row(
   let local_tomb = select_tomb_hlc(tx, bucket, &cid)?;
   let mut override_event = None;
 
-  if !row.deleted {
-    // ---- remote LIVE (upsert) ----
-    match (local_live, local_tomb) {
-      // A tombstone at >= the remote's HLC keeps the entity deleted.
-      (_, Some(t)) if hlc_ge(&t, &row.hlc) => {}
-      // Tombstone strictly older than the remote → resurrect.
-      (_, Some(_)) => {
-        writers::delete_tombstone(tx, bucket, &cid)?;
-        writers::upsert_entity(tx, bucket, row)?;
-      }
-      // Brand new.
-      (None, None) => writers::upsert_entity(tx, bucket, row)?,
-      // Present locally: LWW, remote wins only if strictly newer.
-      (Some(l), None) => {
-        if hlc_gt(&row.hlc, &l) {
-          // Observe a non-trivial override BEFORE overwriting: this device's own
-          // authored value is being replaced by a higher remote HLC.
-          override_event = detect_override(tx, bucket, &cid, &l, self_node)?;
-          writers::upsert_entity(tx, bucket, row)?;
+    if !row.deleted {
+        // A live row whose NOT NULL parent is missing locally (deleted here, tombstone
+        // won) can never be applied: parents merge before children (`merge_order`), so
+        // a missing parent is a local delete, and inserting the child would blow up the
+        // deferred FK check at COMMIT — aborting the whole bucket and wedging sync.
+        // Skip it; the deleting device's next push drops it from the remote union.
+        if !writers::entity_parent_exists(tx, bucket, row)? {
+            log::warn!(
+                "cloud_sync merge: skipping orphan {} row {cid} (parent deleted locally)",
+                bucket.as_str()
+            );
+            return Ok(None);
+        }
+        // ---- remote LIVE (upsert) ----
+        match (local_live, local_tomb) {
+            // A tombstone at >= the remote's HLC keeps the entity deleted.
+            (_, Some(t)) if hlc_ge(&t, &row.hlc) => {}
+            // Tombstone strictly older than the remote → resurrect. For discovery rows,
+            // first check whether a local live row already carries this row's natural key
+            // (same release + track name, or same release URL): that means the "resurrected"
+            // row is a duplicate identity being pushed back by a peer — collapse the two
+            // into one instead of re-splitting them (see `collapse`).
+            (live, Some(_)) => {
+                if live.is_some() || !collapse::try_collapse(tx, bucket, row)? {
+                    writers::delete_tombstone(tx, bucket, &cid)?;
+                    writers::upsert_entity(tx, bucket, row)?;
+                }
+            }
+            // Brand new — unless a local live row carries the same natural key, in which
+            // case the unknown id is a duplicate identity to collapse, not a new entity.
+            (None, None) => {
+                if !collapse::try_collapse(tx, bucket, row)? {
+                    writers::upsert_entity(tx, bucket, row)?;
+                }
+            }
+            // Present locally: LWW, remote wins only if strictly newer.
+            (Some(l), None) => {
+                if hlc_gt(&row.hlc, &l) {
+                    // Observe a non-trivial override BEFORE overwriting: this device's own
+                    // authored value is being replaced by a higher remote HLC.
+                    override_event = detect_override(tx, bucket, &cid, &l, self_node)?;
+                    writers::upsert_entity(tx, bucket, row)?;
+                }
+            }
+        }
+    } else {
+        // ---- remote DELETE (tombstone) ---- DELETE-WINS-TIE (>=)
+        match (local_live, local_tomb) {
+            (Some(l), _) if hlc_ge(&row.hlc, &l) => {
+                writers::hard_delete_entity(tx, bucket, &cid)?;
+                writers::upsert_tombstone(tx, bucket, &cid, &row.hlc)?;
+            }
+            // Local live strictly newer than the delete → keep local, drop the delete.
+            (Some(_), _) => {}
+            // No local live: record/advance the tombstone (MAX inside upsert_tombstone),
+            // so an older concurrent add stays suppressed.
+            (None, _) => writers::upsert_tombstone(tx, bucket, &cid, &row.hlc)?,
         }
       }
     }
@@ -221,13 +262,15 @@ fn read_entity_label(tx: &Connection, bucket: &Bucket, cid: &str) -> Result<Stri
 // ---------------------------------------------------------------------------
 
 fn merge_junction_row(tx: &Connection, bucket: &Bucket, row: &ParsedRow) -> Result<()> {
-  let cid = rows::canonical_id(bucket, &row.value)?;
-  let local_live = select_live_hlc(tx, bucket, &cid)?;
-  let local_tomb = select_tomb_hlc(tx, bucket, &cid)?;
-  let ordered = matches!(
-    bucket,
-    Bucket::PlaylistTracks | Bucket::PlaylistDiscoveryReleases
-  );
+    let cid = rows::canonical_id(bucket, &row.value)?;
+    let local_live = select_live_hlc(tx, bucket, &cid)?;
+    let local_tomb = select_tomb_hlc(tx, bucket, &cid)?;
+    let ordered = matches!(
+        bucket,
+        Bucket::PlaylistTracks
+            | Bucket::PlaylistDiscoveryReleases
+            | Bucket::PlaylistDiscoveryTracks
+    );
 
   if !row.deleted {
     // ---- remote LIVE (add) ---- ADD-WINS-TIE

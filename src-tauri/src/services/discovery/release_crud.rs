@@ -5,12 +5,14 @@ impl DiscoveryService {
   pub fn create_release(&self, create: DiscoveryReleaseCreate) -> Result<DiscoveryRelease> {
     let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
 
-    let now = chrono::Utc::now().to_rfc3339();
-    let id = uuid::Uuid::new_v4().to_string();
-    let normalized_url = normalize_url(&create.url);
-    let source_type = create
-      .source_type
-      .unwrap_or_else(|| detect_source_type(&normalized_url));
+        let now = chrono::Utc::now().to_rfc3339();
+        let normalized_url = normalize_url(&create.url);
+        // Content-derived id: two devices independently adding the same URL mint the
+        // same row identity, so cloud sync converges instead of splitting the release.
+        let id = crate::models::deterministic_release_id(&normalized_url);
+        let source_type = create
+            .source_type
+            .unwrap_or_else(|| detect_source_type(&normalized_url));
 
     let hlc = dirty::next_hlc(&conn)?;
     conn.execute(
@@ -35,55 +37,73 @@ impl DiscoveryService {
         )?;
     dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASES)?;
 
-    // Insert tracks if provided
-    let mut tracks = Vec::new();
-    if let Some(track_creates) = create.tracks {
-      for tc in track_creates {
-        let track_id = uuid::Uuid::new_v4().to_string();
-        conn.execute(
-                    "INSERT INTO discovery_tracks (id, release_id, name, position, duration_ms, video_id, _hlc) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    rusqlite::params![track_id, id, tc.name, tc.position, tc.duration_ms, tc.video_id, hlc],
+        // Insert tracks if provided. Ids are content-derived, so a raw batch carrying the
+        // same name twice would PK-collide — first occurrence wins, matching the
+        // name-dedup rule every other track-insert path already applies.
+        let mut tracks = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
+        if let Some(track_creates) = create.tracks {
+            for tc in track_creates {
+                if !seen_names.insert(crate::models::normalized_track_name(&tc.name)) {
+                    continue;
+                }
+                let track_id = crate::models::deterministic_track_id(&id, &tc.name);
+                conn.execute(
+                    "INSERT INTO discovery_tracks (id, release_id, name, position, duration_ms, video_id, url, _hlc) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    rusqlite::params![track_id, id, tc.name, tc.position, tc.duration_ms, tc.video_id, tc.url, hlc],
                 )?;
-        tracks.push(DiscoveryTrack {
-          id: track_id,
-          release_id: id.clone(),
-          name: tc.name,
-          position: tc.position,
-          duration_ms: tc.duration_ms,
-          video_id: tc.video_id,
-          is_liked: false,
-        });
-      }
+                tracks.push(DiscoveryTrack {
+                    id: track_id,
+                    release_id: id.clone(),
+                    name: tc.name,
+                    position: tc.position,
+                    duration_ms: tc.duration_ms,
+                    video_id: tc.video_id,
+                    url: tc.url,
+                    is_liked: false,
+                    liked_at: None,
+                    preview_unavailable: false,
+                    tags: Vec::new(),
+                });
+            }
+        }
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACKS)?;
+
+        Ok(DiscoveryRelease {
+            id,
+            url: normalized_url,
+            source_type,
+            artist: create.artist,
+            title: create.title,
+            label: create.label,
+            release_date: create.release_date,
+            artwork_url: create.artwork_url,
+            artwork_path: None,
+            artwork_cache_path: None,
+            notes: create.notes,
+            parent_url: create.parent_url,
+            source_page_url: create.source_page_url,
+            date_added: now.clone(),
+            date_modified: now,
+            is_new: false,
+            surfaced_at: None,
+            source_ids: Vec::new(),
+            tracks,
+            tags: Vec::new(),
+            total_track_count: None,
+        })
     }
     dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACKS)?;
 
-    Ok(DiscoveryRelease {
-      id,
-      url: normalized_url,
-      source_type,
-      artist: create.artist,
-      title: create.title,
-      label: create.label,
-      release_date: create.release_date,
-      artwork_url: create.artwork_url,
-      artwork_path: None,
-      notes: create.notes,
-      parent_url: create.parent_url,
-      source_page_url: create.source_page_url,
-      date_added: now.clone(),
-      date_modified: now,
-      is_new: false,
-      surfaced_at: None,
-      source_ids: Vec::new(),
-      tracks,
-      tags: Vec::new(),
-    })
-  }
+    /// Playback-hot read (`fetch_preview_stream`, detail views) — runs on a pooled
+    /// reader inside one snapshot, so its 5 SELECTs stay mutually consistent and never
+    /// queue behind the writer.
+    pub fn get_release(&self, id: &str) -> Result<DiscoveryRelease> {
+        self.db.read(|conn| self.get_release_on(conn, id))
+    }
 
-  pub fn get_release(&self, id: &str) -> Result<DiscoveryRelease> {
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
-
-    let mut release = conn.query_row(
+    fn get_release_on(&self, conn: &Connection, id: &str) -> Result<DiscoveryRelease> {
+        let mut release = conn.query_row(
             "SELECT id, url, source_type, artist, title, label, release_date, artwork_url, artwork_path, notes, parent_url, source_page_url, date_added, date_modified, is_new, surfaced_at
              FROM discovery_releases WHERE id = ?1",
             [id],
@@ -98,6 +118,7 @@ impl DiscoveryService {
                     release_date: row.get(6)?,
                     artwork_url: row.get(7)?,
                     artwork_path: row.get(8)?,
+                    artwork_cache_path: None,
                     notes: row.get(9)?,
                     parent_url: row.get(10)?,
                     source_page_url: row.get(11)?,
@@ -108,6 +129,7 @@ impl DiscoveryService {
                     source_ids: Vec::new(),
                     tracks: Vec::new(),
                     tags: Vec::new(),
+                    total_track_count: None,
                 })
             },
         ).map_err(|e| match e {
@@ -117,23 +139,30 @@ impl DiscoveryService {
             _ => CrateError::Database(e),
         })?;
 
-    // Load tracks
-    let mut stmt = conn.prepare(
-            "SELECT id, release_id, name, position, duration_ms, video_id, is_liked FROM discovery_tracks WHERE release_id = ?1 ORDER BY position",
+        // Load tracks
+        let mut stmt = conn.prepare(
+            "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at,
+                    EXISTS(SELECT 1 FROM discovery_preview_unavailable pu WHERE pu.release_id = discovery_tracks.release_id AND pu.position = discovery_tracks.position)
+             FROM discovery_tracks WHERE release_id = ?1 ORDER BY position",
         )?;
-    release.tracks = stmt
-      .query_map([id], |row| {
-        Ok(DiscoveryTrack {
-          id: row.get(0)?,
-          release_id: row.get(1)?,
-          name: row.get(2)?,
-          position: row.get(3)?,
-          duration_ms: row.get(4)?,
-          video_id: row.get(5)?,
-          is_liked: row.get::<_, i32>(6).map(|v| v != 0)?,
-        })
-      })?
-      .collect::<std::result::Result<Vec<_>, _>>()?;
+        release.tracks = stmt
+            .query_map([id], |row| {
+                Ok(DiscoveryTrack {
+                    id: row.get(0)?,
+                    release_id: row.get(1)?,
+                    name: row.get(2)?,
+                    position: row.get(3)?,
+                    duration_ms: row.get(4)?,
+                    video_id: row.get(5)?,
+                    url: row.get(6)?,
+                    is_liked: row.get::<_, i32>(7).map(|v| v != 0)?,
+                    liked_at: row.get(8)?,
+                    preview_unavailable: row.get::<_, i32>(9).map(|v| v != 0)?,
+                    tags: Vec::new(),
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        super::attach_track_tags(conn, &mut release.tracks)?;
 
     // Load tags
     let mut stmt = conn.prepare(
@@ -162,13 +191,31 @@ impl DiscoveryService {
       .query_map([id], |row| row.get::<_, String>(0))?
       .collect::<std::result::Result<Vec<_>, _>>()?;
 
-    Ok(release)
-  }
+        // Load the on-disk cached-cover path, if any, for cache-first (offline) rendering.
+        if let Ok(ext) = conn.query_row(
+            "SELECT ext FROM discovery_artwork_cache WHERE release_id = ?1",
+            [id],
+            |row| row.get::<_, String>(0),
+        ) {
+            release.artwork_cache_path = Some(self.artwork_cache_rel_path(id, &ext));
+        }
 
-  pub fn get_releases(&self, filter: Option<DiscoveryFilter>) -> Result<Vec<DiscoveryRelease>> {
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        Ok(release)
+    }
 
-    let filter = filter.unwrap_or_default();
+    /// The paginated feed query (5k-collection hot path) — runs on a pooled reader
+    /// inside one snapshot (page + 4 batch loads stay consistent), so scrolling and
+    /// merge-triggered reloads never queue behind the writer.
+    pub fn get_releases(&self, filter: Option<DiscoveryFilter>) -> Result<Vec<DiscoveryRelease>> {
+        self.db.read(|conn| self.get_releases_on(conn, filter))
+    }
+
+    fn get_releases_on(
+        &self,
+        conn: &Connection,
+        filter: Option<DiscoveryFilter>,
+    ) -> Result<Vec<DiscoveryRelease>> {
+        let filter = filter.unwrap_or_default();
 
     // Build query with optional filters
     let mut sql = String::from(
@@ -254,64 +301,91 @@ impl DiscoveryService {
     let mut stmt = conn.prepare(&sql)?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
-    let mut releases: Vec<DiscoveryRelease> = stmt
-      .query_map(param_refs.as_slice(), |row| {
-        Ok(DiscoveryRelease {
-          id: row.get(0)?,
-          url: row.get(1)?,
-          source_type: row.get(2)?,
-          artist: row.get(3)?,
-          title: row.get(4)?,
-          label: row.get(5)?,
-          release_date: row.get(6)?,
-          artwork_url: row.get(7)?,
-          artwork_path: row.get(8)?,
-          notes: row.get(9)?,
-          parent_url: row.get(10)?,
-          source_page_url: row.get(11)?,
-          date_added: row.get(12)?,
-          date_modified: row.get(13)?,
-          is_new: row.get::<_, i32>(14).map(|v| v != 0)?,
-          surfaced_at: row.get(15)?,
-          source_ids: Vec::new(),
-          tracks: Vec::new(),
-          tags: Vec::new(),
-        })
-      })?
-      .collect::<std::result::Result<Vec<_>, _>>()?;
+        // `dr.id` tiebreaker keeps the order stable across paged reads: synced/bulk-imported
+        // releases often share a `date_added`, and without a total order LIMIT/OFFSET pages
+        // could repeat or skip rows.
+        sql.push_str(" ORDER BY dr.date_added DESC, dr.id DESC");
+
+        if let Some(limit) = filter.limit {
+            sql.push_str(" LIMIT ?");
+            params.push(Box::new(limit as i64));
+            if let Some(offset) = filter.offset {
+                sql.push_str(" OFFSET ?");
+                params.push(Box::new(offset as i64));
+            }
+        }
 
     if releases.is_empty() {
       return Ok(releases);
     }
 
-    // Batch load tracks for all releases
-    let release_ids: Vec<String> = releases.iter().map(|r| r.id.clone()).collect();
-    let placeholders = release_ids
-      .iter()
-      .map(|_| "?")
-      .collect::<Vec<_>>()
-      .join(", ");
+        let mut releases: Vec<DiscoveryRelease> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(DiscoveryRelease {
+                    id: row.get(0)?,
+                    url: row.get(1)?,
+                    source_type: row.get(2)?,
+                    artist: row.get(3)?,
+                    title: row.get(4)?,
+                    label: row.get(5)?,
+                    release_date: row.get(6)?,
+                    artwork_url: row.get(7)?,
+                    artwork_path: row.get(8)?,
+                    artwork_cache_path: None,
+                    notes: row.get(9)?,
+                    parent_url: row.get(10)?,
+                    source_page_url: row.get(11)?,
+                    date_added: row.get(12)?,
+                    date_modified: row.get(13)?,
+                    is_new: row.get::<_, i32>(14).map(|v| v != 0)?,
+                    surfaced_at: row.get(15)?,
+                    source_ids: Vec::new(),
+                    tracks: Vec::new(),
+                    tags: Vec::new(),
+                    total_track_count: None,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
-    let mut stmt = conn.prepare(&format!(
-            "SELECT id, release_id, name, position, duration_ms, video_id, is_liked FROM discovery_tracks WHERE release_id IN ({placeholders}) ORDER BY position"
+        if releases.is_empty() {
+            return Ok(releases);
+        }
+
+        // Batch load tracks for all releases
+        let release_ids: Vec<String> = releases.iter().map(|r| r.id.clone()).collect();
+        let placeholders = release_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at,
+                    EXISTS(SELECT 1 FROM discovery_preview_unavailable pu WHERE pu.release_id = discovery_tracks.release_id AND pu.position = discovery_tracks.position)
+             FROM discovery_tracks WHERE release_id IN ({placeholders}) ORDER BY position"
         ))?;
-    let track_params: Vec<&dyn rusqlite::types::ToSql> = release_ids
-      .iter()
-      .map(|id| id as &dyn rusqlite::types::ToSql)
-      .collect();
-    let all_tracks: Vec<DiscoveryTrack> = stmt
-      .query_map(track_params.as_slice(), |row| {
-        Ok(DiscoveryTrack {
-          id: row.get(0)?,
-          release_id: row.get(1)?,
-          name: row.get(2)?,
-          position: row.get(3)?,
-          duration_ms: row.get(4)?,
-          video_id: row.get(5)?,
-          is_liked: row.get::<_, i32>(6).map(|v| v != 0)?,
-        })
-      })?
-      .collect::<std::result::Result<Vec<_>, _>>()?;
+        let track_params: Vec<&dyn rusqlite::types::ToSql> = release_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let mut all_tracks: Vec<DiscoveryTrack> = stmt
+            .query_map(track_params.as_slice(), |row| {
+                Ok(DiscoveryTrack {
+                    id: row.get(0)?,
+                    release_id: row.get(1)?,
+                    name: row.get(2)?,
+                    position: row.get(3)?,
+                    duration_ms: row.get(4)?,
+                    video_id: row.get(5)?,
+                    url: row.get(6)?,
+                    is_liked: row.get::<_, i32>(7).map(|v| v != 0)?,
+                    liked_at: row.get(8)?,
+                    preview_unavailable: row.get::<_, i32>(9).map(|v| v != 0)?,
+                    tags: Vec::new(),
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        super::attach_track_tags(conn, &mut all_tracks)?;
 
     // Batch load tags for all releases
     let mut stmt = conn.prepare(&format!(
@@ -347,23 +421,40 @@ impl DiscoveryService {
       })?
       .collect::<std::result::Result<Vec<_>, _>>()?;
 
-    // Merge tracks, tags, and provenance into releases
-    for release in &mut releases {
-      release.tracks = all_tracks
-        .iter()
-        .filter(|t| t.release_id == release.id)
-        .cloned()
-        .collect();
-      release.tags = all_tags
-        .iter()
-        .filter(|(rid, _)| *rid == release.id)
-        .map(|(_, tag)| tag.clone())
-        .collect();
-      release.source_ids = all_sources
-        .iter()
-        .filter(|(rid, _)| *rid == release.id)
-        .map(|(_, sid)| sid.clone())
-        .collect();
+        // Batch load cached-cover extensions for cache-first (offline) artwork rendering.
+        let mut stmt = conn.prepare(&format!(
+            "SELECT release_id, ext FROM discovery_artwork_cache WHERE release_id IN ({placeholders})"
+        ))?;
+        let all_artwork: Vec<(String, String)> = stmt
+            .query_map(track_params.as_slice(), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
+        // Merge tracks, tags, and provenance into releases
+        for release in &mut releases {
+            release.tracks = all_tracks
+                .iter()
+                .filter(|t| t.release_id == release.id)
+                .cloned()
+                .collect();
+            release.tags = all_tags
+                .iter()
+                .filter(|(rid, _)| *rid == release.id)
+                .map(|(_, tag)| tag.clone())
+                .collect();
+            release.source_ids = all_sources
+                .iter()
+                .filter(|(rid, _)| *rid == release.id)
+                .map(|(_, sid)| sid.clone())
+                .collect();
+            release.artwork_cache_path = all_artwork
+                .iter()
+                .find(|(rid, _)| *rid == release.id)
+                .map(|(_, ext)| self.artwork_cache_rel_path(&release.id, ext));
+        }
+
+        Ok(releases)
     }
 
     Ok(releases)
@@ -389,33 +480,31 @@ impl DiscoveryService {
       }
     };
 
-    if let Some(ref artist) = update.artist {
-      set_clauses.push("artist = ?".to_string());
-      params.push(Box::new(str_or_null(artist)));
-    }
-    if let Some(ref title) = update.title {
-      set_clauses.push("title = ?".to_string());
-      params.push(Box::new(str_or_null(title)));
-    }
-    if let Some(ref label) = update.label {
-      set_clauses.push("label = ?".to_string());
-      params.push(Box::new(str_or_null(label)));
-    }
-    if let Some(ref release_date) = update.release_date {
-      set_clauses.push("release_date = ?".to_string());
-      params.push(Box::new(str_or_null(release_date)));
-    }
-    if let Some(ref artwork_url) = update.artwork_url {
-      set_clauses.push("artwork_url = ?".to_string());
-      params.push(Box::new(str_or_null(artwork_url)));
-    }
-    if let Some(ref artwork_path) = update.artwork_path {
-      set_clauses.push("artwork_path = ?".to_string());
-      params.push(Box::new(str_or_null(artwork_path)));
-    }
-    if let Some(ref notes) = update.notes {
-      set_clauses.push("notes = ?".to_string());
-      params.push(Box::new(str_or_null(notes)));
+        let hlc = dirty::next_hlc(&conn)?;
+        set_clauses.push("_hlc = ?".to_string());
+        params.push(Box::new(hlc));
+
+        params.push(Box::new(id.to_string()));
+
+        let sql = format!(
+            "UPDATE discovery_releases SET {} WHERE id = ?",
+            set_clauses.join(", ")
+        );
+
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        conn.execute(&sql, param_refs.as_slice())?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASES)?;
+
+        drop(conn);
+
+        // If the remote artwork URL was (re)set — e.g. a metadata refresh — drop any stale
+        // cached cover so the next display re-downloads the current art.
+        if update.artwork_url.is_some() {
+            let _ = self.delete_cached_artwork_file(id);
+        }
+
+        self.get_release(id)
     }
 
     let hlc = dirty::next_hlc(&conn)?;
@@ -503,7 +592,14 @@ impl DiscoveryService {
       log::warn!("Failed to clean up cached audio for release {id}: {e}");
     }
 
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    pub fn delete_release(&self, id: &str) -> Result<()> {
+        // Clean up cached audio + artwork files before the SQL DELETE
+        if let Err(e) = self.delete_cached_audio_files(id) {
+            log::warn!("Failed to clean up cached audio for release {id}: {e}");
+        }
+        if let Err(e) = self.delete_cached_artwork_file(id) {
+            log::warn!("Failed to clean up cached artwork for release {id}: {e}");
+        }
 
     // Delete = dismiss: tombstone this release's followed-source record so the watch
     // loop never re-adds it. Runs before the DELETE so the URL is still resolvable;
@@ -514,35 +610,45 @@ impl DiscoveryService {
       [id],
     );
 
-    let hlc = dirty::next_hlc(&conn)?;
-    dirty::record_tombstone(&conn, buckets::DISCOVERY_RELEASES, id, &hlc)?;
-    conn.execute("DELETE FROM discovery_releases WHERE id = ?1", [id])?;
-    // Cascade removes this release's tracks + tag/playlist links.
-    dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASES)?;
-    dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACKS)?;
-    dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASE_TAGS)?;
-    dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_RELEASES)?;
-    Ok(())
-  }
+        let hlc = dirty::next_hlc(&conn)?;
+        dirty::record_tombstone(&conn, buckets::DISCOVERY_RELEASES, id, &hlc)?;
+        conn.execute("DELETE FROM discovery_releases WHERE id = ?1", [id])?;
+        // Cascade removes this release's tracks + tag/playlist links.
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASES)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACKS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASE_TAGS)?;
+        dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_RELEASES)?;
+        dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_TRACKS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACK_TAGS)?;
+        Ok(())
+    }
 
-  pub fn get_all_release_urls(&self) -> Result<std::collections::HashSet<String>> {
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    pub fn get_all_release_urls(&self) -> Result<std::collections::HashSet<String>> {
+        self.db.read(|conn| {
+            let mut stmt = conn.prepare("SELECT url FROM discovery_releases")?;
+            let urls = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<std::result::Result<std::collections::HashSet<String>, _>>()?;
 
-    let mut stmt = conn.prepare("SELECT url FROM discovery_releases")?;
-    let urls = stmt
-      .query_map([], |row| row.get::<_, String>(0))?
-      .collect::<std::result::Result<std::collections::HashSet<String>, _>>()?;
-
-    Ok(urls)
-  }
+            Ok(urls)
+        })
+    }
 
   pub fn toggle_track_liked(&self, track_id: &str) -> Result<bool> {
     let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
 
-    let hlc = dirty::next_hlc(&conn)?;
-    conn.execute(
-            "UPDATE discovery_tracks SET is_liked = CASE WHEN is_liked = 0 THEN 1 ELSE 0 END, _hlc = ?2 WHERE id = ?1",
-            rusqlite::params![track_id, hlc],
+        let hlc = dirty::next_hlc(&conn)?;
+        // Both CASEs read the pre-update `is_liked` (SQLite evaluates every SET against the
+        // old row), so the stamp lands exactly when the flag flips on and clears when it
+        // flips off — one statement, one `_hlc`, the pair can never drift apart.
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE discovery_tracks \
+             SET liked_at = CASE WHEN is_liked = 0 THEN ?3 ELSE NULL END, \
+                 is_liked = CASE WHEN is_liked = 0 THEN 1 ELSE 0 END, \
+                 _hlc = ?2 \
+             WHERE id = ?1",
+            rusqlite::params![track_id, hlc, now],
         )?;
     dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACKS)?;
 
@@ -570,7 +676,16 @@ impl DiscoveryService {
       }
     }
 
-    let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+    pub fn delete_releases(&self, ids: Vec<String>) -> Result<()> {
+        // Clean up cached audio + artwork files for all releases
+        for id in &ids {
+            if let Err(e) = self.delete_cached_audio_files(id) {
+                log::warn!("Failed to clean up cached audio for release {id}: {e}");
+            }
+            if let Err(e) = self.delete_cached_artwork_file(id) {
+                log::warn!("Failed to clean up cached artwork for release {id}: {e}");
+            }
+        }
 
     let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let sql = format!("DELETE FROM discovery_releases WHERE id IN ({placeholders})");
@@ -589,9 +704,21 @@ impl DiscoveryService {
             params.as_slice(),
         );
 
-    let hlc = dirty::next_hlc(&conn)?;
-    for id in &ids {
-      dirty::record_tombstone(&conn, buckets::DISCOVERY_RELEASES, id, &hlc)?;
+        let hlc = dirty::next_hlc(&conn)?;
+        for id in &ids {
+            dirty::record_tombstone(&conn, buckets::DISCOVERY_RELEASES, id, &hlc)?;
+        }
+
+        conn.execute(&sql, params.as_slice())?;
+
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASES)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACKS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_RELEASE_TAGS)?;
+        dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_RELEASES)?;
+        dirty::mark_dirty(&conn, buckets::PLAYLIST_DISCOVERY_TRACKS)?;
+        dirty::mark_dirty(&conn, buckets::DISCOVERY_TRACK_TAGS)?;
+
+        Ok(())
     }
 
     conn.execute(&sql, params.as_slice())?;
@@ -603,4 +730,65 @@ impl DiscoveryService {
 
     Ok(())
   }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use rusqlite::Connection;
+
+    use super::*;
+
+    fn service_with_one_track() -> DiscoveryService {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        for sql in crate::db::schema::get_migrations() {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.execute(
+            "INSERT INTO discovery_releases (id, url, source_type, date_added, date_modified, _hlc) \
+             VALUES ('rel', 'https://x.bandcamp.com/album/y', 'bandcamp', \
+                     '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', '0001')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO discovery_tracks (id, release_id, name, position, _hlc) \
+             VALUES ('t1', 'rel', 'Intro', 1, '0001')",
+            [],
+        )
+        .unwrap();
+        DiscoveryService::new(Arc::new(Mutex::new(conn)), std::env::temp_dir())
+    }
+
+    fn liked_at(svc: &DiscoveryService) -> Option<String> {
+        svc.conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT liked_at FROM discovery_tracks WHERE id = 't1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn toggle_track_liked_stamps_on_like_and_clears_on_unlike() {
+        let svc = service_with_one_track();
+
+        assert!(svc.toggle_track_liked("t1").unwrap());
+        let first = liked_at(&svc).expect("liking records a stamp");
+
+        assert!(!svc.toggle_track_liked("t1").unwrap());
+        assert_eq!(liked_at(&svc), None, "unliking clears the stamp");
+
+        assert!(svc.toggle_track_liked("t1").unwrap());
+        let again = liked_at(&svc).expect("re-liking records a fresh stamp");
+        assert!(
+            again >= first,
+            "the fresh stamp is never older than the first"
+        );
+    }
 }

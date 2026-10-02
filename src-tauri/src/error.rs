@@ -74,6 +74,25 @@ pub enum CrateError {
   #[allow(dead_code)]
   #[error("Cloud sync blob not found: {0}")]
   CloudSyncBlobNotFound(String),
+    /// A non-success HTTP response from the sync backend. `code` is a sanitized server
+    /// error token (e.g. "PERMISSION_DENIED"), never the raw body or a URL.
+    #[error("Cloud sync HTTP {status} ({context}): {code}")]
+    CloudSyncHttp {
+        context: String,
+        status: u16,
+        code: String,
+    },
+
+    /// A failure applying a pulled bucket to the local database (parse or SQL error),
+    /// attributed to the bucket it happened in.
+    #[error("Cloud sync merge error ({bucket}): {message}")]
+    CloudSyncMerge { bucket: String, message: String },
+
+    /// A transient connectivity failure (connect/timeout/DNS, HTTP 429, HTTP 5xx).
+    /// Distinct from [`CrateError::CloudSync`] so the runtime can surface `Offline`
+    /// (and recover) instead of a hard `Error`.
+    #[error("Cloud sync network error: {0}")]
+    CloudSyncNetwork(String),
 
   #[allow(dead_code)]
   #[error("Cloud sync auth error: {0}")]
@@ -95,6 +114,18 @@ impl CrateError {
   pub fn is_transient(&self) -> bool {
     matches!(self, CrateError::CloudSyncNetwork(_))
   }
+    /// Whether this failure is worth surfacing as `Offline` (and retrying) rather than
+    /// a hard `Error`: connectivity failures, rate limits, server errors, and manifest
+    /// CAS conflicts (the dirty queue survives an aborted push, so the debounce loop
+    /// retries it automatically).
+    pub fn is_transient(&self) -> bool {
+        match self {
+            CrateError::CloudSyncNetwork(_) => true,
+            CrateError::CloudSyncHttp { status, .. } => *status == 429 || *status >= 500,
+            CrateError::CloudSyncConflict => true,
+            _ => false,
+        }
+    }
 }
 
 impl serde::Serialize for CrateError {

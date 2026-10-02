@@ -221,12 +221,139 @@ pub(super) async fn fetch_discogs(client: &reqwest::Client, url: &str) -> Result
   let kind = parse_discogs_url(url)
     .ok_or_else(|| CrateError::Discovery("Could not parse Discogs URL".into()))?;
 
-  // For master releases, resolve to the main release first
-  let release_id = match kind {
-    DiscogsUrlKind::Artist(_) | DiscogsUrlKind::Label(_) => {
-      return Err(CrateError::Discovery(
-        "Artist/label pages cannot be fetched as a single release".into(),
-      ));
+    // For master releases, resolve to the main release first
+    let release_id = match kind {
+        DiscogsUrlKind::Artist(_) | DiscogsUrlKind::Label(_) => {
+            return Err(CrateError::Discovery(
+                "Artist/label pages cannot be fetched as a single release".into(),
+            ));
+        }
+        DiscogsUrlKind::Release(id) => id,
+        DiscogsUrlKind::Master(id) => {
+            let master_url = format!("https://api.discogs.com/masters/{id}");
+            let resp = discogs_api_get(client, &master_url).await?;
+
+            resp.get("main_release")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| CrateError::Discovery("Discogs master has no main_release".into()))?
+        }
+    };
+
+    let release_url = format!("https://api.discogs.com/releases/{release_id}");
+    let resp = discogs_api_get(client, &release_url).await?;
+
+    let artist = resp
+        .get("artists")
+        .and_then(|a| a.as_array())
+        .and_then(|arr| join_discogs_artists(arr));
+
+    let title = resp
+        .get("title")
+        .and_then(|t| t.as_str())
+        .map(|s| s.to_string());
+
+    let label = resp
+        .get("labels")
+        .and_then(|l| l.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|l| l.get("name"))
+        .and_then(|n| n.as_str())
+        .map(|s| s.to_string());
+
+    // Prefer full `released` date, fallback to `year`
+    // Discogs uses `-00` for unknown month/day (e.g. "2018-00-00"), strip those.
+    let release_date = resp
+        .get("released")
+        .and_then(|d| d.as_str())
+        .filter(|s| !s.is_empty())
+        .map(normalize_discogs_date)
+        .or_else(|| {
+            resp.get("year")
+                .and_then(|y| y.as_u64())
+                .map(|y| format!("{y}"))
+        });
+
+    // Prefer primary image, fallback to first image
+    let artwork_url = resp
+        .get("images")
+        .and_then(|i| i.as_array())
+        .and_then(|images| {
+            images
+                .iter()
+                .find(|img| img.get("type").and_then(|t| t.as_str()) == Some("primary"))
+                .or_else(|| images.first())
+        })
+        .and_then(|img| img.get("uri").and_then(|u| u.as_str()))
+        .map(|s| s.to_string());
+
+    let is_comp = is_compilation(&artist);
+
+    // Extract tracks from tracklist, filtering to actual tracks (skip headings)
+    let mut tracks = resp
+        .get("tracklist")
+        .and_then(|t| t.as_array())
+        .map(|tracklist| {
+            tracklist
+                .iter()
+                .filter(|t| t.get("type_").and_then(|ty| ty.as_str()).unwrap_or("track") == "track")
+                .enumerate()
+                .filter_map(|(idx, track)| {
+                    let raw_name = track
+                        .get("title")
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())?;
+
+                    // For compilations, prepend the per-track artist to preserve it
+                    let name = if is_comp {
+                        track
+                            .get("artists")
+                            .and_then(|a| a.as_array())
+                            .and_then(|arr| join_discogs_artists(arr))
+                            .map(|track_artist| format!("{track_artist} - {raw_name}"))
+                            .unwrap_or(raw_name)
+                    } else {
+                        raw_name
+                    };
+
+                    let duration_ms = track
+                        .get("duration")
+                        .and_then(|d| d.as_str())
+                        .and_then(parse_discogs_duration);
+                    Some(FetchedTrack {
+                        name,
+                        position: (idx + 1) as i32,
+                        duration_ms,
+                        video_id: None,
+                        url: None,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    // Fallback: fill missing track durations from video metadata
+    if let Some(videos) = resp.get("videos").and_then(|v| v.as_array()) {
+        for track in tracks.iter_mut().filter(|t| t.duration_ms.is_none()) {
+            let track_name_lower = track.name.to_ascii_lowercase();
+
+            if let Some(video_duration) = videos.iter().find_map(|video| {
+                let video_title = video.get("title").and_then(|t| t.as_str())?;
+                let video_title_lower = video_title.to_ascii_lowercase();
+
+                if video_title_lower == track_name_lower
+                    || video_title_lower.contains(&track_name_lower)
+                {
+                    video
+                        .get("duration")
+                        .and_then(|d| d.as_u64())
+                        .filter(|&d| d > 0)
+                } else {
+                    None
+                }
+            }) {
+                track.duration_ms = Some(video_duration as i64 * 1000);
+            }
+        }
     }
     DiscogsUrlKind::Release(id) => id,
     DiscogsUrlKind::Master(id) => {
