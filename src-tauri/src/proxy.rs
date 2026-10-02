@@ -1,10 +1,9 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Mutex};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::error::{CrateError, Result};
 use crate::services::DiscoveryService;
@@ -23,12 +22,6 @@ const CHUNK_SIZE: u64 = 4_194_304;
 /// Maximum total download size to prevent runaway downloads (~50 MB).
 const MAX_TOTAL_SIZE: u64 = 52_428_800;
 
-/// Fully downloaded audio file held in memory for instant range serving.
-struct CachedAudio {
-  data: Vec<u8>,
-  content_type: String,
-}
-
 /// Shared state threaded into every axum proxy request handler.
 ///
 /// Serving is DISK-BACKED: a stream downloads once to the on-disk audio cache and every
@@ -40,13 +33,10 @@ struct CachedAudio {
 pub(crate) struct ProxyServerState {
   pub app_handle: tauri::AppHandle,
   pub client: reqwest::Client,
-  /// Cache of fully downloaded audio files, keyed by "{release_id}/{track_position}" for
-  /// discovery previews and "sample:{key}" for Beatport recommendation samples.
-  cache: Arc<tokio::sync::RwLock<HashMap<String, Arc<CachedAudio>>>>,
   /// In-flight downloads: maps cache key to a watch receiver that signals completion.
   /// `None` = download in progress, `Some(true)` = success, `Some(false)` = failed.
   downloads: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::watch::Receiver<Option<bool>>>>>,
-  /// Registered sample routes: proxy key → remote https URL. A std `Mutex` is fine here
+  /// Registered sample routes: proxy key -> remote https URL. A std `Mutex` is fine here
   /// because every access locks, clones out, and drops the guard before any `.await`.
   pub(crate) samples: Arc<Mutex<HashMap<String, String>>>,
 }
@@ -56,25 +46,37 @@ impl ProxyServerState {
     Self {
       app_handle,
       client,
-      cache: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
       downloads: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
       samples: Arc::new(Mutex::new(HashMap::new())),
-    pub app_handle: tauri::AppHandle,
-    pub client: reqwest::Client,
-    /// In-flight downloads: maps cache key to a watch receiver that signals completion.
-    /// `None` = download in progress, `Some(true)` = success, `Some(false)` = failed.
-    downloads: Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::watch::Receiver<Option<bool>>>>>,
-}
-
-impl ProxyServerState {
-    pub fn new(app_handle: tauri::AppHandle, client: reqwest::Client) -> Self {
-        Self {
-            app_handle,
-            client,
-            downloads: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-        }
     }
   }
+}
+
+/// Probe the proxy listener and kick the supervisor to rebind it when it's dead.
+///
+/// iOS closes an app's listening sockets on suspend, so the first play after a resume
+/// would otherwise fail with a connection refusal. Callers run this before handing out
+/// (or acting on) a proxy URL: a healthy listener answers in well under a millisecond
+/// on loopback, a dead one triggers a rebind and this waits (bounded, ~2.5 s worst
+/// case) for the supervisor to bring the port back.
+pub(crate) async fn ensure_proxy_alive(port: u16, restart: &tokio::sync::Notify) {
+  use std::time::Duration;
+
+  for attempt in 0..10u32 {
+    let connect = tokio::net::TcpStream::connect(("127.0.0.1", port));
+    if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(250), connect).await {
+      if attempt > 0 {
+        log::info!("Stream proxy listener back up on port {port}");
+      }
+      return;
+    }
+    if attempt == 0 {
+      log::warn!("Stream proxy port {port} not accepting connections; requesting rebind");
+      restart.notify_one();
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+  }
+  log::error!("Stream proxy port {port} still not accepting after rebind request");
 }
 
 /// Validate a sample URL for proxying: exactly `https://{SAMPLE_HOST}` and nothing else, so the
@@ -114,33 +116,6 @@ pub(crate) fn register_sample(
   let mut guard = samples.lock().ok()?;
   guard.insert(key.clone(), raw.to_string());
   Some(format!("http://127.0.0.1:{port}/samples/{key}"))
-}
-
-/// Probe the proxy listener and kick the supervisor to rebind it when it's dead.
-///
-/// iOS closes an app's listening sockets on suspend, so the first play after a resume
-/// would otherwise fail with a connection refusal. Callers run this before handing out
-/// (or acting on) a proxy URL: a healthy listener answers in well under a millisecond
-/// on loopback, a dead one triggers a rebind and this waits (bounded, ~2.5 s worst
-/// case) for the supervisor to bring the port back.
-pub(crate) async fn ensure_proxy_alive(port: u16, restart: &tokio::sync::Notify) {
-    use std::time::Duration;
-
-    for attempt in 0..10u32 {
-        let connect = tokio::net::TcpStream::connect(("127.0.0.1", port));
-        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(250), connect).await {
-            if attempt > 0 {
-                log::info!("Stream proxy listener back up on port {port}");
-            }
-            return;
-        }
-        if attempt == 0 {
-            log::warn!("Stream proxy port {port} not accepting connections; requesting rebind");
-            restart.notify_one();
-        }
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
-    log::error!("Stream proxy port {port} still not accepting after rebind request");
 }
 
 /// Parse a `bytes=start-[end]` Range header value and return `(start, optional_end)`.
@@ -196,46 +171,35 @@ async fn proxy_http_handler_inner(
   let has_range_header = incoming_range.is_some();
   let (start, end_opt) = parse_bytes_range(incoming_range);
 
-  // 1. Check memory cache — if audio data is available, serve from memory.
-  {
-    let cache = state.cache.read().await;
-    if let Some(cached) = cache.get(&cache_key) {
-      return serve_range_from_cache(cached, start, end_opt, has_range_header);
-    }
-  }
-
-  // 2. Check disk cache — load into memory and serve if available.
+  // 1. Disk cache: serve the requested slice straight from the file.
   {
     let discovery = state.app_handle.state::<DiscoveryService>();
     if let Ok(Some((content_type, file_size))) =
       discovery.get_cached_audio_meta(release_id, track_position)
     {
       let file_path = discovery.audio_cache_path(release_id, track_position);
-
-      if let Ok(data) = std::fs::read(&file_path) {
-        if data.len() as i64 == file_size {
-          let cached = Arc::new(CachedAudio { data, content_type });
-
-          // Promote to memory cache
-          let mut cache = state.cache.write().await;
-          while cache.len() >= MAX_CACHE_ENTRIES {
-            if let Some(oldest_key) = cache.keys().next().cloned() {
-              cache.remove(&oldest_key);
-            }
-          }
-          cache.insert(cache_key.clone(), cached.clone());
-
-          return serve_range_from_cache(&cached, start, end_opt, has_range_header);
-        } else {
-          log::warn!("Audio cache file size mismatch for {cache_key}, removing stale entry");
-          let _ = std::fs::remove_file(&file_path);
-          let _ = discovery.delete_cached_audio_files(release_id);
-        }
+      let disk_len = std::fs::metadata(&file_path).map(|m| m.len() as i64).ok();
+      if disk_len == Some(file_size) {
+        // Bump the LRU access time so a replayed track survives eviction.
+        let _ = discovery.touch_audio_cache_access(release_id, track_position);
+        return serve_range_from_file(
+          &file_path,
+          &content_type,
+          file_size as u64,
+          start,
+          end_opt,
+          has_range_header,
+        )
+        .await;
       }
+      // Only this track's entry is stale — leave the release's other cached (possibly
+      // pinned/downloaded) tracks alone.
+      log::warn!("Audio cache file size mismatch for {cache_key}, removing stale entry");
+      let _ = discovery.delete_cached_audio_track(release_id, track_position);
     }
   }
 
-  // 3. Check if a download is already in progress for this key.
+  // 2. Check if a download is already in progress for this key.
   //    If so, wait for it. If not, start one.
   let mut rx = {
     let mut downloads = state.downloads.lock().await;
@@ -260,44 +224,35 @@ async fn proxy_http_handler_inner(
       let tp = track_position;
 
       tokio::spawn(async move {
-        let success = match download_stream(&state_clone, &url, &proxy_ua).await {
-          Ok(cached_audio) => {
-            let entry = Arc::new(cached_audio);
-            let mut cache = state_clone.cache.write().await;
-
-            while cache.len() >= MAX_CACHE_ENTRIES {
-              if let Some(oldest_key) = cache.keys().next().cloned() {
-                cache.remove(&oldest_key);
-              }
-            }
-
-            cache.insert(key.clone(), entry.clone());
-
-            // Write to disk cache
-            let discovery = state_clone.app_handle.state::<DiscoveryService>();
-            let file_path = discovery.audio_cache_path(&rid, tp);
-            if let Err(e) = std::fs::create_dir_all(file_path.parent().unwrap()) {
-              log::warn!("Failed to create audio cache dir: {e}");
-            } else if let Err(e) = std::fs::write(&file_path, &entry.data) {
-              log::warn!("Failed to write audio cache file: {e}");
-            } else if let Err(e) = discovery.save_audio_cache_entry(
-              &rid,
-              tp,
-              &entry.content_type,
-              entry.data.len() as i64,
-            ) {
+        let discovery = state_clone.app_handle.state::<DiscoveryService>();
+        let file_path = discovery.audio_cache_path(&rid, tp);
+        let success = match download_stream_to_disk(&state_clone, &url, &proxy_ua, &file_path).await
+        {
+          Ok((content_type, size)) => {
+            if let Err(e) = discovery.save_audio_cache_entry(&rid, tp, &content_type, size as i64) {
               log::warn!("Failed to record audio cache entry: {e}");
             } else {
-              log::info!(
-                "Cached audio to disk: {rid}/{tp} ({} bytes)",
-                entry.data.len()
-              );
+              log::info!("Cached audio to disk: {rid}/{tp} ({size} bytes)");
+              // Keep the on-disk cache under its size cap (LRU eviction).
+              if let Err(e) = discovery.enforce_audio_cache_limit() {
+                log::warn!("Failed to enforce audio cache limit: {e}");
+              }
+              // Covers organic play-writes, precache downloads, AND evictions —
+              // cached-state consumers (badges / downloaded filter) refetch on this.
+              let _ = state_clone.app_handle.emit("discovery-cache-changed", ());
             }
-
             true
           }
           Err(e) => {
             log::warn!("Stream download failed for {key}: {e}");
+            // A cached stream URL can die before its recorded expiry (CDN signatures
+            // are often bound to the resolving IP, so a WiFi↔cellular hop invalidates
+            // them). Without this, every replay re-serves the same dead URL until the
+            // expiry timestamp passes — even across app restarts. URL-level only:
+            // never touches downloaded audio bytes.
+            if let Err(e) = discovery.invalidate_stream_cache(&rid) {
+              log::warn!("Failed to invalidate stream cache for {rid}: {e}");
+            }
             false
           }
         };
@@ -310,7 +265,7 @@ async fn proxy_http_handler_inner(
     }
   };
 
-  // 4. Wait for the download to complete.
+  // 3. Wait for the download to complete.
   if rx.changed().await.is_err() {
     return Err(CrateError::Discovery(
       "Download task dropped unexpectedly".into(),
@@ -327,209 +282,51 @@ async fn proxy_http_handler_inner(
     );
   }
 
-  // 5. Serve from cache.
-  let cache = state.cache.read().await;
-  let cached = cache
-    .get(&cache_key)
+  // 4. Serve from the freshly written disk cache.
+  let discovery = state.app_handle.state::<DiscoveryService>();
+  let (content_type, file_size) = discovery
+    .get_cached_audio_meta(release_id, track_position)?
     .ok_or_else(|| CrateError::Discovery("Download succeeded but cache entry missing".into()))?;
-  serve_range_from_cache(cached, start, end_opt, has_range_header)
-    // 1. Disk cache: serve the requested slice straight from the file.
-    {
-        let discovery = state.app_handle.state::<DiscoveryService>();
-        if let Ok(Some((content_type, file_size))) =
-            discovery.get_cached_audio_meta(release_id, track_position)
-        {
-            let file_path = discovery.audio_cache_path(release_id, track_position);
-            let disk_len = std::fs::metadata(&file_path).map(|m| m.len() as i64).ok();
-            if disk_len == Some(file_size) {
-                // Bump the LRU access time so a replayed track survives eviction.
-                let _ = discovery.touch_audio_cache_access(release_id, track_position);
-                return serve_range_from_file(
-                    &file_path,
-                    &content_type,
-                    file_size as u64,
-                    start,
-                    end_opt,
-                    has_range_header,
-                )
-                .await;
-            }
-            // Only this track's entry is stale — leave the release's other cached (possibly
-            // pinned/downloaded) tracks alone.
-            log::warn!("Audio cache file size mismatch for {cache_key}, removing stale entry");
-            let _ = discovery.delete_cached_audio_track(release_id, track_position);
-        }
-    }
-
-    // 2. Check if a download is already in progress for this key.
-    //    If so, wait for it. If not, start one.
-    let mut rx = {
-        let mut downloads = state.downloads.lock().await;
-        if let Some(existing_rx) = downloads.get(&cache_key) {
-            existing_rx.clone()
-        } else {
-            let discovery = state.app_handle.state::<DiscoveryService>();
-            let cached_stream = discovery
-                .get_cached_stream(release_id, track_position)?
-                .ok_or_else(|| {
-                    CrateError::Discovery("No cached stream for proxy request".into())
-                })?;
-
-            // Use proxy_ua if set (YouTube/Discogs), empty string otherwise (Bandcamp/SoundCloud)
-            let proxy_ua = cached_stream.proxy_ua.unwrap_or_default();
-
-            let (tx, rx) = tokio::sync::watch::channel(None);
-            downloads.insert(cache_key.clone(), rx.clone());
-
-            let state_clone = state.clone();
-            let url = cached_stream.stream_url.clone();
-            let key = cache_key.clone();
-            let rid = release_id.to_string();
-            let tp = track_position;
-
-            tokio::spawn(async move {
-                let discovery = state_clone.app_handle.state::<DiscoveryService>();
-                let file_path = discovery.audio_cache_path(&rid, tp);
-                let success = match download_stream_to_disk(
-                    &state_clone,
-                    &url,
-                    &proxy_ua,
-                    &file_path,
-                )
-                .await
-                {
-                    Ok((content_type, size)) => {
-                        if let Err(e) =
-                            discovery.save_audio_cache_entry(&rid, tp, &content_type, size as i64)
-                        {
-                            log::warn!("Failed to record audio cache entry: {e}");
-                        } else {
-                            log::info!("Cached audio to disk: {rid}/{tp} ({size} bytes)");
-                            // Keep the on-disk cache under its size cap (LRU eviction).
-                            if let Err(e) = discovery.enforce_audio_cache_limit() {
-                                log::warn!("Failed to enforce audio cache limit: {e}");
-                            }
-                            // Covers organic play-writes, precache downloads, AND evictions —
-                            // cached-state consumers (badges / downloaded filter) refetch on this.
-                            let _ = state_clone.app_handle.emit("discovery-cache-changed", ());
-                        }
-                        true
-                    }
-                    Err(e) => {
-                        log::warn!("Stream download failed for {key}: {e}");
-                        // A cached stream URL can die before its recorded expiry (CDN signatures
-                        // are often bound to the resolving IP, so a WiFi↔cellular hop invalidates
-                        // them). Without this, every replay re-serves the same dead URL until the
-                        // expiry timestamp passes — even across app restarts. URL-level only:
-                        // never touches downloaded audio bytes.
-                        if let Err(e) = discovery.invalidate_stream_cache(&rid) {
-                            log::warn!("Failed to invalidate stream cache for {rid}: {e}");
-                        }
-                        false
-                    }
-                };
-
-                let _ = tx.send(Some(success));
-                state_clone.downloads.lock().await.remove(&key);
-            });
-
-            rx
-        }
-    };
-
-    // 3. Wait for the download to complete.
-    if rx.changed().await.is_err() {
-        return Err(CrateError::Discovery(
-            "Download task dropped unexpectedly".into(),
-        ));
-    }
-
-    if *rx.borrow() != Some(true) {
-        return Ok(axum::http::Response::builder()
-            .status(502)
-            .header("Content-Type", "text/plain")
-            .body(axum::body::Body::from("Stream download failed"))
-            .unwrap());
-    }
-
-    // 4. Serve from the freshly written disk cache.
-    let discovery = state.app_handle.state::<DiscoveryService>();
-    let (content_type, file_size) = discovery
-        .get_cached_audio_meta(release_id, track_position)?
-        .ok_or_else(|| {
-            CrateError::Discovery("Download succeeded but cache entry missing".into())
-        })?;
-    let file_path = discovery.audio_cache_path(release_id, track_position);
-    serve_range_from_file(
-        &file_path,
-        &content_type,
-        file_size as u64,
-        start,
-        end_opt,
-        has_range_header,
-    )
-    .await
+  let file_path = discovery.audio_cache_path(release_id, track_position);
+  serve_range_from_file(
+    &file_path,
+    &content_type,
+    file_size as u64,
+    start,
+    end_opt,
+    has_range_header,
+  )
+  .await
 }
 
 /// Download an audio stream in sequential chunks, appending each chunk to
 /// `{dest}.part` and renaming to `dest` on completion. Peak memory is one ~4 MB chunk,
 /// never the whole file. Returns `(content_type, size_on_disk)`.
 ///
-/// Downloads chunks sequentially. Without n-param transformation, YouTube CDN throttles
-/// downloads to ~1 MB per video. With transformation, full downloads are possible.
-/// Browser-compatible clients (WEB, WEB_EMBEDDED) don't go through the proxy at all.
-async fn download_stream(
-  state: &ProxyServerState,
-  stream_url: &str,
-  proxy_ua: &str,
-) -> Result<CachedAudio> {
-  let mut data = Vec::new();
-  let mut content_type = String::from("audio/mp4");
-  let mut total_size: Option<u64> = None;
-
-  loop {
-    let offset = data.len() as u64;
-
-    if let Some(total) = total_size {
-      if offset >= total {
-        break;
-      }
-    }
-    if offset >= MAX_TOTAL_SIZE {
-      break;
-    }
-
-    let range_end = offset + CHUNK_SIZE - 1;
-    let mut req = state
-      .client
-      .get(stream_url)
-      .header("Range", format!("bytes={offset}-{range_end}"));
-    if !proxy_ua.is_empty() {
-      req = req.header("User-Agent", proxy_ua);
 /// Without n-param transformation, YouTube CDN throttles downloads to ~1 MB per video.
 /// With transformation, full downloads are possible. Browser-compatible clients
 /// (WEB, WEB_EMBEDDED) don't go through the proxy at all.
 async fn download_stream_to_disk(
-    state: &ProxyServerState,
-    stream_url: &str,
-    proxy_ua: &str,
-    dest: &Path,
+  state: &ProxyServerState,
+  stream_url: &str,
+  proxy_ua: &str,
+  dest: &Path,
 ) -> Result<(String, u64)> {
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let part_path: PathBuf = {
-        let mut os = dest.as_os_str().to_owned();
-        os.push(".part");
-        PathBuf::from(os)
-    };
-    let mut file = std::fs::File::create(&part_path)?;
+  if let Some(parent) = dest.parent() {
+    std::fs::create_dir_all(parent)?;
+  }
+  let part_path: PathBuf = {
+    let mut os = dest.as_os_str().to_owned();
+    os.push(".part");
+    PathBuf::from(os)
+  };
+  let mut file = std::fs::File::create(&part_path)?;
 
-    let mut written: u64 = 0;
-    let mut content_type = String::from("audio/mp4");
-    let mut total_size: Option<u64> = None;
+  let mut written: u64 = 0;
+  let mut content_type = String::from("audio/mp4");
+  let mut total_size: Option<u64> = None;
 
-    let result: Result<()> = async {
+  let result: Result<()> = async {
         loop {
             let offset = written;
 
@@ -599,175 +396,44 @@ async fn download_stream_to_disk(
     }
     .await;
 
-    if let Err(e) = result {
-        let _ = std::fs::remove_file(&part_path);
-        return Err(e);
-    }
-
-    if written == 0 {
-        let _ = std::fs::remove_file(&part_path);
-        return Err(CrateError::Discovery(
-            "Stream download produced no data".into(),
-        ));
-    }
-    let response = req
-      .send()
-      .await
-      .map_err(|e| CrateError::Discovery(format!("Stream chunk request failed: {e:#}")))?;
-
-    let status = response.status();
-    if !status.is_success() && status.as_u16() != 206 {
-      if data.is_empty() {
-        return Err(CrateError::Discovery(format!(
-          "Stream download returned {status}"
-        )));
-      }
-      // CDN rejected subsequent chunk — cache what we have.
-      log::info!(
-        "CDN rejected chunk at offset {offset} ({status}), caching {} bytes of partial audio",
-        data.len()
-      );
-      break;
-    }
-
-    // Extract metadata from the first chunk.
-    if offset == 0 {
-      total_size = parse_total_from_content_range(response.headers());
-      if let Some(ct) = response
-        .headers()
-        .get("Content-Type")
-        .and_then(|v| v.to_str().ok())
-      {
-        content_type = ct.to_string();
-      }
-      log::info!("Stream download started: total_size={total_size:?}, content-type={content_type}");
-    }
-
-    let chunk_bytes = response
-      .bytes()
-      .await
-      .map_err(|e| CrateError::Discovery(format!("Stream chunk body failed: {e:#}")))?;
-
-    if chunk_bytes.is_empty() {
-      break;
-    }
-
-    data.extend_from_slice(&chunk_bytes);
+  if let Err(e) = result {
+    let _ = std::fs::remove_file(&part_path);
+    return Err(e);
   }
 
-  if data.is_empty() {
+  if written == 0 {
+    let _ = std::fs::remove_file(&part_path);
     return Err(CrateError::Discovery(
       "Stream download produced no data".into(),
     ));
   }
 
-  let full = total_size.is_none_or(|total| data.len() as u64 >= total);
+  file.flush()?;
+  drop(file);
+  // The cached copy is what both the proxy and the direct `file://` path feed to AVPlayer,
+  // so it is patched once here rather than per request.
+  #[cfg(target_os = "ios")]
+  crate::services::discovery::fmp4::neutralize_for_avfoundation(&part_path, &content_type);
+  std::fs::rename(&part_path, dest)?;
+
+  let full = total_size.is_none_or(|total| written >= total);
   log::info!(
-    "Stream download {}: {} bytes cached, content-type: {content_type}",
+    "Stream download {}: {written} bytes cached, content-type: {content_type}",
     if full { "complete" } else { "partial" },
-    data.len()
   );
 
-  Ok(CachedAudio { data, content_type })
-    file.flush()?;
-    drop(file);
-    // The cached copy is what both the proxy and the direct `file://` path feed to AVPlayer,
-    // so it is patched once here rather than per request.
-    #[cfg(target_os = "ios")]
-    crate::services::discovery::fmp4::neutralize_for_avfoundation(&part_path, &content_type);
-    std::fs::rename(&part_path, dest)?;
-
-    let full = total_size.is_none_or(|total| written >= total);
-    log::info!(
-        "Stream download {}: {written} bytes cached, content-type: {content_type}",
-        if full { "complete" } else { "partial" },
-    );
-
-    Ok((content_type, written))
+  Ok((content_type, written))
 }
 
 /// Common CORS headers applied to every proxy response.
-fn apply_cors_headers(builder: axum::http::response::Builder) -> axum::http::response::Builder {
-  builder
-    .header("Access-Control-Allow-Origin", "*")
-    .header(
-      "Access-Control-Expose-Headers",
-      "Content-Range, Content-Length, Accept-Ranges",
-    )
-    .header("Access-Control-Allow-Headers", "Range")
-}
-
-/// Handle OPTIONS preflight requests for the proxy endpoint.
-pub(crate) async fn proxy_cors_preflight_handler() -> axum::http::Response<axum::body::Body> {
-  apply_cors_headers(axum::http::Response::builder().status(204))
-    .header("Access-Control-Allow-Methods", "GET, OPTIONS")
-    .body(axum::body::Body::empty())
-    .unwrap()
-}
-
-/// Serve cached audio from its on-disk file, streaming — never buffering the body.
-/// Returns `200 OK` with the full body when there is no Range header, or `206 Partial
-/// Content` with the requested byte slice when there is one. Returning `206`
-/// unconditionally (even without a Range request) caused WKWebView's AVFoundation to
-/// miscalculate the duration as ~2x the real value.
-fn serve_range_from_cache(
-  cached: &CachedAudio,
-  start: u64,
-  end_opt: Option<u64>,
-  is_range_request: bool,
-) -> Result<axum::http::Response<axum::body::Body>> {
-  let total = cached.data.len() as u64;
-/// miscalculate the duration as ~2x the real value — the 200-vs-206 split must not change.
-async fn serve_range_from_file(
-    path: &Path,
-    content_type: &str,
-    total: u64,
-    start: u64,
-    end_opt: Option<u64>,
-    is_range_request: bool,
-) -> Result<axum::http::Response<axum::body::Body>> {
-    use tokio::io::AsyncSeekExt;
-
-  if is_range_request && start >= total {
-    return Ok(
-      apply_cors_headers(axum::http::Response::builder().status(416))
-        .header("Content-Range", format!("bytes */{total}"))
-        .body(axum::body::Body::empty())
-        .unwrap(),
-    );
-  }
-
-  if is_range_request {
-    let end = end_opt.map_or(total - 1, |e| e.min(total - 1));
-    let slice = &cached.data[start as usize..=end as usize];
-
-    Ok(
-      apply_cors_headers(axum::http::Response::builder().status(206))
-        .header("Content-Type", &cached.content_type)
-        .header("Content-Range", format!("bytes {start}-{end}/{total}"))
-        .header("Content-Length", slice.len().to_string())
-        .header("Accept-Ranges", "bytes")
-        .body(axum::body::Body::from(slice.to_vec()))
-        .unwrap(),
-    )
-  } else {
-    Ok(
-      apply_cors_headers(axum::http::Response::builder().status(200))
-        .header("Content-Type", &cached.content_type)
-        .header("Content-Length", total.to_string())
-        .header("Accept-Ranges", "bytes")
-        .body(axum::body::Body::from(cached.data.clone()))
-        .unwrap(),
-    )
-  }
-}
-
 /// Top-level axum handler for `GET /samples/{key}`.
 ///
 /// Beatport recommendation samples are remote `https://geo-samples.beatport.com` mp3s. The
 /// WebKitGTK webview's own https fetch (libsoup/souphttpsrc) hangs for those URLs on some
-/// systems, so the modal routes them through this proxy instead: reqwest fetches server-side,
-/// the bytes are memory-cached, and Range serving matches the discovery preview behavior.
+/// systems, so the modal routes them through this proxy instead: reqwest fetches server-side
+/// and the response is relayed with the caller's Range semantics preserved. Samples are
+/// ~1-2 MB, so the relay needs neither the disk cache nor the download dedupe that discovery
+/// previews use.
 pub(crate) async fn sample_http_handler(
   axum::extract::Path(key): axum::extract::Path<String>,
   req_headers: axum::http::HeaderMap,
@@ -791,7 +457,7 @@ async fn sample_http_handler_inner(
   req_headers: &axum::http::HeaderMap,
   state: &ProxyServerState,
 ) -> Result<axum::http::Response<axum::body::Body>> {
-  // Resolve the registered URL first — an unknown key is a 404, not a proxy attempt.
+  // Resolve the registered URL first - an unknown key is a 404, not a proxy attempt.
   let remote_url = {
     let samples = state.samples.lock().map_err(|_| CrateError::LockPoisoned)?;
     samples.get(key).cloned()
@@ -803,134 +469,119 @@ async fn sample_http_handler_inner(
         .unwrap(),
     );
   };
-
-  let cache_key = format!("sample:{key}");
-  let incoming_range = req_headers.get("Range").and_then(|v| v.to_str().ok());
-  let has_range_header = incoming_range.is_some();
-  let (start, end_opt) = parse_bytes_range(incoming_range);
-
-  // 1. Serve from memory cache when the full sample is already downloaded.
-  {
-    let cache = state.cache.read().await;
-    if let Some(cached) = cache.get(&cache_key) {
-      return serve_range_from_cache(cached, start, end_opt, has_range_header);
-    }
+  let mut req = state.client.get(&remote_url);
+  if let Some(range) = req_headers.get("Range").and_then(|v| v.to_str().ok()) {
+    req = req.header("Range", range);
   }
-
-  // 2. Dedupe concurrent requests on one download task (same watch-channel pattern as discovery).
-  let mut rx = {
-    let mut downloads = state.downloads.lock().await;
-    if let Some(existing_rx) = downloads.get(&cache_key) {
-      existing_rx.clone()
-    } else {
-      let (tx, rx) = tokio::sync::watch::channel(None);
-      downloads.insert(cache_key.clone(), rx.clone());
-
-      let state_clone = state.clone();
-      let key = cache_key.clone();
-
-      tokio::spawn(async move {
-        let success = match download_sample(&state_clone, &remote_url).await {
-          Ok(cached_audio) => {
-            let entry = Arc::new(cached_audio);
-            let mut cache = state_clone.cache.write().await;
-            while cache.len() >= MAX_CACHE_ENTRIES {
-              if let Some(oldest_key) = cache.keys().next().cloned() {
-                cache.remove(&oldest_key);
-              }
-            }
-            cache.insert(key.clone(), entry);
-            true
-          }
-          Err(e) => {
-            log::warn!("Sample download failed for {key}: {e}");
-            false
-          }
-        };
-
-        let _ = tx.send(Some(success));
-        state_clone.downloads.lock().await.remove(&key);
-      });
-
-      rx
-    }
-  };
-
-  // 3. Wait for the download, then serve exactly like discovery: 200 without a Range header,
-  //    206 with one (unconditional 206 doubles AVFoundation's duration estimate).
-  if rx.changed().await.is_err() {
-    return Err(CrateError::Discovery(
-      "Sample download task dropped unexpectedly".into(),
-    ));
-  }
-
-  if *rx.borrow() != Some(true) {
+  let resp = req
+    .send()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Sample proxy request failed: {e:#}")))?;
+  let status = resp.status();
+  if !status.is_success() && status.as_u16() != 206 {
+    log::warn!("Sample origin returned {status} for {remote_url}");
     return Ok(
-      axum::http::Response::builder()
-        .status(502)
-        .header("Content-Type", "text/plain")
-        .body(axum::body::Body::from("Sample download failed"))
+      apply_cors_headers(axum::http::Response::builder().status(502))
+        .body(axum::body::Body::from("Sample fetch failed"))
+        .unwrap(),
+    );
+  }
+  let content_type = resp
+    .headers()
+    .get(reqwest::header::CONTENT_TYPE)
+    .and_then(|v| v.to_str().ok())
+    .unwrap_or("audio/mpeg")
+    .to_string();
+  let mut builder = axum::http::Response::builder()
+    .status(status.as_u16())
+    .header("Content-Type", content_type);
+  for name in ["Content-Range", "Accept-Ranges", "Content-Length"] {
+    if let Some(v) = resp.headers().get(name).and_then(|v| v.to_str().ok()) {
+      builder = builder.header(name, v.to_string());
+    }
+  }
+  let bytes = resp
+    .bytes()
+    .await
+    .map_err(|e| CrateError::Discovery(format!("Sample body read failed: {e:#}")))?;
+  Ok(
+    apply_cors_headers(builder)
+      .body(axum::body::Body::from(bytes))
+      .unwrap(),
+  )
+}
+
+fn apply_cors_headers(builder: axum::http::response::Builder) -> axum::http::response::Builder {
+  builder
+    .header("Access-Control-Allow-Origin", "*")
+    .header(
+      "Access-Control-Expose-Headers",
+      "Content-Range, Content-Length, Accept-Ranges",
+    )
+    .header("Access-Control-Allow-Headers", "Range")
+}
+
+/// Handle OPTIONS preflight requests for the proxy endpoint.
+pub(crate) async fn proxy_cors_preflight_handler() -> axum::http::Response<axum::body::Body> {
+  apply_cors_headers(axum::http::Response::builder().status(204))
+    .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+    .body(axum::body::Body::empty())
+    .unwrap()
+}
+
+/// Serve cached audio from its on-disk file, streaming — never buffering the body.
+/// Returns `200 OK` with the full body when there is no Range header, or `206 Partial
+/// Content` with the requested byte slice when there is one. Returning `206`
+/// unconditionally (even without a Range request) caused WKWebView's AVFoundation to
+/// miscalculate the duration as ~2x the real value — the 200-vs-206 split must not change.
+async fn serve_range_from_file(
+  path: &Path,
+  content_type: &str,
+  total: u64,
+  start: u64,
+  end_opt: Option<u64>,
+  is_range_request: bool,
+) -> Result<axum::http::Response<axum::body::Body>> {
+  use tokio::io::AsyncSeekExt;
+
+  if is_range_request && start >= total {
+    return Ok(
+      apply_cors_headers(axum::http::Response::builder().status(416))
+        .header("Content-Range", format!("bytes */{total}"))
+        .body(axum::body::Body::empty())
         .unwrap(),
     );
   }
 
-  let cache = state.cache.read().await;
-  let cached = cache.get(&cache_key).ok_or_else(|| {
-    CrateError::Discovery("Sample download succeeded but cache entry missing".into())
-  })?;
-  serve_range_from_cache(cached, start, end_opt, has_range_header)
-}
+  let mut file = tokio::fs::File::open(path).await?;
 
-/// Download a Beatport sample fully into memory.
-///
-/// A plain single GET is enough: `geo-samples.beatport.com` serves mp3s without the signed-URL /
-/// user-agent games that discovery's chunked `download_stream` exists for. The `MAX_TOTAL_SIZE`
-/// cap rejects anything unreasonably large (samples are ~1–2 MB) before it reaches the cache.
-async fn download_sample(state: &ProxyServerState, url: &str) -> Result<CachedAudio> {
-  let response = state
-    .client
-    .get(url)
-    .send()
-    .await
-    .map_err(|e| CrateError::Discovery(format!("Sample request failed: {e:#}")))?;
+  if is_range_request {
+    let end = end_opt.map_or(total - 1, |e| e.min(total - 1));
+    let len = end - start + 1;
+    file.seek(std::io::SeekFrom::Start(start)).await?;
+    let limited = tokio::io::AsyncReadExt::take(file, len);
+    let stream = tokio_util::io::ReaderStream::new(limited);
 
-  let status = response.status();
-  if !status.is_success() {
-    return Err(CrateError::Discovery(format!(
-      "Sample download returned {status}"
-    )));
+    Ok(
+      apply_cors_headers(axum::http::Response::builder().status(206))
+        .header("Content-Type", content_type)
+        .header("Content-Range", format!("bytes {start}-{end}/{total}"))
+        .header("Content-Length", len.to_string())
+        .header("Accept-Ranges", "bytes")
+        .body(axum::body::Body::from_stream(stream))
+        .unwrap(),
+    )
+  } else {
+    let stream = tokio_util::io::ReaderStream::new(file);
+    Ok(
+      apply_cors_headers(axum::http::Response::builder().status(200))
+        .header("Content-Type", content_type)
+        .header("Content-Length", total.to_string())
+        .header("Accept-Ranges", "bytes")
+        .body(axum::body::Body::from_stream(stream))
+        .unwrap(),
+    )
   }
-
-  let content_type = response
-    .headers()
-    .get("Content-Type")
-    .and_then(|v| v.to_str().ok())
-    .unwrap_or("audio/mpeg")
-    .to_string();
-
-  let data = response
-    .bytes()
-    .await
-    .map_err(|e| CrateError::Discovery(format!("Sample body read failed: {e:#}")))?
-    .to_vec();
-
-  if data.is_empty() {
-    return Err(CrateError::Discovery(
-      "Sample download produced no data".into(),
-    ));
-  }
-  if data.len() as u64 > MAX_TOTAL_SIZE {
-    return Err(CrateError::Discovery(format!(
-      "Sample of {} bytes exceeds the {MAX_TOTAL_SIZE} byte cache limit",
-      data.len()
-    )));
-  }
-
-  log::info!(
-    "Sample cached: {} bytes, content-type: {content_type}",
-    data.len()
-  );
-  Ok(CachedAudio { data, content_type })
 }
 
 #[cfg(test)]
@@ -965,34 +616,6 @@ mod tests {
         validate_sample_url(bad).is_err(),
         "expected rejection for {bad:?}"
       );
-    let mut file = tokio::fs::File::open(path).await?;
-
-    if is_range_request {
-        let end = end_opt.map_or(total - 1, |e| e.min(total - 1));
-        let len = end - start + 1;
-        file.seek(std::io::SeekFrom::Start(start)).await?;
-        let limited = tokio::io::AsyncReadExt::take(file, len);
-        let stream = tokio_util::io::ReaderStream::new(limited);
-
-        Ok(
-            apply_cors_headers(axum::http::Response::builder().status(206))
-                .header("Content-Type", content_type)
-                .header("Content-Range", format!("bytes {start}-{end}/{total}"))
-                .header("Content-Length", len.to_string())
-                .header("Accept-Ranges", "bytes")
-                .body(axum::body::Body::from_stream(stream))
-                .unwrap(),
-        )
-    } else {
-        let stream = tokio_util::io::ReaderStream::new(file);
-        Ok(
-            apply_cors_headers(axum::http::Response::builder().status(200))
-                .header("Content-Type", content_type)
-                .header("Content-Length", total.to_string())
-                .header("Accept-Ranges", "bytes")
-                .body(axum::body::Body::from_stream(stream))
-                .unwrap(),
-        )
     }
   }
 

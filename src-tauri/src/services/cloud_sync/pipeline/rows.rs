@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{CrateError, Result};
 use crate::models::{
-    BackupDiscoveryReleaseTag, BackupDiscoveryTrackTag, BackupPlaylistDiscoveryRelease,
-    BackupPlaylistDiscoveryTrack, BackupTrack, BackupTrackTag, DiscoveryTrack, PlaylistTrack, Tag,
+  BackupDiscoveryReleaseTag, BackupDiscoveryTrackTag, BackupPlaylistDiscoveryRelease,
+  BackupPlaylistDiscoveryTrack, BackupTrack, BackupTrackTag, DiscoveryTrack, PlaylistTrack, Tag,
 };
 
 use super::buckets::{shard_for_track_id, Bucket, BucketKind};
@@ -131,33 +131,33 @@ pub struct DiscoveryReleaseSourceRow {
 /// state in `collection_account_state` is never serialized).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionAccountRow {
-    pub id: String,
-    pub url: String,
-    pub source_type: String,
-    pub external_id: Option<String>,
-    pub username: Option<String>,
-    pub name: Option<String>,
-    pub avatar_url: Option<String>,
-    pub enabled: bool,
-    pub date_added: String,
-    pub date_modified: String,
+  pub id: String,
+  pub url: String,
+  pub source_type: String,
+  pub external_id: Option<String>,
+  pub username: Option<String>,
+  pub name: Option<String>,
+  pub avatar_url: Option<String>,
+  pub enabled: bool,
+  pub date_added: String,
+  pub date_modified: String,
 }
 
 /// `collection_items` wire row (one owned item of a collection account).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionItemRow {
-    pub id: String,
-    pub account_id: String,
-    pub source_type: String,
-    pub item_type: String,
-    pub url: String,
-    pub external_id: Option<String>,
-    pub artist: Option<String>,
-    pub title: Option<String>,
-    pub artwork_url: Option<String>,
-    pub purchased_at: Option<String>,
-    pub date_added: String,
-    pub date_modified: String,
+  pub id: String,
+  pub account_id: String,
+  pub source_type: String,
+  pub item_type: String,
+  pub url: String,
+  pub external_id: Option<String>,
+  pub artist: Option<String>,
+  pub title: Option<String>,
+  pub artwork_url: Option<String>,
+  pub purchased_at: Option<String>,
+  pub date_added: String,
+  pub date_modified: String,
 }
 
 /// `settings` wire row — `{ key, value, _hlc }`. Settings are never deleted, so
@@ -237,22 +237,22 @@ struct PlaylistDiscoveryReleaseTombstone<'a> {
 
 #[derive(Serialize)]
 struct PlaylistDiscoveryTrackTombstone<'a> {
-    playlist_id: &'a str,
-    track_id: &'a str,
-    #[serde(rename = "_hlc")]
-    hlc: &'a str,
-    #[serde(rename = "_deleted")]
-    deleted: bool,
+  playlist_id: &'a str,
+  track_id: &'a str,
+  #[serde(rename = "_hlc")]
+  hlc: &'a str,
+  #[serde(rename = "_deleted")]
+  deleted: bool,
 }
 
 #[derive(Serialize)]
 struct DiscoveryTrackTagTombstone<'a> {
-    track_id: &'a str,
-    tag_id: &'a str,
-    #[serde(rename = "_hlc")]
-    hlc: &'a str,
-    #[serde(rename = "_deleted")]
-    deleted: bool,
+  track_id: &'a str,
+  tag_id: &'a str,
+  #[serde(rename = "_hlc")]
+  hlc: &'a str,
+  #[serde(rename = "_deleted")]
+  deleted: bool,
 }
 
 #[derive(Serialize)]
@@ -292,44 +292,35 @@ pub fn bucket_hash(jsonl: &[u8]) -> String {
 /// Serialize a bucket to canonical, uncompressed JSONL: live rows merged with this
 /// bucket's tombstones by canonical id, ordered by canonical id.
 pub fn serialize_bucket(conn: &Connection, bucket: &Bucket) -> Result<Vec<u8>> {
-    let tombs = match bucket.kind() {
-        BucketKind::Settings => return serialize_settings(conn),
-        _ => read_tombstones(conn, bucket)?,
-    };
-    match bucket {
-        Bucket::Tracks(_) => emit(bucket, read_live_tracks(conn, bucket)?, tombs),
-        Bucket::Playlists => emit(bucket, read_live_playlists(conn)?, tombs),
-        Bucket::PlaylistTracks => emit(bucket, read_live_playlist_tracks(conn)?, tombs),
-        Bucket::Cues => emit(bucket, read_live_cues(conn)?, tombs),
-        Bucket::TagCategories => emit(bucket, read_live_tag_categories(conn)?, tombs),
-        Bucket::Tags => emit(bucket, read_live_tags(conn)?, tombs),
-        Bucket::TrackTags => emit(bucket, read_live_track_tags(conn)?, tombs),
-        Bucket::DiscoveryReleases => emit(bucket, read_live_discovery_releases(conn)?, tombs),
-        Bucket::DiscoveryTracks => emit(bucket, read_live_discovery_tracks(conn)?, tombs),
-        Bucket::DiscoveryReleaseTags => {
-            emit(bucket, read_live_discovery_release_tags(conn)?, tombs)
-        }
-        Bucket::PlaylistDiscoveryReleases => {
-            emit(bucket, read_live_playlist_discovery_releases(conn)?, tombs)
-        }
-        Bucket::PlaylistDiscoveryTracks => {
-            emit(bucket, read_live_playlist_discovery_tracks(conn)?, tombs)
-        }
-        Bucket::DiscoveryTrackTags => emit(bucket, read_live_discovery_track_tags(conn)?, tombs),
-        Bucket::LibraryRoots => emit(bucket, read_live_library_roots(conn)?, tombs),
-        Bucket::FollowedSources => emit(bucket, read_live_followed_sources(conn)?, tombs),
-        Bucket::DiscoveryReleaseSources => {
-            emit(bucket, read_live_discovery_release_sources(conn)?, tombs)
-        }
-        Bucket::CollectionAccounts => emit(bucket, read_live_collection_accounts(conn)?, tombs),
-        Bucket::CollectionItems => emit(bucket, read_live_collection_items(conn)?, tombs),
-        Bucket::Settings => unreachable!("handled above"),
+  let tombs = match bucket.kind() {
+    BucketKind::Settings => return serialize_settings(conn),
+    _ => read_tombstones(conn, bucket)?,
+  };
+  match bucket {
+    Bucket::Tracks(_) => emit(bucket, read_live_tracks(conn, bucket)?, tombs),
+    Bucket::Playlists => emit(bucket, read_live_playlists(conn)?, tombs),
+    Bucket::PlaylistTracks => emit(bucket, read_live_playlist_tracks(conn)?, tombs),
+    Bucket::Cues => emit(bucket, read_live_cues(conn)?, tombs),
+    Bucket::TagCategories => emit(bucket, read_live_tag_categories(conn)?, tombs),
+    Bucket::Tags => emit(bucket, read_live_tags(conn)?, tombs),
+    Bucket::TrackTags => emit(bucket, read_live_track_tags(conn)?, tombs),
+    Bucket::DiscoveryReleases => emit(bucket, read_live_discovery_releases(conn)?, tombs),
+    Bucket::DiscoveryTracks => emit(bucket, read_live_discovery_tracks(conn)?, tombs),
+    Bucket::DiscoveryReleaseTags => emit(bucket, read_live_discovery_release_tags(conn)?, tombs),
+    Bucket::PlaylistDiscoveryReleases => {
+      emit(bucket, read_live_playlist_discovery_releases(conn)?, tombs)
     }
+    Bucket::PlaylistDiscoveryTracks => {
+      emit(bucket, read_live_playlist_discovery_tracks(conn)?, tombs)
+    }
+    Bucket::DiscoveryTrackTags => emit(bucket, read_live_discovery_track_tags(conn)?, tombs),
     Bucket::LibraryRoots => emit(bucket, read_live_library_roots(conn)?, tombs),
     Bucket::FollowedSources => emit(bucket, read_live_followed_sources(conn)?, tombs),
     Bucket::DiscoveryReleaseSources => {
       emit(bucket, read_live_discovery_release_sources(conn)?, tombs)
     }
+    Bucket::CollectionAccounts => emit(bucket, read_live_collection_accounts(conn)?, tombs),
+    Bucket::CollectionItems => emit(bucket, read_live_collection_items(conn)?, tombs),
     Bucket::Settings => unreachable!("handled above"),
   }
 }
@@ -489,91 +480,83 @@ fn emit<T: Serialize>(
 }
 
 fn write_tombstone(buf: &mut Vec<u8>, bucket: &Bucket, cid: &str, hlc: &str) -> Result<()> {
-    match bucket.pk_columns() {
-        [_] => serde_json::to_writer(
-            &mut *buf,
-            &EntityTombstone {
-                id: cid,
-                hlc,
-                deleted: true,
-            },
-        )
-        .map_err(|e| CrateError::CloudSync(format!("serialize tombstone: {e}")))?,
-        [_, _] => {
-            let (a, b) = dirty::split_junction_id(cid)
-                .ok_or_else(|| CrateError::CloudSync(format!("malformed junction id {cid:?}")))?;
-            let res = match bucket {
-                Bucket::PlaylistTracks => serde_json::to_writer(
-                    &mut *buf,
-                    &PlaylistTrackTombstone {
-                        playlist_id: a,
-                        track_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                Bucket::TrackTags => serde_json::to_writer(
-                    &mut *buf,
-                    &TrackTagTombstone {
-                        track_id: a,
-                        tag_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                Bucket::DiscoveryReleaseTags => serde_json::to_writer(
-                    &mut *buf,
-                    &DiscoveryReleaseTagTombstone {
-                        release_id: a,
-                        tag_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                Bucket::PlaylistDiscoveryReleases => serde_json::to_writer(
-                    &mut *buf,
-                    &PlaylistDiscoveryReleaseTombstone {
-                        playlist_id: a,
-                        release_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                Bucket::PlaylistDiscoveryTracks => serde_json::to_writer(
-                    &mut *buf,
-                    &PlaylistDiscoveryTrackTombstone {
-                        playlist_id: a,
-                        track_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                Bucket::DiscoveryTrackTags => serde_json::to_writer(
-                    &mut *buf,
-                    &DiscoveryTrackTagTombstone {
-                        track_id: a,
-                        tag_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                Bucket::DiscoveryReleaseSources => serde_json::to_writer(
-                    &mut *buf,
-                    &DiscoveryReleaseSourceTombstone {
-                        release_id: a,
-                        source_id: b,
-                        hlc,
-                        deleted: true,
-                    },
-                ),
-                _ => {
-                    return Err(CrateError::CloudSync(
-                        "junction arity on non-junction".into(),
-                    ))
-                }
-            };
-            res.map_err(|e| CrateError::CloudSync(format!("serialize tombstone: {e}")))?;
-        }
+  match bucket.pk_columns() {
+    [_] => serde_json::to_writer(
+      &mut *buf,
+      &EntityTombstone {
+        id: cid,
+        hlc,
+        deleted: true,
+      },
+    )
+    .map_err(|e| CrateError::CloudSync(format!("serialize tombstone: {e}")))?,
+    [_, _] => {
+      let (a, b) = dirty::split_junction_id(cid)
+        .ok_or_else(|| CrateError::CloudSync(format!("malformed junction id {cid:?}")))?;
+      let res = match bucket {
+        Bucket::PlaylistTracks => serde_json::to_writer(
+          &mut *buf,
+          &PlaylistTrackTombstone {
+            playlist_id: a,
+            track_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
+        Bucket::TrackTags => serde_json::to_writer(
+          &mut *buf,
+          &TrackTagTombstone {
+            track_id: a,
+            tag_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
+        Bucket::DiscoveryReleaseTags => serde_json::to_writer(
+          &mut *buf,
+          &DiscoveryReleaseTagTombstone {
+            release_id: a,
+            tag_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
+        Bucket::PlaylistDiscoveryReleases => serde_json::to_writer(
+          &mut *buf,
+          &PlaylistDiscoveryReleaseTombstone {
+            playlist_id: a,
+            release_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
+        Bucket::PlaylistDiscoveryTracks => serde_json::to_writer(
+          &mut *buf,
+          &PlaylistDiscoveryTrackTombstone {
+            playlist_id: a,
+            track_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
+        Bucket::DiscoveryTrackTags => serde_json::to_writer(
+          &mut *buf,
+          &DiscoveryTrackTagTombstone {
+            track_id: a,
+            tag_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
+        Bucket::DiscoveryReleaseSources => serde_json::to_writer(
+          &mut *buf,
+          &DiscoveryReleaseSourceTombstone {
+            release_id: a,
+            source_id: b,
+            hlc,
+            deleted: true,
+          },
+        ),
         _ => {
           return Err(CrateError::CloudSync(
             "junction arity on non-junction".into(),
@@ -849,29 +832,30 @@ fn read_live_discovery_releases(
 }
 
 fn read_live_discovery_tracks(conn: &Connection) -> Result<Vec<(String, DiscoveryTrack, String)>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at, _hlc \
+  let mut stmt = conn.prepare(
+    "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at, _hlc \
          FROM discovery_tracks",
-    )?;
-    let rows = stmt.query_map([], |r| {
-        let d = DiscoveryTrack {
-            id: r.get(0)?,
-            release_id: r.get(1)?,
-            name: r.get(2)?,
-            position: r.get(3)?,
-            duration_ms: r.get(4)?,
-            video_id: r.get(5)?,
-            url: r.get(6)?,
-            is_liked: r.get(7)?,
-            liked_at: r.get(8)?,
-            preview_unavailable: false,
-            tags: Vec::new(),
-        };
-        let hlc: String = r.get(9)?;
-        Ok((d.id.clone(), d, hlc))
-    })?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(Into::into)
+  )?;
+  let rows = stmt.query_map([], |r| {
+    let d = DiscoveryTrack {
+      id: r.get(0)?,
+      release_id: r.get(1)?,
+      name: r.get(2)?,
+      position: r.get(3)?,
+      duration_ms: r.get(4)?,
+      video_id: r.get(5)?,
+      url: r.get(6)?,
+      is_liked: r.get(7)?,
+      liked_at: r.get(8)?,
+      preview_unavailable: false,
+      tags: Vec::new(),
+    };
+    let hlc: String = r.get(9)?;
+    Ok((d.id.clone(), d, hlc))
+  })?;
+  rows
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(Into::into)
 }
 
 fn read_live_discovery_release_tags(
@@ -924,50 +908,50 @@ fn read_live_playlist_discovery_releases(
 }
 
 fn read_live_playlist_discovery_tracks(
-    conn: &Connection,
+  conn: &Connection,
 ) -> Result<Vec<(String, BackupPlaylistDiscoveryTrack, String)>> {
-    let mut stmt = conn.prepare(
-        "SELECT playlist_id, track_id, position, date_added, _hlc \
+  let mut stmt = conn.prepare(
+    "SELECT playlist_id, track_id, position, date_added, _hlc \
          FROM playlist_discovery_tracks",
-    )?;
-    let rows = stmt.query_map([], |r| {
-        let p = BackupPlaylistDiscoveryTrack {
-            playlist_id: r.get(0)?,
-            track_id: r.get(1)?,
-            position: r.get(2)?,
-            date_added: r.get(3)?,
-        };
-        let hlc: String = r.get(4)?;
-        Ok((p, hlc))
-    })?;
-    let mut out = Vec::new();
-    for row in rows {
-        let (p, hlc) = row?;
-        let cid = dirty::junction_entity_id(&p.playlist_id, &p.track_id);
-        out.push((cid, p, hlc));
-    }
-    Ok(out)
+  )?;
+  let rows = stmt.query_map([], |r| {
+    let p = BackupPlaylistDiscoveryTrack {
+      playlist_id: r.get(0)?,
+      track_id: r.get(1)?,
+      position: r.get(2)?,
+      date_added: r.get(3)?,
+    };
+    let hlc: String = r.get(4)?;
+    Ok((p, hlc))
+  })?;
+  let mut out = Vec::new();
+  for row in rows {
+    let (p, hlc) = row?;
+    let cid = dirty::junction_entity_id(&p.playlist_id, &p.track_id);
+    out.push((cid, p, hlc));
+  }
+  Ok(out)
 }
 
 fn read_live_discovery_track_tags(
-    conn: &Connection,
+  conn: &Connection,
 ) -> Result<Vec<(String, BackupDiscoveryTrackTag, String)>> {
-    let mut stmt = conn.prepare("SELECT track_id, tag_id, _hlc FROM discovery_track_tags")?;
-    let rows = stmt.query_map([], |r| {
-        let t = BackupDiscoveryTrackTag {
-            track_id: r.get(0)?,
-            tag_id: r.get(1)?,
-        };
-        let hlc: String = r.get(2)?;
-        Ok((t, hlc))
-    })?;
-    let mut out = Vec::new();
-    for row in rows {
-        let (t, hlc) = row?;
-        let cid = dirty::junction_entity_id(&t.track_id, &t.tag_id);
-        out.push((cid, t, hlc));
-    }
-    Ok(out)
+  let mut stmt = conn.prepare("SELECT track_id, tag_id, _hlc FROM discovery_track_tags")?;
+  let rows = stmt.query_map([], |r| {
+    let t = BackupDiscoveryTrackTag {
+      track_id: r.get(0)?,
+      tag_id: r.get(1)?,
+    };
+    let hlc: String = r.get(2)?;
+    Ok((t, hlc))
+  })?;
+  let mut out = Vec::new();
+  for row in rows {
+    let (t, hlc) = row?;
+    let cid = dirty::junction_entity_id(&t.track_id, &t.tag_id);
+    out.push((cid, t, hlc));
+  }
+  Ok(out)
 }
 
 fn read_live_playlist_tracks(conn: &Connection) -> Result<Vec<(String, PlaylistTrack, String)>> {
@@ -1036,59 +1020,61 @@ fn read_live_followed_sources(
 }
 
 fn read_live_collection_accounts(
-    conn: &Connection,
+  conn: &Connection,
 ) -> Result<Vec<(String, CollectionAccountRow, String)>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, url, source_type, external_id, username, name, avatar_url, enabled, \
+  let mut stmt = conn.prepare(
+    "SELECT id, url, source_type, external_id, username, name, avatar_url, enabled, \
          date_added, date_modified, _hlc FROM collection_accounts",
-    )?;
-    let rows = stmt.query_map([], |r| {
-        let a = CollectionAccountRow {
-            id: r.get(0)?,
-            url: r.get(1)?,
-            source_type: r.get(2)?,
-            external_id: r.get(3)?,
-            username: r.get(4)?,
-            name: r.get(5)?,
-            avatar_url: r.get(6)?,
-            enabled: r.get(7)?,
-            date_added: r.get(8)?,
-            date_modified: r.get(9)?,
-        };
-        let hlc: String = r.get(10)?;
-        Ok((a.id.clone(), a, hlc))
-    })?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(Into::into)
+  )?;
+  let rows = stmt.query_map([], |r| {
+    let a = CollectionAccountRow {
+      id: r.get(0)?,
+      url: r.get(1)?,
+      source_type: r.get(2)?,
+      external_id: r.get(3)?,
+      username: r.get(4)?,
+      name: r.get(5)?,
+      avatar_url: r.get(6)?,
+      enabled: r.get(7)?,
+      date_added: r.get(8)?,
+      date_modified: r.get(9)?,
+    };
+    let hlc: String = r.get(10)?;
+    Ok((a.id.clone(), a, hlc))
+  })?;
+  rows
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(Into::into)
 }
 
 fn read_live_collection_items(
-    conn: &Connection,
+  conn: &Connection,
 ) -> Result<Vec<(String, CollectionItemRow, String)>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, account_id, source_type, item_type, url, external_id, artist, title, \
+  let mut stmt = conn.prepare(
+    "SELECT id, account_id, source_type, item_type, url, external_id, artist, title, \
          artwork_url, purchased_at, date_added, date_modified, _hlc FROM collection_items",
-    )?;
-    let rows = stmt.query_map([], |r| {
-        let i = CollectionItemRow {
-            id: r.get(0)?,
-            account_id: r.get(1)?,
-            source_type: r.get(2)?,
-            item_type: r.get(3)?,
-            url: r.get(4)?,
-            external_id: r.get(5)?,
-            artist: r.get(6)?,
-            title: r.get(7)?,
-            artwork_url: r.get(8)?,
-            purchased_at: r.get(9)?,
-            date_added: r.get(10)?,
-            date_modified: r.get(11)?,
-        };
-        let hlc: String = r.get(12)?;
-        Ok((i.id.clone(), i, hlc))
-    })?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(Into::into)
+  )?;
+  let rows = stmt.query_map([], |r| {
+    let i = CollectionItemRow {
+      id: r.get(0)?,
+      account_id: r.get(1)?,
+      source_type: r.get(2)?,
+      item_type: r.get(3)?,
+      url: r.get(4)?,
+      external_id: r.get(5)?,
+      artist: r.get(6)?,
+      title: r.get(7)?,
+      artwork_url: r.get(8)?,
+      purchased_at: r.get(9)?,
+      date_added: r.get(10)?,
+      date_modified: r.get(11)?,
+    };
+    let hlc: String = r.get(12)?;
+    Ok((i.id.clone(), i, hlc))
+  })?;
+  rows
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(Into::into)
 }
 
 fn read_live_discovery_release_sources(

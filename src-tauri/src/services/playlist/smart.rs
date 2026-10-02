@@ -206,34 +206,34 @@ impl PlaylistService {
     let param_refs: Vec<&dyn rusqlite::ToSql> =
       params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
 
-        let mut stmt = conn.prepare(&sql)?;
-        let mut releases: Vec<DiscoveryRelease> = stmt
-            .query_map(param_refs.as_slice(), |row| {
-                Ok(DiscoveryRelease {
-                    id: row.get(0)?,
-                    url: row.get(1)?,
-                    source_type: row.get(2)?,
-                    artist: row.get(3)?,
-                    title: row.get(4)?,
-                    label: row.get(5)?,
-                    release_date: row.get(6)?,
-                    artwork_url: row.get(7)?,
-                    artwork_path: row.get(8)?,
-                    artwork_cache_path: None,
-                    notes: row.get(9)?,
-                    parent_url: row.get(10)?,
-                    source_page_url: row.get(11)?,
-                    date_added: row.get(12)?,
-                    date_modified: row.get(13)?,
-                    is_new: false,
-                    surfaced_at: None,
-                    source_ids: Vec::new(),
-                    tracks: Vec::new(),
-                    tags: Vec::new(),
-                    total_track_count: None,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut stmt = conn.prepare(&sql)?;
+    let mut releases: Vec<DiscoveryRelease> = stmt
+      .query_map(param_refs.as_slice(), |row| {
+        Ok(DiscoveryRelease {
+          id: row.get(0)?,
+          url: row.get(1)?,
+          source_type: row.get(2)?,
+          artist: row.get(3)?,
+          title: row.get(4)?,
+          label: row.get(5)?,
+          release_date: row.get(6)?,
+          artwork_url: row.get(7)?,
+          artwork_path: row.get(8)?,
+          artwork_cache_path: None,
+          notes: row.get(9)?,
+          parent_url: row.get(10)?,
+          source_page_url: row.get(11)?,
+          date_added: row.get(12)?,
+          date_modified: row.get(13)?,
+          is_new: false,
+          surfaced_at: None,
+          source_ids: Vec::new(),
+          tracks: Vec::new(),
+          tags: Vec::new(),
+          total_track_count: None,
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
 
     if releases.is_empty() {
       return Ok(releases);
@@ -251,29 +251,29 @@ impl PlaylistService {
       .map(|id| id as &dyn rusqlite::ToSql)
       .collect();
 
-        let mut stmt = conn.prepare(&format!(
+    let mut stmt = conn.prepare(&format!(
             "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at,
                     EXISTS(SELECT 1 FROM discovery_preview_unavailable pu WHERE pu.release_id = discovery_tracks.release_id AND pu.position = discovery_tracks.position)
              FROM discovery_tracks WHERE release_id IN ({placeholders}) ORDER BY position"
         ))?;
-        let mut all_tracks: Vec<DiscoveryTrack> = stmt
-            .query_map(param_refs.as_slice(), |row| {
-                Ok(DiscoveryTrack {
-                    id: row.get(0)?,
-                    release_id: row.get(1)?,
-                    name: row.get(2)?,
-                    position: row.get(3)?,
-                    duration_ms: row.get(4)?,
-                    video_id: row.get(5)?,
-                    url: row.get(6)?,
-                    is_liked: row.get(7)?,
-                    liked_at: row.get(8)?,
-                    preview_unavailable: row.get::<_, i32>(9).map(|v| v != 0)?,
-                    tags: Vec::new(),
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        crate::services::discovery::attach_track_tags(&conn, &mut all_tracks)?;
+    let mut all_tracks: Vec<DiscoveryTrack> = stmt
+      .query_map(param_refs.as_slice(), |row| {
+        Ok(DiscoveryTrack {
+          id: row.get(0)?,
+          release_id: row.get(1)?,
+          name: row.get(2)?,
+          position: row.get(3)?,
+          duration_ms: row.get(4)?,
+          video_id: row.get(5)?,
+          url: row.get(6)?,
+          is_liked: row.get(7)?,
+          liked_at: row.get(8)?,
+          preview_unavailable: row.get::<_, i32>(9).map(|v| v != 0)?,
+          tags: Vec::new(),
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    crate::services::discovery::attach_track_tags(&conn, &mut all_tracks)?;
 
     let mut stmt = conn.prepare(&format!(
       "SELECT drt.release_id, t.id, t.category_id, t.name, t.color, t.sort_order

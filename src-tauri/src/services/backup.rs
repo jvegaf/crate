@@ -209,6 +209,7 @@ impl BackupService {
           release_date: row.get(6)?,
           artwork_url: row.get(7)?,
           artwork_path: row.get(8)?,
+          artwork_cache_path: None,
           notes: row.get(9)?,
           parent_url: row.get(10)?,
           source_page_url: row.get(11)?,
@@ -220,6 +221,7 @@ impl BackupService {
           source_ids: Vec::new(),
           tracks: Vec::new(),
           tags: Vec::new(),
+          total_track_count: None,
         })
       })?
       .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -227,7 +229,7 @@ impl BackupService {
 
     // Discovery tracks
     let mut stmt = conn.prepare(
-            "SELECT id, release_id, name, position, duration_ms, video_id, is_liked FROM discovery_tracks",
+            "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at FROM discovery_tracks",
         )?;
     let discovery_tracks = stmt
       .query_map([], |row| {
@@ -238,63 +240,15 @@ impl BackupService {
           position: row.get(3)?,
           duration_ms: row.get(4)?,
           video_id: row.get(5)?,
-          is_liked: row.get(6)?,
+          url: row.get(6)?,
+          is_liked: row.get(7)?,
+          liked_at: row.get(8)?,
+          preview_unavailable: false,
+          tags: Vec::new(),
         })
       })?
       .collect::<std::result::Result<Vec<_>, _>>()?;
     drop(stmt);
-        let discovery_releases = stmt
-            .query_map([], |row| {
-                Ok(crate::models::DiscoveryRelease {
-                    id: row.get(0)?,
-                    url: row.get(1)?,
-                    source_type: row.get(2)?,
-                    artist: row.get(3)?,
-                    title: row.get(4)?,
-                    label: row.get(5)?,
-                    release_date: row.get(6)?,
-                    artwork_url: row.get(7)?,
-                    artwork_path: row.get(8)?,
-                    artwork_cache_path: None,
-                    notes: row.get(9)?,
-                    parent_url: row.get(10)?,
-                    source_page_url: row.get(11)?,
-                    date_added: row.get(12)?,
-                    date_modified: row.get(13)?,
-                    is_new: row.get(14)?,
-                    surfaced_at: row.get(15)?,
-                    // Provenance is captured via discovery_release_sources, not on the row.
-                    source_ids: Vec::new(),
-                    tracks: Vec::new(),
-                    tags: Vec::new(),
-                    total_track_count: None,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        // Discovery tracks
-        let mut stmt = conn.prepare(
-            "SELECT id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at FROM discovery_tracks",
-        )?;
-        let discovery_tracks = stmt
-            .query_map([], |row| {
-                Ok(crate::models::DiscoveryTrack {
-                    id: row.get(0)?,
-                    release_id: row.get(1)?,
-                    name: row.get(2)?,
-                    position: row.get(3)?,
-                    duration_ms: row.get(4)?,
-                    video_id: row.get(5)?,
-                    url: row.get(6)?,
-                    is_liked: row.get(7)?,
-                    liked_at: row.get(8)?,
-                    preview_unavailable: false,
-                    tags: Vec::new(),
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
 
     // Discovery release tags
     let mut stmt = conn.prepare("SELECT release_id, tag_id FROM discovery_release_tags")?;
@@ -324,40 +278,37 @@ impl BackupService {
       .collect::<std::result::Result<Vec<_>, _>>()?;
     drop(stmt);
 
+    // Playlist discovery tracks (track-level membership)
+    let mut stmt = conn.prepare(
+      "SELECT playlist_id, track_id, position, date_added FROM playlist_discovery_tracks",
+    )?;
+    let playlist_discovery_tracks = stmt
+      .query_map([], |row| {
+        Ok(BackupPlaylistDiscoveryTrack {
+          playlist_id: row.get(0)?,
+          track_id: row.get(1)?,
+          position: row.get(2)?,
+          date_added: row.get(3)?,
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    // Discovery track tags
+    let mut stmt = conn.prepare("SELECT track_id, tag_id FROM discovery_track_tags")?;
+    let discovery_track_tags = stmt
+      .query_map([], |row| {
+        Ok(BackupDiscoveryTrackTag {
+          track_id: row.get(0)?,
+          tag_id: row.get(1)?,
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(stmt);
+
     // Followed sources (synced follow list)
     let mut stmt = conn.prepare(
       "SELECT id, url, source_type, follow_type, name, artwork_url, artwork_path,
-        // Playlist discovery tracks (track-level membership)
-        let mut stmt = conn.prepare(
-            "SELECT playlist_id, track_id, position, date_added FROM playlist_discovery_tracks",
-        )?;
-        let playlist_discovery_tracks = stmt
-            .query_map([], |row| {
-                Ok(BackupPlaylistDiscoveryTrack {
-                    playlist_id: row.get(0)?,
-                    track_id: row.get(1)?,
-                    position: row.get(2)?,
-                    date_added: row.get(3)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        // Discovery track tags
-        let mut stmt = conn.prepare("SELECT track_id, tag_id FROM discovery_track_tags")?;
-        let discovery_track_tags = stmt
-            .query_map([], |row| {
-                Ok(BackupDiscoveryTrackTag {
-                    track_id: row.get(0)?,
-                    tag_id: row.get(1)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        // Followed sources (synced follow list)
-        let mut stmt = conn.prepare(
-            "SELECT id, url, source_type, follow_type, name, artwork_url, artwork_path,
                     enabled, date_added, date_modified
              FROM followed_sources",
     )?;
@@ -431,6 +382,77 @@ impl BackupService {
       .collect::<std::result::Result<Vec<_>, _>>()?;
     drop(stmt);
 
+    // Collection accounts (synced linked fan pages)
+    let mut stmt = conn.prepare(
+      "SELECT id, url, source_type, external_id, username, name, avatar_url,
+                    enabled, date_added, date_modified
+             FROM collection_accounts",
+    )?;
+    let collection_accounts = stmt
+      .query_map([], |row| {
+        Ok(BackupCollectionAccount {
+          id: row.get(0)?,
+          url: row.get(1)?,
+          source_type: row.get(2)?,
+          external_id: row.get(3)?,
+          username: row.get(4)?,
+          name: row.get(5)?,
+          avatar_url: row.get(6)?,
+          enabled: row.get(7)?,
+          date_added: row.get(8)?,
+          date_modified: row.get(9)?,
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    // Collection items (synced owned items)
+    let mut stmt = conn.prepare(
+      "SELECT id, account_id, source_type, item_type, url, external_id, artist, title,
+                    artwork_url, purchased_at, date_added, date_modified
+             FROM collection_items",
+    )?;
+    let collection_items = stmt
+      .query_map([], |row| {
+        Ok(BackupCollectionItem {
+          id: row.get(0)?,
+          account_id: row.get(1)?,
+          source_type: row.get(2)?,
+          item_type: row.get(3)?,
+          url: row.get(4)?,
+          external_id: row.get(5)?,
+          artist: row.get(6)?,
+          title: row.get(7)?,
+          artwork_url: row.get(8)?,
+          purchased_at: row.get(9)?,
+          date_added: row.get(10)?,
+          date_modified: row.get(11)?,
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(stmt);
+
+    // Collection account state (per-device refresh bookkeeping)
+    let mut stmt = conn.prepare(
+      "SELECT account_id, last_checked_at, last_success_at, health, last_error,
+                    consecutive_failures, last_item_count
+             FROM collection_account_state",
+    )?;
+    let collection_account_state = stmt
+      .query_map([], |row| {
+        Ok(BackupCollectionAccountState {
+          account_id: row.get(0)?,
+          last_checked_at: row.get(1)?,
+          last_success_at: row.get(2)?,
+          health: row.get(3)?,
+          last_error: row.get(4)?,
+          consecutive_failures: row.get(5)?,
+          last_item_count: row.get(6)?,
+        })
+      })?
+      .collect::<std::result::Result<Vec<_>, _>>()?;
+    drop(stmt);
+
     let counts = BackupCounts {
       tracks: tracks.len(),
       cues: cues.len(),
@@ -441,87 +463,6 @@ impl BackupService {
       artwork_files: 0,
       followed_sources: followed_sources.len(),
     };
-        // Collection accounts (synced linked fan pages)
-        let mut stmt = conn.prepare(
-            "SELECT id, url, source_type, external_id, username, name, avatar_url,
-                    enabled, date_added, date_modified
-             FROM collection_accounts",
-        )?;
-        let collection_accounts = stmt
-            .query_map([], |row| {
-                Ok(BackupCollectionAccount {
-                    id: row.get(0)?,
-                    url: row.get(1)?,
-                    source_type: row.get(2)?,
-                    external_id: row.get(3)?,
-                    username: row.get(4)?,
-                    name: row.get(5)?,
-                    avatar_url: row.get(6)?,
-                    enabled: row.get(7)?,
-                    date_added: row.get(8)?,
-                    date_modified: row.get(9)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        // Collection items (synced owned items)
-        let mut stmt = conn.prepare(
-            "SELECT id, account_id, source_type, item_type, url, external_id, artist, title,
-                    artwork_url, purchased_at, date_added, date_modified
-             FROM collection_items",
-        )?;
-        let collection_items = stmt
-            .query_map([], |row| {
-                Ok(BackupCollectionItem {
-                    id: row.get(0)?,
-                    account_id: row.get(1)?,
-                    source_type: row.get(2)?,
-                    item_type: row.get(3)?,
-                    url: row.get(4)?,
-                    external_id: row.get(5)?,
-                    artist: row.get(6)?,
-                    title: row.get(7)?,
-                    artwork_url: row.get(8)?,
-                    purchased_at: row.get(9)?,
-                    date_added: row.get(10)?,
-                    date_modified: row.get(11)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        // Collection account state (per-device refresh bookkeeping)
-        let mut stmt = conn.prepare(
-            "SELECT account_id, last_checked_at, last_success_at, health, last_error,
-                    consecutive_failures, last_item_count
-             FROM collection_account_state",
-        )?;
-        let collection_account_state = stmt
-            .query_map([], |row| {
-                Ok(BackupCollectionAccountState {
-                    account_id: row.get(0)?,
-                    last_checked_at: row.get(1)?,
-                    last_success_at: row.get(2)?,
-                    health: row.get(3)?,
-                    last_error: row.get(4)?,
-                    consecutive_failures: row.get(5)?,
-                    last_item_count: row.get(6)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        drop(stmt);
-
-        let counts = BackupCounts {
-            tracks: tracks.len(),
-            cues: cues.len(),
-            tag_categories: tag_categories.len(),
-            tags: tags.len(),
-            playlists: playlists.len(),
-            discovery_releases: discovery_releases.len(),
-            artwork_files: 0,
-            followed_sources: followed_sources.len(),
-        };
 
     log::info!(
             "Backup collected: {} tracks, {} cues, {} tag_categories, {} tags, {} playlists, {} discovery_releases",
@@ -544,41 +485,18 @@ impl BackupService {
       discovery_tracks,
       discovery_release_tags,
       playlist_discovery_releases,
+      playlist_discovery_tracks,
+      discovery_track_tags,
       followed_sources,
       followed_source_state,
       followed_source_releases,
       discovery_release_sources,
+      collection_accounts,
+      collection_items,
+      collection_account_state,
       artwork_files: None,
     })
   }
-        Ok(BackupData {
-            version: 1,
-            app_version: app_version.to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            counts,
-            tag_categories,
-            tags,
-            tracks,
-            cues,
-            track_tags,
-            playlists,
-            playlist_tracks,
-            discovery_releases,
-            discovery_tracks,
-            discovery_release_tags,
-            playlist_discovery_releases,
-            playlist_discovery_tracks,
-            discovery_track_tags,
-            followed_sources,
-            followed_source_state,
-            followed_source_releases,
-            discovery_release_sources,
-            collection_accounts,
-            collection_items,
-            collection_account_state,
-            artwork_files: None,
-        })
-    }
 
   pub fn restore_from_backup_data(&self, data: BackupData) -> Result<()> {
     log::info!(
@@ -788,8 +706,8 @@ impl BackupService {
       // 9. Discovery tracks
       {
         let mut stmt = tx.prepare(
-                    "INSERT INTO discovery_tracks (id, release_id, name, position, duration_ms, video_id, is_liked)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT INTO discovery_tracks (id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 )?;
         for dt in &data.discovery_tracks {
           stmt.execute(params![
@@ -799,30 +717,12 @@ impl BackupService {
             dt.position,
             dt.duration_ms,
             dt.video_id,
+            dt.url,
             dt.is_liked,
+            dt.liked_at,
           ])?;
         }
       }
-            // 9. Discovery tracks
-            {
-                let mut stmt = tx.prepare(
-                    "INSERT INTO discovery_tracks (id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                )?;
-                for dt in &data.discovery_tracks {
-                    stmt.execute(params![
-                        dt.id,
-                        dt.release_id,
-                        dt.name,
-                        dt.position,
-                        dt.duration_ms,
-                        dt.video_id,
-                        dt.url,
-                        dt.is_liked,
-                        dt.liked_at,
-                    ])?;
-                }
-            }
 
       // 10. Discovery release tags
       {
@@ -849,37 +749,32 @@ impl BackupService {
         }
       }
 
+      // 11b. Track-level playlist membership + track tags. A pre-transition backup
+      // has neither; its release-level rows above are expanded by the launch sweep.
+      {
+        let mut stmt = tx.prepare(
+          "INSERT INTO playlist_discovery_tracks (playlist_id, track_id, position, date_added)
+                     VALUES (?1, ?2, ?3, ?4)",
+        )?;
+        for pdt in &data.playlist_discovery_tracks {
+          stmt.execute(params![
+            pdt.playlist_id,
+            pdt.track_id,
+            pdt.position,
+            pdt.date_added,
+          ])?;
+        }
+        let mut stmt =
+          tx.prepare("INSERT INTO discovery_track_tags (track_id, tag_id) VALUES (?1, ?2)")?;
+        for dtt in &data.discovery_track_tags {
+          stmt.execute(params![dtt.track_id, dtt.tag_id])?;
+        }
+      }
+
       // 12. Followed sources (synced follow list)
       {
         let mut stmt = tx.prepare(
           "INSERT INTO followed_sources (id, url, source_type, follow_type, name, artwork_url,
-            // 11b. Track-level playlist membership + track tags. A pre-transition backup
-            // has neither; its release-level rows above are expanded by the launch sweep.
-            {
-                let mut stmt = tx.prepare(
-                    "INSERT INTO playlist_discovery_tracks (playlist_id, track_id, position, date_added)
-                     VALUES (?1, ?2, ?3, ?4)",
-                )?;
-                for pdt in &data.playlist_discovery_tracks {
-                    stmt.execute(params![
-                        pdt.playlist_id,
-                        pdt.track_id,
-                        pdt.position,
-                        pdt.date_added,
-                    ])?;
-                }
-                let mut stmt = tx.prepare(
-                    "INSERT INTO discovery_track_tags (track_id, tag_id) VALUES (?1, ?2)",
-                )?;
-                for dtt in &data.discovery_track_tags {
-                    stmt.execute(params![dtt.track_id, dtt.tag_id])?;
-                }
-            }
-
-            // 12. Followed sources (synced follow list)
-            {
-                let mut stmt = tx.prepare(
-                    "INSERT INTO followed_sources (id, url, source_type, follow_type, name, artwork_url,
                                                    artwork_path, enabled, date_added, date_modified)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )?;
@@ -948,6 +843,76 @@ impl BackupService {
         }
       }
 
+      // 16. Collection accounts (synced linked fan pages)
+      {
+        let mut stmt = tx.prepare(
+                    "INSERT INTO collection_accounts (id, url, source_type, external_id, username,
+                                                      name, avatar_url, enabled, date_added, date_modified)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                )?;
+        for ca in &data.collection_accounts {
+          stmt.execute(params![
+            ca.id,
+            ca.url,
+            ca.source_type,
+            ca.external_id,
+            ca.username,
+            ca.name,
+            ca.avatar_url,
+            ca.enabled,
+            ca.date_added,
+            ca.date_modified,
+          ])?;
+        }
+      }
+
+      // 17. Collection items (synced owned items — FK collection_accounts)
+      {
+        let mut stmt = tx.prepare(
+          "INSERT INTO collection_items (id, account_id, source_type, item_type, url,
+                                                   external_id, artist, title, artwork_url,
+                                                   purchased_at, date_added, date_modified)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        )?;
+        for ci in &data.collection_items {
+          stmt.execute(params![
+            ci.id,
+            ci.account_id,
+            ci.source_type,
+            ci.item_type,
+            ci.url,
+            ci.external_id,
+            ci.artist,
+            ci.title,
+            ci.artwork_url,
+            ci.purchased_at,
+            ci.date_added,
+            ci.date_modified,
+          ])?;
+        }
+      }
+
+      // 18. Collection account state (per-device refresh bookkeeping)
+      {
+        let mut stmt = tx.prepare(
+          "INSERT INTO collection_account_state (account_id, last_checked_at, last_success_at,
+                                                           health, last_error, consecutive_failures,
+                                                           last_item_count)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )?;
+        for st in &data.collection_account_state {
+          stmt.execute(params![
+            st.account_id,
+            st.last_checked_at,
+            st.last_success_at,
+            st.health,
+            st.last_error,
+            st.consecutive_failures,
+            st.last_item_count,
+          ])?;
+        }
+      }
+
       // FK check BEFORE commit — violations trigger rollback
       let mut fk_stmt = tx.prepare("PRAGMA foreign_key_check")?;
       let fk_errors: Vec<String> = fk_stmt
@@ -959,87 +924,6 @@ impl BackupService {
         .filter_map(|r| r.ok())
         .collect();
       drop(fk_stmt);
-            // 16. Collection accounts (synced linked fan pages)
-            {
-                let mut stmt = tx.prepare(
-                    "INSERT INTO collection_accounts (id, url, source_type, external_id, username,
-                                                      name, avatar_url, enabled, date_added, date_modified)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                )?;
-                for ca in &data.collection_accounts {
-                    stmt.execute(params![
-                        ca.id,
-                        ca.url,
-                        ca.source_type,
-                        ca.external_id,
-                        ca.username,
-                        ca.name,
-                        ca.avatar_url,
-                        ca.enabled,
-                        ca.date_added,
-                        ca.date_modified,
-                    ])?;
-                }
-            }
-
-            // 17. Collection items (synced owned items — FK collection_accounts)
-            {
-                let mut stmt = tx.prepare(
-                    "INSERT INTO collection_items (id, account_id, source_type, item_type, url,
-                                                   external_id, artist, title, artwork_url,
-                                                   purchased_at, date_added, date_modified)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                )?;
-                for ci in &data.collection_items {
-                    stmt.execute(params![
-                        ci.id,
-                        ci.account_id,
-                        ci.source_type,
-                        ci.item_type,
-                        ci.url,
-                        ci.external_id,
-                        ci.artist,
-                        ci.title,
-                        ci.artwork_url,
-                        ci.purchased_at,
-                        ci.date_added,
-                        ci.date_modified,
-                    ])?;
-                }
-            }
-
-            // 18. Collection account state (per-device refresh bookkeeping)
-            {
-                let mut stmt = tx.prepare(
-                    "INSERT INTO collection_account_state (account_id, last_checked_at, last_success_at,
-                                                           health, last_error, consecutive_failures,
-                                                           last_item_count)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                )?;
-                for st in &data.collection_account_state {
-                    stmt.execute(params![
-                        st.account_id,
-                        st.last_checked_at,
-                        st.last_success_at,
-                        st.health,
-                        st.last_error,
-                        st.consecutive_failures,
-                        st.last_item_count,
-                    ])?;
-                }
-            }
-
-            // FK check BEFORE commit — violations trigger rollback
-            let mut fk_stmt = tx.prepare("PRAGMA foreign_key_check")?;
-            let fk_errors: Vec<String> = fk_stmt
-                .query_map([], |row| {
-                    let table: String = row.get(0)?;
-                    let rowid: i64 = row.get(1)?;
-                    Ok(format!("FK violation in {table} row {rowid}"))
-                })?
-                .filter_map(|r| r.ok())
-                .collect();
-            drop(fk_stmt);
 
       if !fk_errors.is_empty() {
         return Err(CrateError::Backup(format!(
