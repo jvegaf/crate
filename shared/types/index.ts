@@ -1066,3 +1066,71 @@ export interface RankedSearchResult {
 	candidates: ScoredTagCandidate[]
 	errors: ProviderError[]
 }
+
+// =============================================================================
+// Beatport Recommendations Types
+// =============================================================================
+
+/**
+ * One "similar tracks" recommendation from Beatport's catalog API.
+ *
+ * Mirrors `models/recommendations.rs` in snake_case. Optional fields are
+ * `T | null` because serde emits `null` for `None`, never `undefined`.
+ */
+export interface BeatportRecommendation {
+	/** Beatport numeric track id — also the identity of the row. */
+	track_id: number
+	track_name: string
+	mix_name: string | null
+	track_length_ms: number | null
+	bpm: number | null
+	/** Long-form key as Beatport reports it (`"Bb Minor"`), not Crate's notation. */
+	key: string | null
+	key_camelot: string | null
+	isrc: string | null
+	track_number: number | null
+	/** Waveform image URL (not audio), pre-resolved to a fixed display size. */
+	track_waveform_url: string | null
+	/** Preview sample mp3 URL, trimmed to `sample_start_ms`..`sample_end_ms`. */
+	sample_url: string | null
+	sample_start_ms: number | null
+	sample_end_ms: number | null
+	artists: BeatportArtist[]
+	genre: BeatportGenre | null
+	release: BeatportRelease | null
+	label: BeatportNamedEntity | null
+}
+
+/** An artist credit on a recommendation. */
+export interface BeatportArtist {
+	id: number | null
+	name: string | null
+	/** Credit role as Beatport reports it; the wire key is `type`. */
+	type: string | null
+}
+
+/** A genre with its optional sub-genre and top-level category. */
+export interface BeatportGenre {
+	id: number | null
+	name: string | null
+	/** May arrive as `{ id: null, name: null }` rather than being absent. */
+	sub_genre: BeatportNamedEntity | null
+	category: BeatportNamedEntity | null
+}
+
+/** A plain `{id, name}` reference: genre sub-category, category and label share it. */
+export interface BeatportNamedEntity {
+	id: number | null
+	name: string | null
+}
+
+/** The release a recommendation belongs to. */
+export interface BeatportRelease {
+	id: number | null
+	name: string | null
+	/** Artwork URL already resolved by the backend to `…/image_size/800x800/….jpg`. */
+	image_url: string | null
+	catalog_number: string | null
+	/** `"2025-10-17T00:00:00"` — no timezone marker; read the leading YYYY-MM-DD. */
+	release_date: string | null
+}
