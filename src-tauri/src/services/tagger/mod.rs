@@ -4,10 +4,15 @@
 //! chosen candidate with its per-ID detail. Network-only and mostly mobile-safe:
 //! Beatport and Bandcamp run everywhere, TraxSource is desktop-only because it
 //! shells out to the system `curl` binary.
+//!
+//! The Beatport recommendations path (`recommendations`) is not a tagger provider:
+//! it is a separate command that reuses this module's HTTP client and shared
+//! Beatport OAuth token cache.
 
 mod bandcamp;
 mod beatport;
 mod http;
+mod recommendations;
 mod scoring;
 #[cfg(test)]
 mod tests;
@@ -29,17 +34,22 @@ use crate::models::{
 /// Shared HTTP client plus the persistent provider instances.
 ///
 /// Providers are owned by the service (not rebuilt per call) so Beatport's OAuth
-/// token cache survives across searches.
+/// token cache survives across searches and recommendations.
 pub struct TaggerService {
   client: reqwest::Client,
   providers: Vec<Box<dyn TaggerProvider>>,
+  /// The one Beatport token cache, shared with the Beatport provider inside
+  /// `providers` so both features mint a single token per expiry window.
+  beatport_tokens: beatport::BeatportTokenProvider,
 }
 
 impl TaggerService {
   /// Build the service. The only failure mode is an HTTP client that cannot be built.
   pub fn new() -> Result<Self> {
-    let mut providers: Vec<Box<dyn TaggerProvider>> =
-      vec![Box::new(beatport::BeatportProvider::new())];
+    let beatport_tokens = beatport::BeatportTokenProvider::new();
+    let mut providers: Vec<Box<dyn TaggerProvider>> = vec![Box::new(
+      beatport::BeatportProvider::new(beatport_tokens.clone()),
+    )];
     #[cfg(feature = "desktop")]
     providers.push(Box::new(TraxSourceProvider));
     providers.push(Box::new(bandcamp::BandcampProvider));
@@ -47,6 +57,7 @@ impl TaggerService {
     Ok(Self {
       client: http::build_client()?,
       providers,
+      beatport_tokens,
     })
   }
 

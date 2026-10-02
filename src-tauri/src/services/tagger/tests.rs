@@ -2,6 +2,7 @@ use super::bandcamp::{
   enrich_bandcamp_candidate, parse_bandcamp_autocomplete, parse_iso8601_duration,
 };
 use super::beatport::{enrich_beatport_candidate, parse_beatport_search};
+use super::recommendations::parse_beatport_recommendations;
 use super::scoring::{
   duration_score, hybrid_text_similarity, levenshtein_similarity, normalize_string,
   rank_candidates, ScoringWeights, UnifiedScorer, DEFAULT_WEIGHTS,
@@ -77,6 +78,142 @@ fn beatport_empty_when_payload_malformed() {
   assert!(parse_beatport_search("{}").is_empty());
   assert!(parse_beatport_search("not json").is_empty());
   assert!(parse_beatport_search(r#"{"tracks":[]}"#).is_empty());
+}
+
+const BEATPORT_RECOMMENDATIONS_BODY: &str = r#"[
+  {"track_id":123456,"track_name":"Your Mind","mix_name":"Original Mix","track_length_ms":405000,
+   "bpm":128,"key":"G Minor","key_camelot":"6B","isrc":"GBABC1234567","track_number":1,
+   "track_waveform_url":"https://geo-media.beatport.com/image_size/{w}x{h}/e6d9c6f4.png",
+   "sample_url":"https://sample.beatport.com/mp3/320/your-mind.mp3","sample_start_ms":60000,
+   "sample_end_ms":90000,"attributes":["_on_sale"],
+   "artists":[{"id":11,"name":"Adam Beyer","type":"artist"}],
+   "genre":{"id":201,"name":"Techno","sub_genre":{"id":202,"name":"Peak Time Techno"},"category":{"id":1,"name":"Mainstage"}},
+   "release":{"id":999,"name":"Your Mind EP","image_url":"https://images.beatport.com/999/{w}x{h}.jpg","catalog_number":"DC123","release_date":"2019-05-03T00:00:00"},
+   "label":{"id":77,"name":"Drumcode"},"sale_type":"standard"},
+  {"track_id":654321,"track_name":"Daybreak",
+   "sample_url":"https://sample.beatport.com/mp3/320/daybreak.mp3",
+   "artists":[{"id":11,"name":"Adam Beyer"}]},
+  {"track_name":"Track Without An Id","sample_url":"https://sample.beatport.com/mp3/320/anon.mp3"}
+]"#;
+
+#[test]
+fn beatport_recommendations_parse_a_full_item() {
+  let recommendations = parse_beatport_recommendations(BEATPORT_RECOMMENDATIONS_BODY);
+  // The third item has no `track_id`: it is dropped on its own, the rest survive.
+  assert_eq!(recommendations.len(), 2);
+
+  let first = &recommendations[0];
+  assert_eq!(first.track_id, 123456);
+  assert_eq!(first.track_name, "Your Mind");
+  assert_eq!(first.mix_name.as_deref(), Some("Original Mix"));
+  assert_eq!(first.track_length_ms, Some(405_000));
+  assert_eq!(first.bpm, Some(128.0));
+  // Long-form key text is passed through as-is: unlike the tagger's v4 search
+  // path, nothing here normalizes it to Crate's short notation.
+  assert_eq!(first.key.as_deref(), Some("G Minor"));
+  assert_eq!(first.key_camelot.as_deref(), Some("6B"));
+  assert_eq!(first.isrc.as_deref(), Some("GBABC1234567"));
+  assert_eq!(first.track_number, Some(1));
+  // Both image fields are `{w}x{h}` templates on the wire; both get resolved.
+  assert_eq!(
+    first.track_waveform_url.as_deref(),
+    Some("https://geo-media.beatport.com/image_size/800x800/e6d9c6f4.png")
+  );
+  assert_eq!(
+    first.sample_url.as_deref(),
+    Some("https://sample.beatport.com/mp3/320/your-mind.mp3")
+  );
+  assert_eq!(first.sample_start_ms, Some(60_000));
+  assert_eq!(first.sample_end_ms, Some(90_000));
+
+  assert_eq!(first.artists.len(), 1);
+  assert_eq!(first.artists[0].name.as_deref(), Some("Adam Beyer"));
+  assert_eq!(first.artists[0].id, Some(11));
+  assert_eq!(first.artists[0].artist_type.as_deref(), Some("artist"));
+
+  let genre = first.genre.as_ref().expect("genre");
+  assert_eq!(genre.name.as_deref(), Some("Techno"));
+  assert_eq!(
+    genre
+      .sub_genre
+      .as_ref()
+      .and_then(|value| value.name.as_deref()),
+    Some("Peak Time Techno")
+  );
+  assert_eq!(
+    genre
+      .category
+      .as_ref()
+      .and_then(|value| value.name.as_deref()),
+    Some("Mainstage")
+  );
+
+  assert_eq!(
+    first.label.as_ref().and_then(|l| l.name.as_deref()),
+    Some("Drumcode")
+  );
+
+  let release = first.release.as_ref().expect("release");
+  assert_eq!(release.name.as_deref(), Some("Your Mind EP"));
+  assert_eq!(release.catalog_number.as_deref(), Some("DC123"));
+  assert_eq!(release.release_date.as_deref(), Some("2019-05-03T00:00:00"));
+  // The `{w}x{h}` size placeholder is resolved so the URL is loadable as-is.
+  assert_eq!(
+    release.image_url.as_deref(),
+    Some("https://images.beatport.com/999/800x800.jpg")
+  );
+}
+
+#[test]
+fn beatport_recommendations_tolerate_missing_optional_fields() {
+  let recommendations = parse_beatport_recommendations(BEATPORT_RECOMMENDATIONS_BODY);
+  let second = recommendations
+    .iter()
+    .find(|recommendation| recommendation.track_id == 654321)
+    .expect("minimal item present");
+
+  assert_eq!(second.track_name, "Daybreak");
+  assert_eq!(
+    second.sample_url.as_deref(),
+    Some("https://sample.beatport.com/mp3/320/daybreak.mp3")
+  );
+  assert_eq!(second.artists.len(), 1);
+  assert_eq!(second.artists[0].artist_type, None);
+  assert_eq!(second.mix_name, None);
+  assert_eq!(second.bpm, None);
+  assert_eq!(second.key, None);
+  assert!(second.genre.is_none());
+  assert!(second.release.is_none());
+  assert!(second.label.is_none());
+}
+
+#[test]
+fn beatport_recommendations_serialize_with_the_wire_field_names() {
+  let recommendations = parse_beatport_recommendations(BEATPORT_RECOMMENDATIONS_BODY);
+  let value = serde_json::to_value(&recommendations[0]).expect("serialize recommendation");
+
+  // The TypeScript mirror keys on these names: snake_case throughout, and the
+  // Rust `artist_type` field still crosses the wire as `type`.
+  assert_eq!(value["track_id"].as_u64(), Some(123456));
+  assert_eq!(value["track_name"].as_str(), Some("Your Mind"));
+  assert_eq!(value["sample_start_ms"].as_i64(), Some(60_000));
+  assert_eq!(value["artists"][0]["type"].as_str(), Some("artist"));
+  assert!(value["artists"][0].get("artist_type").is_none());
+  assert_eq!(
+    value["genre"]["sub_genre"]["name"].as_str(),
+    Some("Peak Time Techno")
+  );
+  assert_eq!(value["label"]["name"].as_str(), Some("Drumcode"));
+}
+
+#[test]
+fn beatport_recommendations_empty_when_payload_malformed() {
+  assert!(parse_beatport_recommendations("not json").is_empty());
+  // An object where the API returns an array is malformed, not a partial answer.
+  assert!(parse_beatport_recommendations("{}").is_empty());
+  assert!(parse_beatport_recommendations("[]").is_empty());
+  // An array of well-formed objects that merely lack identity fields yields nothing.
+  assert!(parse_beatport_recommendations(r#"[{"track_name":"No Id"}]"#).is_empty());
 }
 
 #[cfg(feature = "desktop")]
@@ -343,6 +480,22 @@ async fn live_traxsource_search() {
   assert!(!first.title.is_empty());
   assert!(!first.artists.is_empty());
   println!("traxsource candidates: {:#?}", outcome.candidates);
+}
+
+#[ignore = "live network"]
+#[tokio::test]
+async fn live_beatport_recommendations() {
+  let service = TaggerService::new().unwrap();
+  // A long-lived Beatport track id, verified against the v1 recommendations endpoint.
+  let recommendations = service.find_similar_tracks(20528025).await.unwrap();
+  assert!(
+    !recommendations.is_empty(),
+    "beatport returned no recommendations"
+  );
+  let first = &recommendations[0];
+  assert_ne!(first.track_id, 0);
+  assert!(!first.track_name.is_empty());
+  println!("beatport recommendations: {:#?}", recommendations);
 }
 
 #[ignore = "live network"]

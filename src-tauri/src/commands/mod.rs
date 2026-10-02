@@ -19,6 +19,7 @@ pub mod media_controls;
 #[cfg(feature = "desktop")]
 pub mod playback;
 pub mod playlist;
+pub mod recommendations;
 pub mod settings;
 #[cfg(feature = "desktop")]
 pub mod sync;

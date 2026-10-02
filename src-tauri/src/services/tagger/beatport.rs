@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -26,20 +27,21 @@ const BEATPORT_CLIENT_ID: &str = "2tiTbKxmQFwnbFjMONU4k7njMRZmV3ZMwRBndiZs";
 const BEATPORT_CLIENT_SECRET: &str =
   "RDUJyAk4zFEGtQ8rsTmylDSfxmALRNBn3D1BsRr7MKi3oa1TL9Mq9QxqUPK7loiumXolEWbJcWa4IGAhtwnTz1cSXClGJ1tkkNCNWwRwjxIKTZJKOJxbwaNt0Rm3WG0v";
 
-/// Beatport search provider.
+/// Beatport's client-credentials bearer token, cached across calls.
 ///
-/// Uses the public v4 JSON API (`api.beatport.com`), which is not behind
-/// Cloudflare, instead of scraping the HTML `__NEXT_DATA__` payload. Search
-/// requires a bearer token, so the provider caches one across calls and refreshes
-/// it shortly before expiry.
-pub(super) struct BeatportProvider {
-  token: Mutex<Option<CachedToken>>,
+/// Owned by `TaggerService` and cloned into each consumer (the search provider and
+/// the recommendations path), so one OAuth token is minted per expiry window for
+/// the whole service rather than one per feature. Cloning hands out another handle
+/// to the same cache.
+#[derive(Clone)]
+pub(super) struct BeatportTokenProvider {
+  token: Arc<Mutex<Option<CachedToken>>>,
 }
 
-impl BeatportProvider {
+impl BeatportTokenProvider {
   pub(super) fn new() -> Self {
     Self {
-      token: Mutex::new(None),
+      token: Arc::new(Mutex::new(None)),
     }
   }
 
@@ -47,8 +49,8 @@ impl BeatportProvider {
   /// about to expire.
   ///
   /// The mutex is intentionally held across the token request: overlapping
-  /// searches then await the first fetch instead of racing duplicate token calls.
-  async fn access_token(&self, client: &reqwest::Client) -> Result<String> {
+  /// callers then await the first fetch instead of racing duplicate token calls.
+  pub(super) async fn access_token(&self, client: &reqwest::Client) -> Result<String> {
     let mut cached = self.token.lock().await;
     if let Some(token) = cached.as_ref() {
       if token.expires_at > Instant::now() {
@@ -91,6 +93,22 @@ impl BeatportProvider {
   }
 }
 
+/// Beatport search provider.
+///
+/// Uses the public v4 JSON API (`api.beatport.com`), which is not behind
+/// Cloudflare, instead of scraping the HTML `__NEXT_DATA__` payload. Search
+/// requires a bearer token, so it borrows the service-wide
+/// [`BeatportTokenProvider`] instead of owning its own.
+pub(super) struct BeatportProvider {
+  tokens: BeatportTokenProvider,
+}
+
+impl BeatportProvider {
+  pub(super) fn new(tokens: BeatportTokenProvider) -> Self {
+    Self { tokens }
+  }
+}
+
 /// A bearer token plus the instant it should be considered stale.
 struct CachedToken {
   access_token: String,
@@ -115,7 +133,7 @@ impl TaggerProvider for BeatportProvider {
     query: &TagSearchQuery,
     limit: usize,
   ) -> Result<Vec<TagCandidate>> {
-    let token = self.access_token(client).await?;
+    let token = self.tokens.access_token(client).await?;
 
     let response = client
       .get(API_SEARCH_URL)
@@ -168,7 +186,7 @@ impl TaggerProvider for BeatportProvider {
       return Ok(candidate.clone());
     };
 
-    let token = self.access_token(client).await?;
+    let token = self.tokens.access_token(client).await?;
 
     let response = client
       .get(format!("{API_TRACK_URL}/{track_id}/"))

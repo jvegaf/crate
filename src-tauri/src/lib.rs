@@ -331,6 +331,8 @@ pub fn run() {
       // Applying remote artwork reuses the desktop-only LibraryService.
       #[cfg(feature = "desktop")]
       commands::tagger::set_track_artwork_from_url,
+      // Beatport recommendations (shared, not feature-gated: reqwest only).
+      commands::recommendations::find_beatport_similar_tracks,
       // Follow commands
       commands::follow::follow_source,
       commands::follow::follow_from_entity,
