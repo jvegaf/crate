@@ -630,7 +630,9 @@
 			"pausePlaylist": "Pause playlist",
 			"previousTrack": "Previous track",
 			"nextTrack": "Next track",
-			"failed": "Failed to load Beatport recommendations: {error}"
+			"failed": "Failed to load Beatport recommendations: {error}",
+			"seekPreview": "Seek preview",
+			"playbackFailed": "Failed to play sample"
 		},
 		"albumArt": "Album Art",
 		"deviceInfo": {

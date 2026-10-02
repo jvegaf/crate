@@ -5,7 +5,7 @@
 		title?: string
 		disabled?: boolean
 		active?: boolean
-		size?: 'sm' | 'md' | 'lg'
+		size?: 'sm' | 'md' | 'lg' | 'xl'
 		class?: string
 		icon: string
 		iconClass?: string
@@ -29,6 +29,7 @@
 		sm: 'w-6 h-6 text-sm',
 		md: 'w-8 h-8 text-base',
 		lg: 'w-10 h-10 text-lg',
+		xl: 'w-16 h-16 text-2xl',
 	}
 </script>
 

@@ -3,8 +3,9 @@
 	import { SvelteMap } from 'svelte/reactivity'
 	import { openUrl } from '@tauri-apps/plugin-opener'
 	import type { BeatportRecommendation } from '$shared/types'
-	import { findBeatportSimilarTracks } from '$shared/api/beatport'
+	import { findBeatportSimilarTracks, registerBeatportSampleStreams } from '$shared/api/beatport'
 	import { swapBeatportImageSize } from '$shared/utils/beatport'
+	import { isInputFocused } from '$shared/utils'
 	import { toastStore } from '$shared/stores/toast'
 	import { translate } from '$shared/i18n'
 	import Modal from '$lib/components/common/Modal.svelte'
@@ -26,26 +27,54 @@
 	let recommendations = $state<BeatportRecommendation[]>([])
 	let loading = $state(true)
 
-	// Playback: at most one <audio> plays. The transport walks the rows that carry
-	// a sample; playlist mode (Play all) keeps advancing as rows end, and stops at
-	// the end of the list.
+	// Playback runs through ONE detached Audio (the previewPlayer pattern). An in-DOM
+	// `<audio controls>` takes a slow WebKitGTK resource-selection path that stalls the
+	// first sound 10–27 s even when the proxy serves the full body in <1 s; a detached
+	// Audio on the same URL reached `playing` in ~0.5 s. Rows render compact custom
+	// controls (play/pause, seek bar, time) instead of native controls.
 	let playingTrackId = $state<number | null>(null)
 	let isPlaying = $state(false)
 	let playlistMode = $state(false)
-	const audioEls = new SvelteMap<number, HTMLAudioElement>()
+	/** Row whose play() was requested but has not reached the playing event yet. */
+	let pendingTrackId = $state<number | null>(null)
+	let positionMs = $state(0)
+	let durationMs = $state(0)
 
 	// The playlist is the subset of rows with a sample, in list order.
 	const playable = $derived(recommendations.filter((r) => r.sample_url))
 	const playingIndex = $derived(playable.findIndex((r) => r.track_id === playingTrackId))
+
+	// Proxy-backed sample sources, per track id. Rows absent from this map use their direct
+	// `sample_url` — the pre-proxy behavior — so the feature never hard-depends on the proxy.
+	const streamSrcByTrackId = new SvelteMap<number, string>()
 
 	// Fetch on every open: the host mounts this component fresh per modal state, so
 	// reopening re-queries Beatport. Results are deliberately never cached.
 	$effect(() => {
 		if (!open) return
 		loading = true
+		streamSrcByTrackId.clear()
 		findBeatportSimilarTracks(trackId)
-			.then((result) => {
+			.then(async (result) => {
 				recommendations = result
+				// Register sample URLs with the localhost stream proxy BEFORE rendering rows:
+				// the webview's own remote https fetch hangs on WebKitGTK/libsoup on some
+				// systems, and a <source> whose src is swapped after the media element was
+				// created does not reliably re-run resource selection (a load() call would be
+				// needed). Awaiting registration here means every <audio> is created with its
+				// final src on first render. Registration is a local IPC hash insert — the
+				// loading state barely notices it; any failure keeps rows on their direct URL.
+				try {
+					const rows = result.filter((r) => r.sample_url)
+					const proxied = await registerBeatportSampleStreams(rows.map((r) => r.sample_url as string))
+					rows.forEach((row, i) => {
+						const src = proxied[i] ?? row.sample_url
+						if (src) streamSrcByTrackId.set(row.track_id, src)
+					})
+				} catch (error) {
+					// Proxy registration failed: every row keeps its direct URL (pre-proxy behavior).
+					console.warn('beatport sample proxy registration failed', error)
+				}
 				loading = false
 			})
 			.catch((error: unknown) => {
@@ -55,65 +84,110 @@
 			})
 	})
 
-	// Closing (or unmounting) pauses any live sample and resets playback state.
+	// One detached Audio instance drives every row; its src is swapped on demand.
+	let audioEl: HTMLAudioElement | null = null
+
+	function ensureAudio(): HTMLAudioElement {
+		if (audioEl) return audioEl
+		const el = new Audio()
+		el.addEventListener('play', () => {
+			isPlaying = true
+			pendingTrackId = null
+		})
+		el.addEventListener('pause', () => (isPlaying = false))
+		el.addEventListener('timeupdate', () => (positionMs = Math.round(el.currentTime * 1000)))
+		el.addEventListener(
+			'durationchange',
+			() => (durationMs = isFinite(el.duration) ? Math.round(el.duration * 1000) : 0)
+		)
+		el.addEventListener('ended', handleEnded)
+		el.addEventListener('error', () => {
+			pendingTrackId = null
+			isPlaying = false
+			toastStore.error(get(translate)('modals.beatportRecommendations.playbackFailed'))
+		})
+		audioEl = el
+		return el
+	}
+
+	// Closing (or unmounting) pauses the live sample and resets playback state. The
+	// element is dropped by unmounting itself — no src juggling that would fire a
+	// spurious error event.
 	$effect(() => {
 		return () => {
 			playlistMode = false
 			isPlaying = false
-			for (const el of audioEls.values()) {
-				el.pause()
-			}
+			pendingTrackId = null
+			playingTrackId = null
+			positionMs = 0
+			durationMs = 0
+			audioEl?.pause()
 		}
 	})
-
-	/** Registers a row's audio element so the transport can reach it by track id. */
-	function registerAudio(node: HTMLAudioElement, id: number) {
-		audioEls.set(id, node)
-		return {
-			destroy() {
-				audioEls.delete(id)
-			},
-		}
-	}
 
 	function stopPlayback() {
 		isPlaying = false
 		playlistMode = false
+		pendingTrackId = null
 	}
 
-	/** Play the playable row at `index`; a failed play skips ahead (Harmony parity). */
+	/** Load the given row's sample onto the shared element and start it. */
+	async function playRec(rec: BeatportRecommendation): Promise<boolean> {
+		const src = streamSrcByTrackId.get(rec.track_id) ?? rec.sample_url
+		if (!src) return false
+		const el = ensureAudio()
+		playingTrackId = rec.track_id
+		pendingTrackId = rec.track_id
+		positionMs = 0
+		durationMs = 0
+		el.src = src
+		try {
+			await el.play()
+		} catch {
+			// Rejected start (autoplay policy or network): leave the UI consistent.
+			pendingTrackId = null
+			isPlaying = false
+		}
+		return true
+	}
+
+	/** Play the playable row at `index`; a sourceless row skips ahead (Harmony parity). */
 	async function playAt(index: number): Promise<void> {
 		if (index >= playable.length) {
 			stopPlayback()
 			return
 		}
-		const target = playable[index]
-		const el = audioEls.get(target.track_id)
-		if (!el) {
-			await playAt(index + 1)
+		const started = await playRec(playable[index])
+		if (!started && playlistMode) await playAt(index + 1)
+	}
+
+	/** Row button: toggles its own sample; starting another row switches source and turns playlist off. */
+	function handleRowToggle(rec: BeatportRecommendation) {
+		if (audioEl && playingTrackId === rec.track_id) {
+			if (isPlaying || pendingTrackId === rec.track_id) audioEl.pause()
+			else void audioEl.play().catch(() => (pendingTrackId = null))
 			return
 		}
-		for (const [otherId, other] of audioEls) {
-			if (otherId !== target.track_id) other.pause()
-		}
-		playingTrackId = target.track_id
-		try {
-			await el.play()
-			isPlaying = true
-		} catch {
-			isPlaying = false
-			if (playlistMode) await playAt(index + 1)
-		}
+		playlistMode = false
+		void playRec(rec)
 	}
 
 	function togglePlayAll() {
 		if (isPlaying) {
-			if (playingTrackId !== null) audioEls.get(playingTrackId)?.pause()
+			audioEl?.pause()
 			return
 		}
 		if (playable.length === 0) return
 		playlistMode = true
-		void playAt(playingIndex >= 0 ? playingIndex : 0)
+		if (audioEl && playingTrackId !== null) {
+			// Resume the current row and keep the playlist going from here.
+			void audioEl.play().catch(() => {
+				isPlaying = false
+				pendingTrackId = null
+			})
+			return
+		}
+		void playAt(0)
 	}
 
 	function playPrev() {
@@ -126,23 +200,66 @@
 		void playAt(playingIndex + 1)
 	}
 
-	/** The user pressed play on a row's native controls: enforce one-audio-at-a-time. */
-	function handleNativePlay(id: number) {
-		for (const [otherId, other] of audioEls) {
-			if (otherId !== id) other.pause()
-		}
-		playingTrackId = id
-		isPlaying = true
-	}
-
-	function handleNativePause(id: number) {
-		if (id === playingTrackId) isPlaying = false
-	}
-
-	function handleEnded(id: number) {
-		if (id !== playingTrackId) return
+	function handleEnded() {
 		isPlaying = false
 		if (playlistMode) void playAt(playingIndex + 1)
+	}
+
+	function seekSample(event: MouseEvent, rec: BeatportRecommendation) {
+		if (!audioEl || playingTrackId !== rec.track_id || durationMs <= 0) return
+		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+		const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+		audioEl.currentTime = (fraction * durationMs) / 1000
+	}
+
+	function seekTo(ms: number) {
+		if (!audioEl || durationMs <= 0) return
+		const clamped = Math.min(durationMs, Math.max(0, ms))
+		audioEl.currentTime = clamped / 1000
+		positionMs = clamped
+	}
+
+	// While this modal is open it owns the plain arrow keys: Left/Right seek the current
+	// sample by 10 s (same step as the global player shortcut), Down/Up switch rows —
+	// Down starts from the first row when nothing is loaded yet. The global shortcuts are
+	// already suppressed for any open ModalOrchestrator modal (useAppSetup → isModalOpen),
+	// so there is no double-fire with the main player's seek/volume bindings.
+	$effect(() => {
+		if (!open) return
+		function handleKeys(e: KeyboardEvent) {
+			if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || isInputFocused()) return
+			switch (e.key) {
+				case 'ArrowLeft':
+					if (playingTrackId !== null) {
+						e.preventDefault()
+						seekTo(positionMs - 10_000)
+					}
+					break
+				case 'ArrowRight':
+					if (playingTrackId !== null) {
+						e.preventDefault()
+						seekTo(positionMs + 10_000)
+					}
+					break
+				case 'ArrowDown':
+					e.preventDefault()
+					void playAt(playingIndex < 0 ? 0 : playingIndex + 1)
+					break
+				case 'ArrowUp':
+					if (playingIndex > 0) {
+						e.preventDefault()
+						void playAt(playingIndex - 1)
+					}
+					break
+			}
+		}
+		window.addEventListener('keydown', handleKeys)
+		return () => window.removeEventListener('keydown', handleKeys)
+	})
+
+	function fmtTime(ms: number): string {
+		const total = Math.max(0, Math.round(ms / 1000))
+		return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 	}
 
 	function artistNames(rec: BeatportRecommendation): string {
@@ -260,19 +377,36 @@
 								<span class="truncate text-xs text-text-secondary">{artistNames(rec)}</span>
 							</div>
 
-							<!-- Sample player, only when a preview exists -->
-							{#if rec.sample_url}
-								<audio
-									class="h-8 min-w-[300px] grow basis-[320px]"
-									controls
-									preload="none"
-									use:registerAudio={rec.track_id}
-									onplay={() => handleNativePlay(rec.track_id)}
-									onpause={() => handleNativePause(rec.track_id)}
-									onended={() => handleEnded(rec.track_id)}
-								>
-									<source src={rec.sample_url} type="audio/mpeg" />
-								</audio>
+							<!-- Compact sample player: custom controls over the shared detached
+							     Audio (native `<audio controls>` in the DOM stalls ~10–27 s in
+							     WebKitGTK resource selection; see the playback note in the script). -->
+							{#if streamSrcByTrackId.get(rec.track_id) ?? rec.sample_url}
+								{@const rowPlaying = playingTrackId === rec.track_id}
+								<div class="flex min-w-[300px] grow basis-[320px] items-center gap-3">
+									<IconButton
+										icon={rowPlaying && (isPlaying || pendingTrackId === rec.track_id) ? 'pause' : 'play'}
+										fill
+										size="xl"
+										onclick={() => handleRowToggle(rec)}
+									/>
+									<button
+										type="button"
+										class="h-1.5 min-w-0 grow cursor-pointer overflow-hidden rounded-full bg-surface-1 disabled:cursor-default"
+										disabled={!rowPlaying}
+										aria-label={$translate('modals.beatportRecommendations.seekPreview')}
+										onclick={(event) => seekSample(event, rec)}
+									>
+										<span
+											class="block h-full rounded-full bg-brand-primary"
+											style="width: {rowPlaying && durationMs > 0
+												? Math.min(100, (positionMs / durationMs) * 100)
+												: 0}%"
+										></span>
+									</button>
+									<span class="w-[92px] shrink-0 text-right text-xs text-text-secondary">
+										{rowPlaying ? `${fmtTime(positionMs)} / ${fmtTime(durationMs)}` : fmtTime(rec.track_length_ms ?? 0)}
+									</span>
+								</div>
 							{/if}
 
 							{@render statColumn(

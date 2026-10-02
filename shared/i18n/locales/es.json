@@ -574,7 +574,9 @@
 			"pausePlaylist": "Pausar la lista de reproducción",
 			"previousTrack": "Pista anterior",
 			"nextTrack": "Pista siguiente",
-			"failed": "Error al cargar las recomendaciones de Beatport: {error}"
+			"failed": "Error al cargar las recomendaciones de Beatport: {error}",
+			"seekPreview": "Buscar en la vista previa",
+			"playbackFailed": "No se pudo reproducir la muestra"
 		},
 		"albumArt": "Carátula del álbum",
 		"deviceInfo": {
