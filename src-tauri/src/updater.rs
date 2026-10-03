@@ -50,6 +50,16 @@ pub fn accepts_release(current: &Version, remote: &Version) -> bool {
         );
         return false;
     }
+    // Same-channel but unpinned prerelease builds (e.g. `-dev`) have no published manifest, so
+    // they must never self-update — the intent `dev_builds_never_update` asserts. Plain
+    // `remote > current` below would wrongly accept `-dev` to `-dev` upgrades.
+    if current_channel == ReleaseChannel::Other {
+        log::warn!(
+            "updater: ignoring {remote} — build {current} is on an unpublished prerelease channel \
+             and does not receive auto-updates"
+        );
+        return false;
+    }
     remote > current
 }
 
