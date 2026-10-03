@@ -25,7 +25,7 @@ Per user decision (2026-10-03): the fork adapts to the ORIGINAL repo's style —
 Mechanical fmt work: direct inline. Clippy semantic fixes: delegate if 2+ non-trivial files.
 
 ## Progress / evidence
-- pending
+DONE 2026-10-03. Commits: `853bd56` (rustfmt.toml tab_spaces=4 + 182-file sweep to upstream style, formatting-only); `6f16475` (updater: Other-channel builds never self-update — repo's own `dev_builds_never_update` test now passes, cargo test 477/477; upstream defect candidate for a PR to blackboxaudio/crate); `f10e9cd` (ci.build: rename invalid `tests/…` slash job ids that made the whole workflow fail validation, ubuntu system deps for tests-rust, `svelte-kit sync` before vitest). Evidence on `f10e9cd`: Lint success; Build jobs all success — macOS, Windows, iOS, Android, Rust tests, Frontend tests (Vitest 74/74); E2E skipped by its develop-only gate. Local gate mirrors used CI-exact commands (pinned nightly-2026-02-19 fmt/clippy, `cargo test --features desktop`, `npx vitest run`).
 
 ## Next step
-F1–F3.
+None — closed. Follow-ups (not blocking): PR the updater fix upstream; upstream prefetch-drop question stays open from the merge-repair doc.
