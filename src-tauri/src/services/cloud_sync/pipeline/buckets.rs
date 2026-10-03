@@ -38,23 +38,23 @@ pub const COLLECTION_ITEMS: &str = "collection_items";
 /// hex char of the (UUID) id so a single-track edit re-uploads ~1/16th of the
 /// library instead of the whole `tracks` blob.
 pub fn bucket_for_track_id(id: &str) -> String {
-  let c = id
-    .chars()
-    .next()
-    .map(|c| c.to_ascii_lowercase())
-    .filter(|c| c.is_ascii_hexdigit())
-    .unwrap_or('0');
-  format!("tracks/{c}")
+    let c = id
+        .chars()
+        .next()
+        .map(|c| c.to_ascii_lowercase())
+        .filter(|c| c.is_ascii_hexdigit())
+        .unwrap_or('0');
+    format!("tracks/{c}")
 }
 
 /// The nibble (0..16) a track id shards into — the `u8` payload of
 /// [`Bucket::Tracks`]. Mirrors [`bucket_for_track_id`] exactly (first hex char,
 /// non-hex/empty → 0) so the enum and the string form never disagree.
 pub fn shard_for_track_id(id: &str) -> u8 {
-  id.chars()
-    .next()
-    .and_then(|c| c.to_ascii_lowercase().to_digit(16))
-    .unwrap_or(0) as u8
+    id.chars()
+        .next()
+        .and_then(|c| c.to_ascii_lowercase().to_digit(16))
+        .unwrap_or(0) as u8
 }
 
 /// How a bucket merges. Drives the delete-vs-live tie-break, which MUST be the
@@ -62,12 +62,12 @@ pub fn shard_for_track_id(id: &str) -> u8 {
 /// different bytes (hash ping-pong).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BucketKind {
-  /// Single-PK entity. DELETE-WINS-TIE: a delete at an HLC `>=` the live row wins.
-  Entity,
-  /// Composite-PK junction. ADD-WINS-TIE: a delete wins only if strictly `>` the add.
-  Junction,
-  /// `settings` key/value, per-key HLC in `sync_state`. LWW, never deleted.
-  Settings,
+    /// Single-PK entity. DELETE-WINS-TIE: a delete at an HLC `>=` the live row wins.
+    Entity,
+    /// Composite-PK junction. ADD-WINS-TIE: a delete wins only if strictly `>` the add.
+    Junction,
+    /// `settings` key/value, per-key HLC in `sync_state`. LWW, never deleted.
+    Settings,
 }
 
 /// A logical sync bucket: one content-addressed blob in the vault. The `tracks`
@@ -75,282 +75,282 @@ pub enum BucketKind {
 /// `"tracks/f"`); every other table is a single whole-file bucket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Bucket {
-  /// Track shard; the `u8` is the nibble 0..16 (NOT the hex char).
-  Tracks(u8),
-  Playlists,
-  PlaylistTracks,
-  Cues,
-  TagCategories,
-  Tags,
-  TrackTags,
-  DiscoveryReleases,
-  DiscoveryTracks,
-  DiscoveryReleaseTags,
-  PlaylistDiscoveryReleases,
-  PlaylistDiscoveryTracks,
-  DiscoveryTrackTags,
-  LibraryRoots,
-  FollowedSources,
-  DiscoveryReleaseSources,
-  CollectionAccounts,
-  CollectionItems,
-  Settings,
+    /// Track shard; the `u8` is the nibble 0..16 (NOT the hex char).
+    Tracks(u8),
+    Playlists,
+    PlaylistTracks,
+    Cues,
+    TagCategories,
+    Tags,
+    TrackTags,
+    DiscoveryReleases,
+    DiscoveryTracks,
+    DiscoveryReleaseTags,
+    PlaylistDiscoveryReleases,
+    PlaylistDiscoveryTracks,
+    DiscoveryTrackTags,
+    LibraryRoots,
+    FollowedSources,
+    DiscoveryReleaseSources,
+    CollectionAccounts,
+    CollectionItems,
+    Settings,
 }
 
 impl Bucket {
-  /// The bucket for a given track id (its shard).
-  pub fn for_track_id(id: &str) -> Bucket {
-    Bucket::Tracks(shard_for_track_id(id))
-  }
-
-  /// Canonical plain name — the manifest map key / dirty-queue value.
-  /// `Tracks(10)` → `"tracks/a"`.
-  pub fn as_str(&self) -> String {
-    match self {
-      Bucket::Tracks(n) => format!("tracks/{n:x}"),
-      Bucket::Playlists => PLAYLISTS.to_string(),
-      Bucket::PlaylistTracks => PLAYLIST_TRACKS.to_string(),
-      Bucket::Cues => CUES.to_string(),
-      Bucket::TagCategories => TAG_CATEGORIES.to_string(),
-      Bucket::Tags => TAGS.to_string(),
-      Bucket::TrackTags => TRACK_TAGS.to_string(),
-      Bucket::DiscoveryReleases => DISCOVERY_RELEASES.to_string(),
-      Bucket::DiscoveryTracks => DISCOVERY_TRACKS.to_string(),
-      Bucket::DiscoveryReleaseTags => DISCOVERY_RELEASE_TAGS.to_string(),
-      Bucket::PlaylistDiscoveryReleases => PLAYLIST_DISCOVERY_RELEASES.to_string(),
-      Bucket::PlaylistDiscoveryTracks => PLAYLIST_DISCOVERY_TRACKS.to_string(),
-      Bucket::DiscoveryTrackTags => DISCOVERY_TRACK_TAGS.to_string(),
-      Bucket::LibraryRoots => LIBRARY_ROOTS.to_string(),
-      Bucket::FollowedSources => FOLLOWED_SOURCES.to_string(),
-      Bucket::DiscoveryReleaseSources => DISCOVERY_RELEASE_SOURCES.to_string(),
-      Bucket::CollectionAccounts => COLLECTION_ACCOUNTS.to_string(),
-      Bucket::CollectionItems => COLLECTION_ITEMS.to_string(),
-      Bucket::Settings => SETTINGS.to_string(),
+    /// The bucket for a given track id (its shard).
+    pub fn for_track_id(id: &str) -> Bucket {
+        Bucket::Tracks(shard_for_track_id(id))
     }
-  }
 
-  /// Parse a plain bucket name. `"tracks/a"` → `Tracks(10)`; rejects `"tracks/ab"`.
-  pub fn parse(s: &str) -> Option<Bucket> {
-    if let Some(rest) = s.strip_prefix("tracks/") {
-      let mut chars = rest.chars();
-      let c = chars.next()?;
-      if chars.next().is_some() {
-        return None; // more than one char after the slash
-      }
-      let n = c.to_digit(16)? as u8;
-      return Some(Bucket::Tracks(n));
+    /// Canonical plain name — the manifest map key / dirty-queue value.
+    /// `Tracks(10)` → `"tracks/a"`.
+    pub fn as_str(&self) -> String {
+        match self {
+            Bucket::Tracks(n) => format!("tracks/{n:x}"),
+            Bucket::Playlists => PLAYLISTS.to_string(),
+            Bucket::PlaylistTracks => PLAYLIST_TRACKS.to_string(),
+            Bucket::Cues => CUES.to_string(),
+            Bucket::TagCategories => TAG_CATEGORIES.to_string(),
+            Bucket::Tags => TAGS.to_string(),
+            Bucket::TrackTags => TRACK_TAGS.to_string(),
+            Bucket::DiscoveryReleases => DISCOVERY_RELEASES.to_string(),
+            Bucket::DiscoveryTracks => DISCOVERY_TRACKS.to_string(),
+            Bucket::DiscoveryReleaseTags => DISCOVERY_RELEASE_TAGS.to_string(),
+            Bucket::PlaylistDiscoveryReleases => PLAYLIST_DISCOVERY_RELEASES.to_string(),
+            Bucket::PlaylistDiscoveryTracks => PLAYLIST_DISCOVERY_TRACKS.to_string(),
+            Bucket::DiscoveryTrackTags => DISCOVERY_TRACK_TAGS.to_string(),
+            Bucket::LibraryRoots => LIBRARY_ROOTS.to_string(),
+            Bucket::FollowedSources => FOLLOWED_SOURCES.to_string(),
+            Bucket::DiscoveryReleaseSources => DISCOVERY_RELEASE_SOURCES.to_string(),
+            Bucket::CollectionAccounts => COLLECTION_ACCOUNTS.to_string(),
+            Bucket::CollectionItems => COLLECTION_ITEMS.to_string(),
+            Bucket::Settings => SETTINGS.to_string(),
+        }
     }
-    Some(match s {
-      PLAYLISTS => Bucket::Playlists,
-      PLAYLIST_TRACKS => Bucket::PlaylistTracks,
-      CUES => Bucket::Cues,
-      TAG_CATEGORIES => Bucket::TagCategories,
-      TAGS => Bucket::Tags,
-      TRACK_TAGS => Bucket::TrackTags,
-      DISCOVERY_RELEASES => Bucket::DiscoveryReleases,
-      DISCOVERY_TRACKS => Bucket::DiscoveryTracks,
-      DISCOVERY_RELEASE_TAGS => Bucket::DiscoveryReleaseTags,
-      PLAYLIST_DISCOVERY_RELEASES => Bucket::PlaylistDiscoveryReleases,
-      PLAYLIST_DISCOVERY_TRACKS => Bucket::PlaylistDiscoveryTracks,
-      DISCOVERY_TRACK_TAGS => Bucket::DiscoveryTrackTags,
-      LIBRARY_ROOTS => Bucket::LibraryRoots,
-      FOLLOWED_SOURCES => Bucket::FollowedSources,
-      DISCOVERY_RELEASE_SOURCES => Bucket::DiscoveryReleaseSources,
-      COLLECTION_ACCOUNTS => Bucket::CollectionAccounts,
-      COLLECTION_ITEMS => Bucket::CollectionItems,
-      SETTINGS => Bucket::Settings,
-      _ => return None,
-    })
-  }
 
-  /// Every bucket, in a stable deterministic order (16 track shards then the
-  /// rest). Used for full-library serialization/manifest iteration — this is
-  /// NOT the FK-safe merge order (see [`Bucket::merge_order`]).
-  pub fn all() -> Vec<Bucket> {
-    let mut v: Vec<Bucket> = (0u8..TRACK_SHARDS as u8).map(Bucket::Tracks).collect();
-    v.extend([
-      Bucket::Playlists,
-      Bucket::PlaylistTracks,
-      Bucket::Cues,
-      Bucket::TagCategories,
-      Bucket::Tags,
-      Bucket::TrackTags,
-      Bucket::DiscoveryReleases,
-      Bucket::DiscoveryTracks,
-      Bucket::DiscoveryReleaseTags,
-      Bucket::PlaylistDiscoveryReleases,
-      Bucket::PlaylistDiscoveryTracks,
-      Bucket::DiscoveryTrackTags,
-      Bucket::LibraryRoots,
-      Bucket::FollowedSources,
-      Bucket::DiscoveryReleaseSources,
-      Bucket::CollectionAccounts,
-      Bucket::CollectionItems,
-      Bucket::Settings,
-    ]);
-    v
-  }
-
-  /// FK-safe merge/apply order: parents before children. Pulls merge buckets in
-  /// this order so a junction's endpoints already exist when it is applied.
-  pub fn merge_order() -> Vec<Bucket> {
-    let mut v = vec![
-      // rank 0 — no synced-parent dependency
-      Bucket::TagCategories,
-      Bucket::LibraryRoots,
-      Bucket::DiscoveryReleases,
-      Bucket::FollowedSources,
-      Bucket::CollectionAccounts,
-    ];
-    // rank 1 — depend only on rank 0
-    v.extend((0u8..TRACK_SHARDS as u8).map(Bucket::Tracks));
-    v.extend([
-      Bucket::Tags,
-      Bucket::Playlists,
-      Bucket::DiscoveryTracks,
-      // collection_items depends only on collection_accounts (rank 0)
-      Bucket::CollectionItems,
-    ]);
-    // rank 2 — children / junctions
-    v.extend([
-      Bucket::Cues,
-      Bucket::TrackTags,
-      Bucket::PlaylistTracks,
-      Bucket::DiscoveryReleaseTags,
-      Bucket::PlaylistDiscoveryReleases,
-      // both depend on discovery_tracks (rank 1) + playlists / tags (rank 1)
-      Bucket::PlaylistDiscoveryTracks,
-      Bucket::DiscoveryTrackTags,
-      // discovery_release_sources depends on discovery_releases + followed_sources (both rank 0)
-      Bucket::DiscoveryReleaseSources,
-    ]);
-    // rank 3 — independent
-    v.push(Bucket::Settings);
-    v
-  }
-
-  pub fn kind(&self) -> BucketKind {
-    match self {
-      Bucket::PlaylistTracks
-      | Bucket::TrackTags
-      | Bucket::DiscoveryReleaseTags
-      | Bucket::PlaylistDiscoveryReleases
-      | Bucket::PlaylistDiscoveryTracks
-      | Bucket::DiscoveryTrackTags
-      | Bucket::DiscoveryReleaseSources => BucketKind::Junction,
-      Bucket::Settings => BucketKind::Settings,
-      _ => BucketKind::Entity,
+    /// Parse a plain bucket name. `"tracks/a"` → `Tracks(10)`; rejects `"tracks/ab"`.
+    pub fn parse(s: &str) -> Option<Bucket> {
+        if let Some(rest) = s.strip_prefix("tracks/") {
+            let mut chars = rest.chars();
+            let c = chars.next()?;
+            if chars.next().is_some() {
+                return None; // more than one char after the slash
+            }
+            let n = c.to_digit(16)? as u8;
+            return Some(Bucket::Tracks(n));
+        }
+        Some(match s {
+            PLAYLISTS => Bucket::Playlists,
+            PLAYLIST_TRACKS => Bucket::PlaylistTracks,
+            CUES => Bucket::Cues,
+            TAG_CATEGORIES => Bucket::TagCategories,
+            TAGS => Bucket::Tags,
+            TRACK_TAGS => Bucket::TrackTags,
+            DISCOVERY_RELEASES => Bucket::DiscoveryReleases,
+            DISCOVERY_TRACKS => Bucket::DiscoveryTracks,
+            DISCOVERY_RELEASE_TAGS => Bucket::DiscoveryReleaseTags,
+            PLAYLIST_DISCOVERY_RELEASES => Bucket::PlaylistDiscoveryReleases,
+            PLAYLIST_DISCOVERY_TRACKS => Bucket::PlaylistDiscoveryTracks,
+            DISCOVERY_TRACK_TAGS => Bucket::DiscoveryTrackTags,
+            LIBRARY_ROOTS => Bucket::LibraryRoots,
+            FOLLOWED_SOURCES => Bucket::FollowedSources,
+            DISCOVERY_RELEASE_SOURCES => Bucket::DiscoveryReleaseSources,
+            COLLECTION_ACCOUNTS => Bucket::CollectionAccounts,
+            COLLECTION_ITEMS => Bucket::CollectionItems,
+            SETTINGS => Bucket::Settings,
+            _ => return None,
+        })
     }
-  }
 
-  /// The SQL table backing this bucket. All `Tracks(_)` shards share `"tracks"`.
-  pub fn table(&self) -> &'static str {
-    match self {
-      Bucket::Tracks(_) => "tracks",
-      Bucket::Playlists => "playlists",
-      Bucket::PlaylistTracks => "playlist_tracks",
-      Bucket::Cues => "cues",
-      Bucket::TagCategories => "tag_categories",
-      Bucket::Tags => "tags",
-      Bucket::TrackTags => "track_tags",
-      Bucket::DiscoveryReleases => "discovery_releases",
-      Bucket::DiscoveryTracks => "discovery_tracks",
-      Bucket::DiscoveryReleaseTags => "discovery_release_tags",
-      Bucket::PlaylistDiscoveryReleases => "playlist_discovery_releases",
-      Bucket::PlaylistDiscoveryTracks => "playlist_discovery_tracks",
-      Bucket::DiscoveryTrackTags => "discovery_track_tags",
-      Bucket::LibraryRoots => "library_roots",
-      Bucket::FollowedSources => "followed_sources",
-      Bucket::DiscoveryReleaseSources => "discovery_release_sources",
-      Bucket::CollectionAccounts => "collection_accounts",
-      Bucket::CollectionItems => "collection_items",
-      Bucket::Settings => "settings",
+    /// Every bucket, in a stable deterministic order (16 track shards then the
+    /// rest). Used for full-library serialization/manifest iteration — this is
+    /// NOT the FK-safe merge order (see [`Bucket::merge_order`]).
+    pub fn all() -> Vec<Bucket> {
+        let mut v: Vec<Bucket> = (0u8..TRACK_SHARDS as u8).map(Bucket::Tracks).collect();
+        v.extend([
+            Bucket::Playlists,
+            Bucket::PlaylistTracks,
+            Bucket::Cues,
+            Bucket::TagCategories,
+            Bucket::Tags,
+            Bucket::TrackTags,
+            Bucket::DiscoveryReleases,
+            Bucket::DiscoveryTracks,
+            Bucket::DiscoveryReleaseTags,
+            Bucket::PlaylistDiscoveryReleases,
+            Bucket::PlaylistDiscoveryTracks,
+            Bucket::DiscoveryTrackTags,
+            Bucket::LibraryRoots,
+            Bucket::FollowedSources,
+            Bucket::DiscoveryReleaseSources,
+            Bucket::CollectionAccounts,
+            Bucket::CollectionItems,
+            Bucket::Settings,
+        ]);
+        v
     }
-  }
 
-  /// The `sync_tombstones.entity_type` for this bucket. CRITICAL: every track
-  /// shard maps to [`TRACKS_ENTITY`] (`"tracks"`), matching how `delete_tracks`
-  /// records them — NOT `"tracks/3"`.
-  pub fn entity_type(&self) -> &'static str {
-    match self {
-      Bucket::Tracks(_) => TRACKS_ENTITY,
-      Bucket::Playlists => PLAYLISTS,
-      Bucket::PlaylistTracks => PLAYLIST_TRACKS,
-      Bucket::Cues => CUES,
-      Bucket::TagCategories => TAG_CATEGORIES,
-      Bucket::Tags => TAGS,
-      Bucket::TrackTags => TRACK_TAGS,
-      Bucket::DiscoveryReleases => DISCOVERY_RELEASES,
-      Bucket::DiscoveryTracks => DISCOVERY_TRACKS,
-      Bucket::DiscoveryReleaseTags => DISCOVERY_RELEASE_TAGS,
-      Bucket::PlaylistDiscoveryReleases => PLAYLIST_DISCOVERY_RELEASES,
-      Bucket::PlaylistDiscoveryTracks => PLAYLIST_DISCOVERY_TRACKS,
-      Bucket::DiscoveryTrackTags => DISCOVERY_TRACK_TAGS,
-      Bucket::LibraryRoots => LIBRARY_ROOTS,
-      Bucket::FollowedSources => FOLLOWED_SOURCES,
-      Bucket::DiscoveryReleaseSources => DISCOVERY_RELEASE_SOURCES,
-      Bucket::CollectionAccounts => COLLECTION_ACCOUNTS,
-      Bucket::CollectionItems => COLLECTION_ITEMS,
-      Bucket::Settings => SETTINGS,
+    /// FK-safe merge/apply order: parents before children. Pulls merge buckets in
+    /// this order so a junction's endpoints already exist when it is applied.
+    pub fn merge_order() -> Vec<Bucket> {
+        let mut v = vec![
+            // rank 0 — no synced-parent dependency
+            Bucket::TagCategories,
+            Bucket::LibraryRoots,
+            Bucket::DiscoveryReleases,
+            Bucket::FollowedSources,
+            Bucket::CollectionAccounts,
+        ];
+        // rank 1 — depend only on rank 0
+        v.extend((0u8..TRACK_SHARDS as u8).map(Bucket::Tracks));
+        v.extend([
+            Bucket::Tags,
+            Bucket::Playlists,
+            Bucket::DiscoveryTracks,
+            // collection_items depends only on collection_accounts (rank 0)
+            Bucket::CollectionItems,
+        ]);
+        // rank 2 — children / junctions
+        v.extend([
+            Bucket::Cues,
+            Bucket::TrackTags,
+            Bucket::PlaylistTracks,
+            Bucket::DiscoveryReleaseTags,
+            Bucket::PlaylistDiscoveryReleases,
+            // both depend on discovery_tracks (rank 1) + playlists / tags (rank 1)
+            Bucket::PlaylistDiscoveryTracks,
+            Bucket::DiscoveryTrackTags,
+            // discovery_release_sources depends on discovery_releases + followed_sources (both rank 0)
+            Bucket::DiscoveryReleaseSources,
+        ]);
+        // rank 3 — independent
+        v.push(Bucket::Settings);
+        v
     }
-  }
 
-  /// The display-label column (`name`/`title`) for an entity, used only to name the
-  /// entity in an override toast. Meaningless for junctions/settings (which never
-  /// produce overrides), where it defaults to `"name"`.
-  pub fn label_column(&self) -> &'static str {
-    match self {
-      Bucket::Tracks(_) | Bucket::DiscoveryReleases | Bucket::CollectionItems => "title",
-      _ => "name",
+    pub fn kind(&self) -> BucketKind {
+        match self {
+            Bucket::PlaylistTracks
+            | Bucket::TrackTags
+            | Bucket::DiscoveryReleaseTags
+            | Bucket::PlaylistDiscoveryReleases
+            | Bucket::PlaylistDiscoveryTracks
+            | Bucket::DiscoveryTrackTags
+            | Bucket::DiscoveryReleaseSources => BucketKind::Junction,
+            Bucket::Settings => BucketKind::Settings,
+            _ => BucketKind::Entity,
+        }
     }
-  }
 
-  /// PK column names in declaration order: one element for entities, two for
-  /// junctions (matching the `a|b` order of [`super::dirty::junction_entity_id`]),
-  /// and `["key"]` for settings.
-  pub fn pk_columns(&self) -> &'static [&'static str] {
-    match self {
-      Bucket::PlaylistTracks => &["playlist_id", "track_id"],
-      Bucket::TrackTags => &["track_id", "tag_id"],
-      Bucket::DiscoveryReleaseTags => &["release_id", "tag_id"],
-      Bucket::PlaylistDiscoveryReleases => &["playlist_id", "release_id"],
-      Bucket::PlaylistDiscoveryTracks => &["playlist_id", "track_id"],
-      Bucket::DiscoveryTrackTags => &["track_id", "tag_id"],
-      Bucket::DiscoveryReleaseSources => &["release_id", "source_id"],
-      Bucket::Settings => &["key"],
-      _ => &["id"],
+    /// The SQL table backing this bucket. All `Tracks(_)` shards share `"tracks"`.
+    pub fn table(&self) -> &'static str {
+        match self {
+            Bucket::Tracks(_) => "tracks",
+            Bucket::Playlists => "playlists",
+            Bucket::PlaylistTracks => "playlist_tracks",
+            Bucket::Cues => "cues",
+            Bucket::TagCategories => "tag_categories",
+            Bucket::Tags => "tags",
+            Bucket::TrackTags => "track_tags",
+            Bucket::DiscoveryReleases => "discovery_releases",
+            Bucket::DiscoveryTracks => "discovery_tracks",
+            Bucket::DiscoveryReleaseTags => "discovery_release_tags",
+            Bucket::PlaylistDiscoveryReleases => "playlist_discovery_releases",
+            Bucket::PlaylistDiscoveryTracks => "playlist_discovery_tracks",
+            Bucket::DiscoveryTrackTags => "discovery_track_tags",
+            Bucket::LibraryRoots => "library_roots",
+            Bucket::FollowedSources => "followed_sources",
+            Bucket::DiscoveryReleaseSources => "discovery_release_sources",
+            Bucket::CollectionAccounts => "collection_accounts",
+            Bucket::CollectionItems => "collection_items",
+            Bucket::Settings => "settings",
+        }
     }
-  }
 
-  /// Whether a **discovery-only mobile** node syncs this bucket. A pure **allowlist**
-  /// (fail-closed): only the discovery + shared buckets a mobile node participates in
-  /// return `true`. Every other bucket — the library buckets (`Tracks(_)`, `Cues`,
-  /// `PlaylistTracks`, `TrackTags`, `LibraryRoots`) **and any bucket added later
-  /// without being classified here** — returns `false`, so it is never pushed, pulled,
-  /// or tombstoned on mobile. Failing closed keeps library data from ever reaching a
-  /// mobile node.
-  ///
-  /// Pure (no build-feature gating) so it is unit-testable on any build; the active
-  /// platform scope is assembled by [`synced_buckets`].
-  pub fn syncs_on_mobile(&self) -> bool {
-    matches!(
-      self,
-      Bucket::DiscoveryReleases
-        | Bucket::DiscoveryTracks
-        | Bucket::DiscoveryReleaseTags
-        | Bucket::PlaylistDiscoveryReleases
-        | Bucket::PlaylistDiscoveryTracks
-        | Bucket::DiscoveryTrackTags
-        | Bucket::DiscoveryReleaseSources
-        | Bucket::FollowedSources
-        | Bucket::CollectionAccounts
-        | Bucket::CollectionItems
-        | Bucket::Playlists
-        | Bucket::Tags
-        | Bucket::TagCategories
-        | Bucket::Settings
-    )
-  }
+    /// The `sync_tombstones.entity_type` for this bucket. CRITICAL: every track
+    /// shard maps to [`TRACKS_ENTITY`] (`"tracks"`), matching how `delete_tracks`
+    /// records them — NOT `"tracks/3"`.
+    pub fn entity_type(&self) -> &'static str {
+        match self {
+            Bucket::Tracks(_) => TRACKS_ENTITY,
+            Bucket::Playlists => PLAYLISTS,
+            Bucket::PlaylistTracks => PLAYLIST_TRACKS,
+            Bucket::Cues => CUES,
+            Bucket::TagCategories => TAG_CATEGORIES,
+            Bucket::Tags => TAGS,
+            Bucket::TrackTags => TRACK_TAGS,
+            Bucket::DiscoveryReleases => DISCOVERY_RELEASES,
+            Bucket::DiscoveryTracks => DISCOVERY_TRACKS,
+            Bucket::DiscoveryReleaseTags => DISCOVERY_RELEASE_TAGS,
+            Bucket::PlaylistDiscoveryReleases => PLAYLIST_DISCOVERY_RELEASES,
+            Bucket::PlaylistDiscoveryTracks => PLAYLIST_DISCOVERY_TRACKS,
+            Bucket::DiscoveryTrackTags => DISCOVERY_TRACK_TAGS,
+            Bucket::LibraryRoots => LIBRARY_ROOTS,
+            Bucket::FollowedSources => FOLLOWED_SOURCES,
+            Bucket::DiscoveryReleaseSources => DISCOVERY_RELEASE_SOURCES,
+            Bucket::CollectionAccounts => COLLECTION_ACCOUNTS,
+            Bucket::CollectionItems => COLLECTION_ITEMS,
+            Bucket::Settings => SETTINGS,
+        }
+    }
+
+    /// The display-label column (`name`/`title`) for an entity, used only to name the
+    /// entity in an override toast. Meaningless for junctions/settings (which never
+    /// produce overrides), where it defaults to `"name"`.
+    pub fn label_column(&self) -> &'static str {
+        match self {
+            Bucket::Tracks(_) | Bucket::DiscoveryReleases | Bucket::CollectionItems => "title",
+            _ => "name",
+        }
+    }
+
+    /// PK column names in declaration order: one element for entities, two for
+    /// junctions (matching the `a|b` order of [`super::dirty::junction_entity_id`]),
+    /// and `["key"]` for settings.
+    pub fn pk_columns(&self) -> &'static [&'static str] {
+        match self {
+            Bucket::PlaylistTracks => &["playlist_id", "track_id"],
+            Bucket::TrackTags => &["track_id", "tag_id"],
+            Bucket::DiscoveryReleaseTags => &["release_id", "tag_id"],
+            Bucket::PlaylistDiscoveryReleases => &["playlist_id", "release_id"],
+            Bucket::PlaylistDiscoveryTracks => &["playlist_id", "track_id"],
+            Bucket::DiscoveryTrackTags => &["track_id", "tag_id"],
+            Bucket::DiscoveryReleaseSources => &["release_id", "source_id"],
+            Bucket::Settings => &["key"],
+            _ => &["id"],
+        }
+    }
+
+    /// Whether a **discovery-only mobile** node syncs this bucket. A pure **allowlist**
+    /// (fail-closed): only the discovery + shared buckets a mobile node participates in
+    /// return `true`. Every other bucket — the library buckets (`Tracks(_)`, `Cues`,
+    /// `PlaylistTracks`, `TrackTags`, `LibraryRoots`) **and any bucket added later
+    /// without being classified here** — returns `false`, so it is never pushed, pulled,
+    /// or tombstoned on mobile. Failing closed keeps library data from ever reaching a
+    /// mobile node.
+    ///
+    /// Pure (no build-feature gating) so it is unit-testable on any build; the active
+    /// platform scope is assembled by [`synced_buckets`].
+    pub fn syncs_on_mobile(&self) -> bool {
+        matches!(
+            self,
+            Bucket::DiscoveryReleases
+                | Bucket::DiscoveryTracks
+                | Bucket::DiscoveryReleaseTags
+                | Bucket::PlaylistDiscoveryReleases
+                | Bucket::PlaylistDiscoveryTracks
+                | Bucket::DiscoveryTrackTags
+                | Bucket::DiscoveryReleaseSources
+                | Bucket::FollowedSources
+                | Bucket::CollectionAccounts
+                | Bucket::CollectionItems
+                | Bucket::Playlists
+                | Bucket::Tags
+                | Bucket::TagCategories
+                | Bucket::Settings
+        )
+    }
 }
 
 /// The buckets **this build's node** participates in, in [`Bucket::all`] order. Desktop
@@ -358,135 +358,135 @@ impl Bucket {
 /// ([`Bucket::syncs_on_mobile`]) so library buckets are never serialized into the local
 /// manifest, uploaded, or downloaded. Desktop returns exactly `Bucket::all()`.
 pub fn synced_buckets() -> Vec<Bucket> {
-  #[cfg(feature = "mobile")]
-  {
-    Bucket::all()
-      .into_iter()
-      .filter(Bucket::syncs_on_mobile)
-      .collect()
-  }
-  #[cfg(not(feature = "mobile"))]
-  {
-    Bucket::all()
-  }
+    #[cfg(feature = "mobile")]
+    {
+        Bucket::all()
+            .into_iter()
+            .filter(Bucket::syncs_on_mobile)
+            .collect()
+    }
+    #[cfg(not(feature = "mobile"))]
+    {
+        Bucket::all()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::collections::BTreeSet;
+    use std::collections::BTreeSet;
 
-  use super::*;
+    use super::*;
 
-  #[test]
-  fn shards_by_first_hex_char() {
-    assert_eq!(bucket_for_track_id("a1b2c3d4-..."), "tracks/a");
-    assert_eq!(bucket_for_track_id("0fffffff-..."), "tracks/0");
-    // Non-hex / empty fall back to shard 0.
-    assert_eq!(bucket_for_track_id(""), "tracks/0");
-    assert_eq!(bucket_for_track_id("zzz"), "tracks/0");
-  }
-
-  #[test]
-  fn shard_nibble_matches_string_form() {
-    for id in ["a1b2", "0fff", "ffff", "5abc", "deadbeef"] {
-      let n = shard_for_track_id(id);
-      assert_eq!(Bucket::Tracks(n).as_str(), bucket_for_track_id(id));
-      assert_eq!(Bucket::for_track_id(id), Bucket::Tracks(n));
+    #[test]
+    fn shards_by_first_hex_char() {
+        assert_eq!(bucket_for_track_id("a1b2c3d4-..."), "tracks/a");
+        assert_eq!(bucket_for_track_id("0fffffff-..."), "tracks/0");
+        // Non-hex / empty fall back to shard 0.
+        assert_eq!(bucket_for_track_id(""), "tracks/0");
+        assert_eq!(bucket_for_track_id("zzz"), "tracks/0");
     }
-    assert_eq!(shard_for_track_id(""), 0);
-    assert_eq!(shard_for_track_id("zzz"), 0);
-  }
 
-  #[test]
-  fn as_str_parse_roundtrip_for_every_bucket() {
-    for b in Bucket::all() {
-      assert_eq!(Bucket::parse(&b.as_str()), Some(b), "roundtrip {b:?}");
+    #[test]
+    fn shard_nibble_matches_string_form() {
+        for id in ["a1b2", "0fff", "ffff", "5abc", "deadbeef"] {
+            let n = shard_for_track_id(id);
+            assert_eq!(Bucket::Tracks(n).as_str(), bucket_for_track_id(id));
+            assert_eq!(Bucket::for_track_id(id), Bucket::Tracks(n));
+        }
+        assert_eq!(shard_for_track_id(""), 0);
+        assert_eq!(shard_for_track_id("zzz"), 0);
     }
-  }
 
-  #[test]
-  fn all_shards_format_correctly() {
-    assert_eq!(Bucket::Tracks(0).as_str(), "tracks/0");
-    assert_eq!(Bucket::Tracks(10).as_str(), "tracks/a");
-    assert_eq!(Bucket::Tracks(15).as_str(), "tracks/f");
-    assert_eq!(Bucket::parse("tracks/a"), Some(Bucket::Tracks(10)));
-    assert_eq!(Bucket::parse("tracks/ab"), None);
-    assert_eq!(Bucket::parse("tracks/"), None);
-    assert_eq!(Bucket::parse("bogus"), None);
-  }
-
-  #[test]
-  fn bucket_count_is_34() {
-    assert_eq!(Bucket::all().len(), 34); // 16 shards + 18
-    assert_eq!(Bucket::merge_order().len(), 34);
-  }
-
-  #[test]
-  fn kinds_are_correct() {
-    assert_eq!(Bucket::Tracks(3).kind(), BucketKind::Entity);
-    assert_eq!(Bucket::PlaylistTracks.kind(), BucketKind::Junction);
-    assert_eq!(Bucket::TrackTags.kind(), BucketKind::Junction);
-    assert_eq!(Bucket::PlaylistDiscoveryTracks.kind(), BucketKind::Junction);
-    assert_eq!(Bucket::DiscoveryTrackTags.kind(), BucketKind::Junction);
-    assert_eq!(Bucket::Settings.kind(), BucketKind::Settings);
-    assert_eq!(Bucket::Tracks(3).entity_type(), "tracks");
-  }
-
-  #[test]
-  fn mobile_scope_is_the_discovery_allowlist() {
-    let synced: BTreeSet<String> = Bucket::all()
-      .into_iter()
-      .filter(Bucket::syncs_on_mobile)
-      .map(|b| b.as_str())
-      .collect();
-    let expected: BTreeSet<String> = [
-      "discovery_releases",
-      "discovery_tracks",
-      "discovery_release_tags",
-      "playlist_discovery_releases",
-      "playlist_discovery_tracks",
-      "discovery_track_tags",
-      "discovery_release_sources",
-      "followed_sources",
-      "collection_accounts",
-      "collection_items",
-      "playlists",
-      "tags",
-      "tag_categories",
-      "settings",
-    ]
-    .into_iter()
-    .map(String::from)
-    .collect();
-    assert_eq!(synced, expected);
-    // 14 sync; the other 20 (16 track shards + cues/playlist_tracks/track_tags/
-    // library_roots) never do.
-    assert_eq!(synced.len(), 14);
-    assert_eq!(Bucket::all().len() - synced.len(), 20);
-  }
-
-  #[test]
-  fn library_buckets_never_sync_on_mobile() {
-    // The tables that must stay empty on a discovery-only node. A bucket syncs on
-    // mobile iff it is NOT backed by one of these — this keeps the allowlist and the
-    // bucket→table map from drifting apart.
-    let library_tables: BTreeSet<&str> = [
-      "tracks",
-      "cues",
-      "playlist_tracks",
-      "track_tags",
-      "library_roots",
-    ]
-    .into_iter()
-    .collect();
-    for b in Bucket::all() {
-      let is_library = library_tables.contains(b.table());
-      assert_eq!(
-        b.syncs_on_mobile(),
-        !is_library,
-        "bucket {b:?} (table {}) misclassified",
-        b.table()
-      );
+    #[test]
+    fn as_str_parse_roundtrip_for_every_bucket() {
+        for b in Bucket::all() {
+            assert_eq!(Bucket::parse(&b.as_str()), Some(b), "roundtrip {b:?}");
+        }
     }
-  }
+
+    #[test]
+    fn all_shards_format_correctly() {
+        assert_eq!(Bucket::Tracks(0).as_str(), "tracks/0");
+        assert_eq!(Bucket::Tracks(10).as_str(), "tracks/a");
+        assert_eq!(Bucket::Tracks(15).as_str(), "tracks/f");
+        assert_eq!(Bucket::parse("tracks/a"), Some(Bucket::Tracks(10)));
+        assert_eq!(Bucket::parse("tracks/ab"), None);
+        assert_eq!(Bucket::parse("tracks/"), None);
+        assert_eq!(Bucket::parse("bogus"), None);
+    }
+
+    #[test]
+    fn bucket_count_is_34() {
+        assert_eq!(Bucket::all().len(), 34); // 16 shards + 18
+        assert_eq!(Bucket::merge_order().len(), 34);
+    }
+
+    #[test]
+    fn kinds_are_correct() {
+        assert_eq!(Bucket::Tracks(3).kind(), BucketKind::Entity);
+        assert_eq!(Bucket::PlaylistTracks.kind(), BucketKind::Junction);
+        assert_eq!(Bucket::TrackTags.kind(), BucketKind::Junction);
+        assert_eq!(Bucket::PlaylistDiscoveryTracks.kind(), BucketKind::Junction);
+        assert_eq!(Bucket::DiscoveryTrackTags.kind(), BucketKind::Junction);
+        assert_eq!(Bucket::Settings.kind(), BucketKind::Settings);
+        assert_eq!(Bucket::Tracks(3).entity_type(), "tracks");
+    }
+
+    #[test]
+    fn mobile_scope_is_the_discovery_allowlist() {
+        let synced: BTreeSet<String> = Bucket::all()
+            .into_iter()
+            .filter(Bucket::syncs_on_mobile)
+            .map(|b| b.as_str())
+            .collect();
+        let expected: BTreeSet<String> = [
+            "discovery_releases",
+            "discovery_tracks",
+            "discovery_release_tags",
+            "playlist_discovery_releases",
+            "playlist_discovery_tracks",
+            "discovery_track_tags",
+            "discovery_release_sources",
+            "followed_sources",
+            "collection_accounts",
+            "collection_items",
+            "playlists",
+            "tags",
+            "tag_categories",
+            "settings",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        assert_eq!(synced, expected);
+        // 14 sync; the other 20 (16 track shards + cues/playlist_tracks/track_tags/
+        // library_roots) never do.
+        assert_eq!(synced.len(), 14);
+        assert_eq!(Bucket::all().len() - synced.len(), 20);
+    }
+
+    #[test]
+    fn library_buckets_never_sync_on_mobile() {
+        // The tables that must stay empty on a discovery-only node. A bucket syncs on
+        // mobile iff it is NOT backed by one of these — this keeps the allowlist and the
+        // bucket→table map from drifting apart.
+        let library_tables: BTreeSet<&str> = [
+            "tracks",
+            "cues",
+            "playlist_tracks",
+            "track_tags",
+            "library_roots",
+        ]
+        .into_iter()
+        .collect();
+        for b in Bucket::all() {
+            let is_library = library_tables.contains(b.table());
+            assert_eq!(
+                b.syncs_on_mobile(),
+                !is_library,
+                "bucket {b:?} (table {}) misclassified",
+                b.table()
+            );
+        }
+    }
 }

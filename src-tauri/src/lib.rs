@@ -53,9 +53,9 @@ pub(crate) struct AppForegroundFlag(pub Arc<std::sync::atomic::AtomicBool>);
 pub(crate) struct EnrichmentSkipIds(pub Arc<tokio::sync::Mutex<HashSet<String>>>);
 
 impl EnrichmentSkipIds {
-  pub fn new() -> Self {
-    Self(Arc::new(tokio::sync::Mutex::new(HashSet::new())))
-  }
+    pub fn new() -> Self {
+        Self(Arc::new(tokio::sync::Mutex::new(HashSet::new())))
+    }
 }
 
 /// Session cache of artist/label page avatars (og:image), keyed by page URL, so the follow
@@ -63,40 +63,40 @@ impl EnrichmentSkipIds {
 pub(crate) struct AvatarCache(pub Arc<tokio::sync::Mutex<HashMap<String, Option<String>>>>);
 
 impl AvatarCache {
-  pub fn new() -> Self {
-    Self(Arc::new(tokio::sync::Mutex::new(HashMap::new())))
-  }
+    pub fn new() -> Self {
+        Self(Arc::new(tokio::sync::Mutex::new(HashMap::new())))
+    }
 }
 
 /// Cache for pre-fetched release metadata populated during background enrichment after a page scan.
 /// Keyed by release URL. Entries are consumed (removed) by `bulk_create_discovery_releases`.
 pub(crate) struct ScanEnrichmentCache(
-  pub Arc<tokio::sync::Mutex<HashMap<String, services::discovery::metadata::FetchedMetadata>>>,
+    pub Arc<tokio::sync::Mutex<HashMap<String, services::discovery::metadata::FetchedMetadata>>>,
 );
 
 impl ScanEnrichmentCache {
-  pub fn new() -> Self {
-    Self(Arc::new(tokio::sync::Mutex::new(HashMap::new())))
-  }
+    pub fn new() -> Self {
+        Self(Arc::new(tokio::sync::Mutex::new(HashMap::new())))
+    }
 }
 
 impl StreamFetchPermits {
-  /// Two concurrent background extractions: enough to keep the queue window warm
-  /// without hammering the source platforms or the DB while the user is playing.
-  pub fn new() -> Self {
-    Self(Arc::new(tokio::sync::Semaphore::new(2)))
-  }
+    /// Two concurrent background extractions: enough to keep the queue window warm
+    /// without hammering the source platforms or the DB while the user is playing.
+    pub fn new() -> Self {
+        Self(Arc::new(tokio::sync::Semaphore::new(2)))
+    }
 }
 
 use services::{
-  discovery::n_transform::NsigSolverState, BackupService, DiscoveryService, FollowService,
-  PlaylistService, SettingsService, TagService, TaggerService,
+    discovery::n_transform::NsigSolverState, BackupService, DiscoveryService, FollowService,
+    PlaylistService, SettingsService, TagService, TaggerService,
 };
 // Desktop-only services and their backing crates are excluded from the mobile build.
 #[cfg(feature = "desktop")]
 use services::{
-  export::CheckpointService, AnalysisService, AudioService, DeviceService, DiagnosticsService,
-  ExportService, FileTagsService, LibraryService, SyncService,
+    export::CheckpointService, AnalysisService, AudioService, DeviceService, DiagnosticsService,
+    ExportService, FileTagsService, LibraryService, SyncService,
 };
 // Cross-platform media session (Now Playing / lock-screen controls): souvlaki on desktop,
 // AVAudioSession + MediaPlayer on iOS (#79), no-op elsewhere.
@@ -105,87 +105,87 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  // Install a panic hook that writes to a crash log file. On Windows, release builds
-  // use `windows_subsystem = "windows"` which hides all console output, so without
-  // this hook panics during startup are completely invisible to the user.
-  let crash_log_path = std::env::temp_dir().join("crate-crash.log");
-  let default_hook = std::panic::take_hook();
-  std::panic::set_hook(Box::new(move |info| {
-    let message = format!(
-      "[{}] PANIC: {}\nLocation: {:?}\n\n",
-      chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-      info,
-      info.location(),
+    // Install a panic hook that writes to a crash log file. On Windows, release builds
+    // use `windows_subsystem = "windows"` which hides all console output, so without
+    // this hook panics during startup are completely invisible to the user.
+    let crash_log_path = std::env::temp_dir().join("crate-crash.log");
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let message = format!(
+            "[{}] PANIC: {}\nLocation: {:?}\n\n",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+            info,
+            info.location(),
+        );
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("crate-crash.log"))
+            .and_then(|mut f| std::io::Write::write_all(&mut f, message.as_bytes()));
+        // Also route the panic through `log`: on mobile that's the only channel that reaches the
+        // device console (the default hook prints to stderr, which iOS/Android discard).
+        log::error!("PANIC: {info}");
+        default_hook(info);
+    }));
+
+    // Route `log` output where each platform can actually see it. A normally-launched mobile app's
+    // stderr is discarded by the OS, so env_logger would be invisible on-device: iOS logs via
+    // os_log (Console.app, subsystem `com.bbx-audio.crate`), Android via logcat (tag `crate`).
+    // Desktop keeps env_logger on stderr, where `RUST_LOG` still applies.
+    #[cfg(target_os = "ios")]
+    oslog::OsLogger::new("com.bbx-audio.crate")
+        .level_filter(log::LevelFilter::Info)
+        .init()
+        .ok();
+    #[cfg(target_os = "android")]
+    android_logger::init_once(
+        android_logger::Config::default()
+            .with_max_level(log::LevelFilter::Info)
+            .with_tag("crate"),
     );
-    let _ = std::fs::OpenOptions::new()
-      .create(true)
-      .append(true)
-      .open(std::env::temp_dir().join("crate-crash.log"))
-      .and_then(|mut f| std::io::Write::write_all(&mut f, message.as_bytes()));
-    // Also route the panic through `log`: on mobile that's the only channel that reaches the
-    // device console (the default hook prints to stderr, which iOS/Android discard).
-    log::error!("PANIC: {info}");
-    default_hook(info);
-  }));
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    log::info!("Crash log path: {crash_log_path:?}");
 
-  // Route `log` output where each platform can actually see it. A normally-launched mobile app's
-  // stderr is discarded by the OS, so env_logger would be invisible on-device: iOS logs via
-  // os_log (Console.app, subsystem `com.bbx-audio.crate`), Android via logcat (tag `crate`).
-  // Desktop keeps env_logger on stderr, where `RUST_LOG` still applies.
-  #[cfg(target_os = "ios")]
-  oslog::OsLogger::new("com.bbx-audio.crate")
-    .level_filter(log::LevelFilter::Info)
-    .init()
-    .ok();
-  #[cfg(target_os = "android")]
-  android_logger::init_once(
-    android_logger::Config::default()
-      .with_max_level(log::LevelFilter::Info)
-      .with_tag("crate"),
-  );
-  #[cfg(not(any(target_os = "ios", target_os = "android")))]
-  env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-  log::info!("Crash log path: {crash_log_path:?}");
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init());
 
-  let builder = tauri::Builder::default()
-    .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_fs::init())
-    .plugin(tauri_plugin_clipboard_manager::init())
-    .plugin(tauri_plugin_notification::init());
+    // Desktop-only plugins: the updater (mobile updates via the App Store / TestFlight),
+    // the process plugin, and window-state (there are no OS windows to persist on mobile).
+    #[cfg(feature = "desktop")]
+    let builder = builder
+        .plugin(
+            tauri_plugin_updater::Builder::default()
+                .default_version_comparator(updater::version_comparator)
+                .build(),
+        )
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build());
 
-  // Desktop-only plugins: the updater (mobile updates via the App Store / TestFlight),
-  // the process plugin, and window-state (there are no OS windows to persist on mobile).
-  #[cfg(feature = "desktop")]
-  let builder = builder
-    .plugin(
-      tauri_plugin_updater::Builder::default()
-        .default_version_comparator(updater::version_comparator)
-        .build(),
-    )
-    .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_window_state::Builder::default().build());
+    // Mobile-only plugins: native web-auth (iOS ASWebAuthenticationSession / Android Custom Tabs)
+    // backs the mobile OAuth sign-in flow — there is no loopback browser flow on mobile.
+    #[cfg(feature = "mobile")]
+    let builder = builder
+        .plugin(tauri_plugin_web_auth::init())
+        .plugin(tauri_plugin_haptics::init());
 
-  // Mobile-only plugins: native web-auth (iOS ASWebAuthenticationSession / Android Custom Tabs)
-  // backs the mobile OAuth sign-in flow — there is no loopback browser flow on mobile.
-  #[cfg(feature = "mobile")]
-  let builder = builder
-    .plugin(tauri_plugin_web_auth::init())
-    .plugin(tauri_plugin_haptics::init());
+    // If the OS kills the WKWebView content process (e.g. iOS jetsam under memory pressure: the
+    // screen goes white while native audio keeps playing), reload the webview so the UI recovers
+    // instead of staying blank until a manual relaunch. iOS/macOS only — the hook is unsupported
+    // on other platforms.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    let builder = builder.on_web_content_process_terminate(|webview| {
+        log::warn!("Web content process terminated — reloading webview");
+        if let Err(e) = webview.reload() {
+            log::error!("Failed to reload webview after content process termination: {e}");
+        }
+    });
 
-  // If the OS kills the WKWebView content process (e.g. iOS jetsam under memory pressure: the
-  // screen goes white while native audio keeps playing), reload the webview so the UI recovers
-  // instead of staying blank until a manual relaunch. iOS/macOS only — the hook is unsupported
-  // on other platforms.
-  #[cfg(any(target_os = "macos", target_os = "ios"))]
-  let builder = builder.on_web_content_process_terminate(|webview| {
-    log::warn!("Web content process terminated — reloading webview");
-    if let Err(e) = webview.reload() {
-      log::error!("Failed to reload webview after content process termination: {e}");
-    }
-  });
-
-  let builder = builder
+    let builder = builder
     .invoke_handler(tauri::generate_handler![
       // App commands
       commands::app::get_app_info,
@@ -1006,59 +1006,59 @@ pub fn run() {
       Ok(())
     });
 
-  // Fullscreen menu-text tracking via window resize is desktop-only (no native menu on
-  // mobile, and no `WindowEvent::Resized` to react to).
-  #[cfg(feature = "desktop")]
-  let builder = builder.on_window_event(|window, event| {
-    // Track fullscreen state changes and update the menu text accordingly.
-    // There is no dedicated fullscreen event, so we check on every resize.
-    if let tauri::WindowEvent::Resized(_) = event {
-      use std::sync::atomic::{AtomicBool, Ordering};
-      static WAS_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+    // Fullscreen menu-text tracking via window resize is desktop-only (no native menu on
+    // mobile, and no `WindowEvent::Resized` to react to).
+    #[cfg(feature = "desktop")]
+    let builder = builder.on_window_event(|window, event| {
+        // Track fullscreen state changes and update the menu text accordingly.
+        // There is no dedicated fullscreen event, so we check on every resize.
+        if let tauri::WindowEvent::Resized(_) = event {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WAS_FULLSCREEN: AtomicBool = AtomicBool::new(false);
 
-      let is_fullscreen = window.is_fullscreen().unwrap_or(false);
-      let was_fullscreen = WAS_FULLSCREEN.swap(is_fullscreen, Ordering::Relaxed);
-      if is_fullscreen != was_fullscreen {
-        menu::update_fullscreen_menu_text(window.app_handle(), is_fullscreen);
-      }
-    }
-  });
-
-  let app = builder
-    .build(tauri::generate_context!())
-    .unwrap_or_else(|e| {
-      log::error!("Fatal: failed to run Tauri application: {e}");
-      std::process::exit(1);
-    });
-  app.run(|app_handle, event| match event {
-    tauri::RunEvent::Exit => {
-      // WAL: fold the -wal file back into crate.db on clean shutdown so the main
-      // file stays self-contained for users who copy it manually.
-      if let Some(discovery) = app_handle.try_state::<DiscoveryService>() {
-        if let Ok(conn) = discovery.connection().lock() {
-          if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
-            log::warn!("shutdown wal_checkpoint failed: {e}");
-          }
+            let is_fullscreen = window.is_fullscreen().unwrap_or(false);
+            let was_fullscreen = WAS_FULLSCREEN.swap(is_fullscreen, Ordering::Relaxed);
+            if is_fullscreen != was_fullscreen {
+                menu::update_fullscreen_menu_text(window.app_handle(), is_fullscreen);
+            }
         }
-      }
-    }
-    // Resuming from suspension is when iOS's closed listening sockets surface. The
-    // webview's `visibilitychange` (via `set_app_foreground`) covers this too, but it
-    // doesn't always fire when the app was suspended under background audio — this
-    // event comes from the platform itself, so the proxy is probed either way.
-    tauri::RunEvent::Resumed => {
-      let (Some(port), Some(restart)) = (
-        app_handle.try_state::<ProxyServerPort>().map(|p| p.0),
-        app_handle
-          .try_state::<ProxyRestartSignal>()
-          .map(|s| s.0.clone()),
-      ) else {
-        return;
-      };
-      tauri::async_runtime::spawn(async move {
-        proxy::ensure_proxy_alive(port, &restart).await;
-      });
-    }
-    _ => {}
-  });
+    });
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .unwrap_or_else(|e| {
+            log::error!("Fatal: failed to run Tauri application: {e}");
+            std::process::exit(1);
+        });
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::Exit => {
+            // WAL: fold the -wal file back into crate.db on clean shutdown so the main
+            // file stays self-contained for users who copy it manually.
+            if let Some(discovery) = app_handle.try_state::<DiscoveryService>() {
+                if let Ok(conn) = discovery.connection().lock() {
+                    if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
+                        log::warn!("shutdown wal_checkpoint failed: {e}");
+                    }
+                }
+            }
+        }
+        // Resuming from suspension is when iOS's closed listening sockets surface. The
+        // webview's `visibilitychange` (via `set_app_foreground`) covers this too, but it
+        // doesn't always fire when the app was suspended under background audio — this
+        // event comes from the platform itself, so the proxy is probed either way.
+        tauri::RunEvent::Resumed => {
+            let (Some(port), Some(restart)) = (
+                app_handle.try_state::<ProxyServerPort>().map(|p| p.0),
+                app_handle
+                    .try_state::<ProxyRestartSignal>()
+                    .map(|s| s.0.clone()),
+            ) else {
+                return;
+            };
+            tauri::async_runtime::spawn(async move {
+                proxy::ensure_proxy_alive(port, &restart).await;
+            });
+        }
+        _ => {}
+    });
 }

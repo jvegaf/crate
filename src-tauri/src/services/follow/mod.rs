@@ -21,11 +21,11 @@ use rusqlite::Connection;
 /// A followed source reduced to what the watch loop needs to check it. (The watch loop
 /// scans a page identically regardless of artist/label, so `follow_type` isn't carried.)
 pub struct SourceToCheck {
-  pub id: String,
-  pub url: String,
-  pub source_type: String,
-  pub name: Option<String>,
-  pub baseline_established: bool,
+    pub id: String,
+    pub url: String,
+    pub source_type: String,
+    pub name: Option<String>,
+    pub baseline_established: bool,
 }
 
 /// The check-gate state lives in `watch_gate` (shared with the collection refresh loop);
@@ -34,28 +34,28 @@ pub use crate::services::watch_gate::CheckGate;
 
 /// A surfaced release hitting its release date today, for a release-day notification.
 pub struct ReleaseDayItem {
-  pub release_id: String,
-  pub artist: Option<String>,
-  pub title: Option<String>,
-  pub source_name: Option<String>,
+    pub release_id: String,
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub source_name: Option<String>,
 }
 
 pub struct FollowService {
-  conn: Arc<Mutex<Connection>>,
-  app_data_dir: PathBuf,
+    conn: Arc<Mutex<Connection>>,
+    app_data_dir: PathBuf,
 }
 
 impl FollowService {
-  pub fn new(conn: Arc<Mutex<Connection>>, app_data_dir: PathBuf) -> Self {
-    Self { conn, app_data_dir }
-  }
+    pub fn new(conn: Arc<Mutex<Connection>>, app_data_dir: PathBuf) -> Self {
+        Self { conn, app_data_dir }
+    }
 
-  /// Clone of the DB connection Arc for use in background tasks.
-  pub fn connection(&self) -> Arc<Mutex<Connection>> {
-    self.conn.clone()
-  }
+    /// Clone of the DB connection Arc for use in background tasks.
+    pub fn connection(&self) -> Arc<Mutex<Connection>> {
+        self.conn.clone()
+    }
 
-  pub fn app_data_dir(&self) -> PathBuf {
-    self.app_data_dir.clone()
-  }
+    pub fn app_data_dir(&self) -> PathBuf {
+        self.app_data_dir.clone()
+    }
 }

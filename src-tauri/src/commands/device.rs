@@ -6,22 +6,22 @@ use crate::services::DeviceService;
 
 #[tauri::command]
 pub async fn get_devices(device_service: State<'_, DeviceService>) -> Result<Vec<UsbDevice>> {
-  Ok(device_service.get_removable_devices())
+    Ok(device_service.get_removable_devices())
 }
 
 #[tauri::command]
 pub async fn eject_device(
-  mount_point: String,
-  device_service: State<'_, DeviceService>,
+    mount_point: String,
+    device_service: State<'_, DeviceService>,
 ) -> Result<()> {
-  device_service.eject_device(&mount_point)
+    device_service.eject_device(&mount_point)
 }
 
 #[tauri::command]
 pub async fn reformat_device(
-  mount_point: String,
-  volume_name: String,
-  device_service: State<'_, DeviceService>,
+    mount_point: String,
+    volume_name: String,
+    device_service: State<'_, DeviceService>,
 ) -> Result<()> {
-  device_service.reformat_device(&mount_point, &volume_name)
+    device_service.reformat_device(&mount_point, &volume_name)
 }

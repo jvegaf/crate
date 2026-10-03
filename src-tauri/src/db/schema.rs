@@ -1,7 +1,7 @@
 pub fn get_migrations() -> Vec<&'static str> {
-  vec![
-    // Migration 1: Initial schema
-    r#"
+    vec![
+        // Migration 1: Initial schema
+        r#"
 -- Core tables
 CREATE TABLE tracks (
     id TEXT PRIMARY KEY,
@@ -236,16 +236,16 @@ CREATE TABLE discovery_audio_cache (
     PRIMARY KEY (release_id, track_position)
 );
 "#,
-    // Migration 2: Track-level likes for discovery releases
-    r#"
+        // Migration 2: Track-level likes for discovery releases
+        r#"
 ALTER TABLE discovery_tracks ADD COLUMN is_liked INTEGER NOT NULL DEFAULT 0;
 "#,
-    // Migration 3: Cloud-sync foundations — HLC columns, track rooting, indexes.
-    // `library_roots` is created first so the `tracks.library_root_id` FK resolves.
-    // `_hlc TEXT NOT NULL DEFAULT ''` back-fills existing rows with the "never stamped"
-    // sentinel (which sorts below every real HLC). A REFERENCES column added via
-    // ALTER TABLE must default to NULL (it does), which SQLite permits.
-    r#"
+        // Migration 3: Cloud-sync foundations — HLC columns, track rooting, indexes.
+        // `library_roots` is created first so the `tracks.library_root_id` FK resolves.
+        // `_hlc TEXT NOT NULL DEFAULT ''` back-fills existing rows with the "never stamped"
+        // sentinel (which sorts below every real HLC). A REFERENCES column added via
+        // ALTER TABLE must default to NULL (it does), which SQLite permits.
+        r#"
 CREATE TABLE library_roots (
     id   TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -280,9 +280,9 @@ CREATE INDEX idx_discovery_release_tags_hlc      ON discovery_release_tags(_hlc)
 CREATE INDEX idx_playlist_discovery_releases_hlc ON playlist_discovery_releases(_hlc);
 CREATE INDEX idx_library_roots_hlc               ON library_roots(_hlc);
 "#,
-    // Migration 4: Cloud-sync bookkeeping. These tables are device-local — they are
-    // never themselves serialized as sync buckets.
-    r#"
+        // Migration 4: Cloud-sync bookkeeping. These tables are device-local — they are
+        // never themselves serialized as sync buckets.
+        r#"
 -- Per-device mapping from a synced library_root to its local absolute folder.
 CREATE TABLE IF NOT EXISTS sync_root_mappings (
     library_root_id     TEXT PRIMARY KEY,
@@ -311,13 +311,13 @@ CREATE TABLE IF NOT EXISTS sync_state (
     value TEXT NOT NULL
 );
 "#,
-    // Migration 5: Follow artists & labels.
-    // `followed_sources`, `discovery_release_sources`, and the new
-    // `discovery_releases` columns (`is_new`, `surfaced_at`) SYNC — they carry
-    // `_hlc` and are registered as sync buckets (see pipeline::buckets). The
-    // per-device watch bookkeeping (`followed_source_state`,
-    // `followed_source_releases`) stays LOCAL and is never serialized as a bucket.
-    r#"
+        // Migration 5: Follow artists & labels.
+        // `followed_sources`, `discovery_release_sources`, and the new
+        // `discovery_releases` columns (`is_new`, `surfaced_at`) SYNC — they carry
+        // `_hlc` and are registered as sync buckets (see pipeline::buckets). The
+        // per-device watch bookkeeping (`followed_source_state`,
+        // `followed_source_releases`) stays LOCAL and is never serialized as a bucket.
+        r#"
 -- SYNCED: the artists/labels the user follows.
 CREATE TABLE followed_sources (
     id            TEXT PRIMARY KEY,
@@ -375,48 +375,48 @@ CREATE INDEX idx_discovery_release_sources_hlc ON discovery_release_sources(_hlc
 ALTER TABLE discovery_releases ADD COLUMN is_new INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE discovery_releases ADD COLUMN surfaced_at TEXT;
 "#,
-    // discovery_releases.source_page_url — the artist/label page a release was
-    // discovered from. Bandcamp label discographies span many artist subdomains, so a
-    // release's own URL host isn't the followed page; recording the scanned page lets a
-    // label follow match every release imported from it. Synced.
-    r#"
+        // discovery_releases.source_page_url — the artist/label page a release was
+        // discovered from. Bandcamp label discographies span many artist subdomains, so a
+        // release's own URL host isn't the followed page; recording the scanned page lets a
+        // label follow match every release imported from it. Synced.
+        r#"
 ALTER TABLE discovery_releases ADD COLUMN source_page_url TEXT;
 "#,
-    // idx_tracks_file_hash — the folder scan looks a track up by content hash once
-    // per discovered file. Without a covering index every lookup full-scans `tracks`
-    // and builds a whole row even when nothing matches, making the first import
-    // quadratic. `IF NOT EXISTS` keeps the appended migration idempotent.
-    r#"
+        // idx_tracks_file_hash — the folder scan looks a track up by content hash once
+        // per discovered file. Without a covering index every lookup full-scans `tracks`
+        // and builds a whole row even when nothing matches, making the first import
+        // quadratic. `IF NOT EXISTS` keeps the appended migration idempotent.
+        r#"
 CREATE INDEX IF NOT EXISTS idx_tracks_file_hash ON tracks(file_hash);
 "#,
-    // Migration 8: Data repair, not a schema change. The Symphonia fallback stored
-    // bit depth (`bits_per_sample`) in the bitrate column; the producer was fixed in
-    // commit 1b667d0. Clearing values below 96 removes those corrupt depths while
-    // preserving plausible music bitrates. This is idempotent: a second run matches nothing.
-    r#"
+        // Migration 8: Data repair, not a schema change. The Symphonia fallback stored
+        // bit depth (`bits_per_sample`) in the bitrate column; the producer was fixed in
+        // commit 1b667d0. Clearing values below 96 removes those corrupt depths while
+        // preserving plausible music bitrates. This is idempotent: a second run matches nothing.
+        r#"
 UPDATE tracks SET bitrate = NULL WHERE bitrate IS NOT NULL AND bitrate < 96;
 "#,
-    // Migration 9: Store page URL (Beatport/Bandcamp/Traxsource). Nullable TEXT; existing
-    // rows stay NULL until the user tags a track or sets the URL manually. Persisted to the
-    // audio file's ID3v2 WOAR frame (`ItemKey::TrackArtistUrl`).
-    r#"
+        // Migration 9: Store page URL (Beatport/Bandcamp/Traxsource). Nullable TEXT; existing
+        // rows stay NULL until the user tags a track or sets the URL manually. Persisted to the
+        // audio file's ID3v2 WOAR frame (`ItemKey::TrackArtistUrl`).
+        r#"
 ALTER TABLE tracks ADD COLUMN url TEXT;
 "#,
-    // Migration 10: LRU eviction for the on-disk audio-byte cache. `last_accessed_at`
-    // (RFC 3339) is touched on every cache write and on every playback read so the
-    // eviction sweep can drop the least-recently-played tracks once the cache exceeds
-    // its size cap. Device-local (the cache itself is never synced). Backfilled from
-    // `cached_at` so pre-existing entries have a sensible ordering.
-    r#"
+        // Migration 10: LRU eviction for the on-disk audio-byte cache. `last_accessed_at`
+        // (RFC 3339) is touched on every cache write and on every playback read so the
+        // eviction sweep can drop the least-recently-played tracks once the cache exceeds
+        // its size cap. Device-local (the cache itself is never synced). Backfilled from
+        // `cached_at` so pre-existing entries have a sensible ordering.
+        r#"
 ALTER TABLE discovery_audio_cache ADD COLUMN last_accessed_at TEXT;
 UPDATE discovery_audio_cache SET last_accessed_at = cached_at WHERE last_accessed_at IS NULL;
 "#,
-    // Migration 11: on-disk cache for remote discovery artwork, giving mobile offline
-    // album art. Keyed by release_id (one cover per release). `last_accessed_at` (RFC
-    // 3339) is touched on every render read so the eviction sweep drops the least-
-    // recently-shown covers once the cache exceeds its (user-configurable) size cap.
-    // Device-local — the cache is never synced.
-    r#"
+        // Migration 11: on-disk cache for remote discovery artwork, giving mobile offline
+        // album art. Keyed by release_id (one cover per release). `last_accessed_at` (RFC
+        // 3339) is touched on every render read so the eviction sweep drops the least-
+        // recently-shown covers once the cache exceeds its (user-configurable) size cap.
+        // Device-local — the cache is never synced.
+        r#"
 CREATE TABLE discovery_artwork_cache (
     release_id       TEXT    PRIMARY KEY,
     ext              TEXT    NOT NULL DEFAULT 'webp',
@@ -425,27 +425,27 @@ CREATE TABLE discovery_artwork_cache (
     last_accessed_at TEXT    NOT NULL
 );
 "#,
-    // Migration 12: pinned downloads. `pinned = 1` marks tracks cached via the explicit
-    // "Download for Offline" action; the LRU eviction sweep skips them so heavy listening
-    // can never silently evict a download (only "Remove Download" / "Clear cache" delete
-    // them). Device-local — the cache is never synced.
-    r#"
+        // Migration 12: pinned downloads. `pinned = 1` marks tracks cached via the explicit
+        // "Download for Offline" action; the LRU eviction sweep skips them so heavy listening
+        // can never silently evict a download (only "Remove Download" / "Clear cache" delete
+        // them). Device-local — the cache is never synced.
+        r#"
 ALTER TABLE discovery_audio_cache ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
 "#,
-    // Migration 13: per-track page URLs (Bandcamp `/track/...`, SoundCloud permalinks) for
-    // track-level share/copy. Nullable — YouTube/Discogs tracks have no page of their own,
-    // and pre-existing rows backfill lazily on metadata refresh. Synced (`_hlc` table).
-    r#"
+        // Migration 13: per-track page URLs (Bandcamp `/track/...`, SoundCloud permalinks) for
+        // track-level share/copy. Nullable — YouTube/Discogs tracks have no page of their own,
+        // and pre-existing rows backfill lazily on metadata refresh. Synced (`_hlc` table).
+        r#"
 ALTER TABLE discovery_tracks ADD COLUMN url TEXT;
 "#,
-    // Migration 14: purchased-collection accounts (Bandcamp fan pages in v1;
-    // `source_type` discriminates future purchase sources). `collection_accounts` and
-    // `collection_items` SYNC — they carry `_hlc` and are registered as sync buckets
-    // (see pipeline::buckets). Per-device refresh bookkeeping
-    // (`collection_account_state`) stays LOCAL, mirroring `followed_source_state`.
-    // Ownership of discovery releases/tracks is DERIVED from `collection_items.url`
-    // at read time — no ownership columns are added anywhere else.
-    r#"
+        // Migration 14: purchased-collection accounts (Bandcamp fan pages in v1;
+        // `source_type` discriminates future purchase sources). `collection_accounts` and
+        // `collection_items` SYNC — they carry `_hlc` and are registered as sync buckets
+        // (see pipeline::buckets). Per-device refresh bookkeeping
+        // (`collection_account_state`) stays LOCAL, mirroring `followed_source_state`.
+        // Ownership of discovery releases/tracks is DERIVED from `collection_items.url`
+        // at read time — no ownership columns are added anywhere else.
+        r#"
 -- SYNCED: linked collection accounts (a Bandcamp fan page URL each).
 CREATE TABLE collection_accounts (
     id            TEXT PRIMARY KEY,               -- deterministic v5 of the normalized url
@@ -495,12 +495,12 @@ CREATE TABLE collection_account_state (
     last_item_count      INTEGER
 );
 "#,
-    // Migration 15: per-track preview availability. A row means the source currently
-    // serves NO stream for that track position (Bandcamp pre-order albums stream only
-    // the featured single; the rest are unreleased). Rows are replaced wholesale per
-    // release on every successful stream extraction, so a released album self-heals on
-    // the next check. Derived source state, re-fetchable anywhere — LOCAL, never synced.
-    r#"
+        // Migration 15: per-track preview availability. A row means the source currently
+        // serves NO stream for that track position (Bandcamp pre-order albums stream only
+        // the featured single; the rest are unreleased). Rows are replaced wholesale per
+        // release on every successful stream extraction, so a released album self-heals on
+        // the next check. Derived source state, re-fetchable anywhere — LOCAL, never synced.
+        r#"
 CREATE TABLE discovery_preview_unavailable (
     release_id TEXT    NOT NULL,
     position   INTEGER NOT NULL,
@@ -508,36 +508,36 @@ CREATE TABLE discovery_preview_unavailable (
     PRIMARY KEY (release_id, position)
 );
 "#,
-    // Migration 16: whether the last collection walk covered the whole collection.
-    // The incremental scrape's stop-on-all-known rule assumes stored items form a
-    // newest-first prefix; an interrupted initial walk breaks that (newest items
-    // known, older never fetched) and every later incremental sync would exit on
-    // page 1 forever. Defaults 0 so existing wedged accounts heal with one full
-    // walk on their next refresh. LOCAL, never synced.
-    r#"
+        // Migration 16: whether the last collection walk covered the whole collection.
+        // The incremental scrape's stop-on-all-known rule assumes stored items form a
+        // newest-first prefix; an interrupted initial walk breaks that (newest items
+        // known, older never fetched) and every later incremental sync would exit on
+        // page 1 forever. Defaults 0 so existing wedged accounts heal with one full
+        // walk on their next refresh. LOCAL, never synced.
+        r#"
 ALTER TABLE collection_account_state ADD COLUMN last_walk_complete INTEGER NOT NULL DEFAULT 0;
 "#,
-    // Migration 17: when a discovery track was (last) liked, so the liked pool can be
-    // sorted by like recency. Nullable RFC3339: NULL for unliked rows and for likes
-    // that predate this column (they sort last rather than getting a fake date).
-    // Cleared on unlike so re-liking records a fresh date. Synced — rides the row's
-    // `_hlc` with `is_liked`, so the pair never splits under whole-row LWW.
-    r#"
+        // Migration 17: when a discovery track was (last) liked, so the liked pool can be
+        // sorted by like recency. Nullable RFC3339: NULL for unliked rows and for likes
+        // that predate this column (they sort last rather than getting a fake date).
+        // Cleared on unlike so re-liking records a fresh date. Synced — rides the row's
+        // `_hlc` with `is_liked`, so the pair never splits under whole-row LWW.
+        r#"
 ALTER TABLE discovery_tracks ADD COLUMN liked_at TEXT;
 "#,
-    // Migration 18: track-level discovery playlist membership and track-level tags.
-    // Membership moves from whole releases to individual tracks so a playlist records
-    // WHICH track motivated the add. `playlist_discovery_releases` is NOT dropped: it
-    // becomes the "whole release, pending expansion" ledger — a release with no
-    // fetched tracks yet (follow-watch and bulk-import create them trackless) keeps
-    // its membership there until enrichment adds tracks, at which point the
-    // expansion sweep (`services/playlist/expansion.rs`) fans the row out into
-    // per-track rows. The expansion is a Rust sweep rather than SQL here because
-    // rows need real `_hlc` stamps and the unstamped-row backfill only ever runs
-    // once per device. Both tables are synced (Junction buckets, add-wins).
-    // Positions/date_added are NOT NULL — the nullable columns on the release
-    // junction were a wart every reader has to coalesce around.
-    r#"
+        // Migration 18: track-level discovery playlist membership and track-level tags.
+        // Membership moves from whole releases to individual tracks so a playlist records
+        // WHICH track motivated the add. `playlist_discovery_releases` is NOT dropped: it
+        // becomes the "whole release, pending expansion" ledger — a release with no
+        // fetched tracks yet (follow-watch and bulk-import create them trackless) keeps
+        // its membership there until enrichment adds tracks, at which point the
+        // expansion sweep (`services/playlist/expansion.rs`) fans the row out into
+        // per-track rows. The expansion is a Rust sweep rather than SQL here because
+        // rows need real `_hlc` stamps and the unstamped-row backfill only ever runs
+        // once per device. Both tables are synced (Junction buckets, add-wins).
+        // Positions/date_added are NOT NULL — the nullable columns on the release
+        // junction were a wart every reader has to coalesce around.
+        r#"
 CREATE TABLE playlist_discovery_tracks (
     playlist_id TEXT    NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
     track_id    TEXT    NOT NULL REFERENCES discovery_tracks(id) ON DELETE CASCADE,
@@ -558,5 +558,5 @@ CREATE TABLE discovery_track_tags (
 CREATE INDEX idx_discovery_track_tags_tag ON discovery_track_tags(tag_id);
 CREATE INDEX idx_discovery_track_tags_hlc ON discovery_track_tags(_hlc);
 "#,
-  ]
+    ]
 }

@@ -14,8 +14,8 @@ use rusqlite::Connection;
 
 use crate::error::{CrateError, Result};
 use crate::models::{
-  DuplicateResolution, DuplicateTrack, FileMatchResult, ImportResult, ImportResultWithDuplicates,
-  MetadataField, Tag, Track, TrackFilter, TrackMetadataPatch, TrackUpdate,
+    DuplicateResolution, DuplicateTrack, FileMatchResult, ImportResult, ImportResultWithDuplicates,
+    MetadataField, Tag, Track, TrackFilter, TrackMetadataPatch, TrackUpdate,
 };
 use crate::services::file_tags::FileTagsService;
 use crate::services::hash::compute_audio_hash;
@@ -29,33 +29,33 @@ use crate::services::ArtworkService;
 /// file-dialog filter; that copy lives in TypeScript and is deliberately not wired to
 /// this constant.
 pub const SUPPORTED_AUDIO_EXTENSIONS: &[&str] =
-  &["mp3", "wav", "aiff", "aif", "flac", "m4a", "aac"];
+    &["mp3", "wav", "aiff", "aif", "flac", "m4a", "aac"];
 
 #[derive(Clone)]
 pub struct LibraryService {
-  conn: Arc<Mutex<Connection>>,
-  artwork_service: ArtworkService,
-  file_tags: FileTagsService,
+    conn: Arc<Mutex<Connection>>,
+    artwork_service: ArtworkService,
+    file_tags: FileTagsService,
 }
 
 impl LibraryService {
-  pub fn new(
-    conn: Arc<Mutex<Connection>>,
-    app_data_dir: PathBuf,
-    file_tags: FileTagsService,
-  ) -> Self {
-    Self {
-      conn,
-      artwork_service: ArtworkService::new(app_data_dir),
-      file_tags,
+    pub fn new(
+        conn: Arc<Mutex<Connection>>,
+        app_data_dir: PathBuf,
+        file_tags: FileTagsService,
+    ) -> Self {
+        Self {
+            conn,
+            artwork_service: ArtworkService::new(app_data_dir),
+            file_tags,
+        }
     }
-  }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RescanResult {
-  pub updated_count: usize,
-  pub failed_count: usize,
+    pub updated_count: usize,
+    pub failed_count: usize,
 }
 
 /// Outcome of a recursive scan of the device's music folder.
@@ -65,12 +65,12 @@ pub struct RescanResult {
 /// objects over IPC. Serializes as snake_case like the rest of the library results.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LibraryFolderScanResult {
-  pub scanned_count: usize,
-  pub imported_count: usize,
-  pub skipped_existing_count: usize,
-  pub failed_count: usize,
-  pub imported_track_ids: Vec<String>,
-  pub errors: Vec<String>,
+    pub scanned_count: usize,
+    pub imported_count: usize,
+    pub skipped_existing_count: usize,
+    pub failed_count: usize,
+    pub imported_track_ids: Vec<String>,
+    pub errors: Vec<String>,
 }
 
 /// Live progress for a recursive music-folder scan.
@@ -79,16 +79,16 @@ pub struct LibraryFolderScanResult {
 /// counter. Serializes as snake_case like the rest of the library results.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LibraryScanProgress {
-  pub current: usize,
-  pub total: usize,
-  pub imported_count: usize,
-  pub skipped_existing_count: usize,
-  pub failed_count: usize,
-  pub current_file: Option<String>,
+    pub current: usize,
+    pub total: usize,
+    pub imported_count: usize,
+    pub skipped_existing_count: usize,
+    pub failed_count: usize,
+    pub current_file: Option<String>,
 }
 
 /// Result of processing a single import path
 enum ImportPathResult {
-  NewTrack(Track),
-  Duplicate(DuplicateTrack),
+    NewTrack(Track),
+    Duplicate(DuplicateTrack),
 }

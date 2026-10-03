@@ -8,16 +8,16 @@ use crate::services::SettingsService;
 
 #[tauri::command]
 pub async fn get_settings(settings: State<'_, SettingsService>) -> Result<AppSettings> {
-  settings.get_settings()
+    settings.get_settings()
 }
 
 #[tauri::command]
 pub async fn set_setting(
-  key: String,
-  value: String,
-  settings: State<'_, SettingsService>,
+    key: String,
+    value: String,
+    settings: State<'_, SettingsService>,
 ) -> Result<()> {
-  settings.set_setting(&key, &value)
+    settings.set_setting(&key, &value)
 }
 
 /// Set the webview page zoom to a ladder level (snapped) and persist it. Reset = 1.0.

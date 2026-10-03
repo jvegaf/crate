@@ -17,12 +17,12 @@ use crate::ProxyServerPort;
 /// so it compiles for the mobile targets too.
 #[tauri::command]
 pub async fn find_beatport_similar_tracks(
-  track_id: u64,
-  tagger: State<'_, TaggerService>,
+    track_id: u64,
+    tagger: State<'_, TaggerService>,
 ) -> Result<Vec<BeatportRecommendation>> {
-  tagger.find_similar_tracks(track_id).await.inspect_err(|e| {
-    log::warn!("find_beatport_similar_tracks failed for Beatport track {track_id}: {e}")
-  })
+    tagger.find_similar_tracks(track_id).await.inspect_err(|e| {
+        log::warn!("find_beatport_similar_tracks failed for Beatport track {track_id}: {e}")
+    })
 }
 
 /// Register Beatport recommendation sample URLs with the local stream proxy and return one
@@ -37,21 +37,21 @@ pub async fn find_beatport_similar_tracks(
 /// platform, like `fetch_preview_stream`.
 #[tauri::command]
 pub async fn register_beatport_sample_streams(
-  urls: Vec<String>,
-  app: tauri::AppHandle,
+    urls: Vec<String>,
+    app: tauri::AppHandle,
 ) -> Result<Vec<Option<String>>> {
-  let fallback = || urls.iter().map(|_| None).collect::<Vec<_>>();
-  let (Some(port), Some(state)) = (
-    app.try_state::<ProxyServerPort>(),
-    app.try_state::<ProxyServerState>(),
-  ) else {
-    log::warn!("Stream proxy state unavailable; recommendation samples fall back to direct URLs");
-    return Ok(fallback());
-  };
-  Ok(
-    urls
-      .iter()
-      .map(|url| proxy::register_sample(&state.samples, port.0, url))
-      .collect(),
-  )
+    let fallback = || urls.iter().map(|_| None).collect::<Vec<_>>();
+    let (Some(port), Some(state)) = (
+        app.try_state::<ProxyServerPort>(),
+        app.try_state::<ProxyServerState>(),
+    ) else {
+        log::warn!(
+            "Stream proxy state unavailable; recommendation samples fall back to direct URLs"
+        );
+        return Ok(fallback());
+    };
+    Ok(urls
+        .iter()
+        .map(|url| proxy::register_sample(&state.samples, port.0, url))
+        .collect())
 }

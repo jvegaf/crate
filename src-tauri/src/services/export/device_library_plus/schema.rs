@@ -9,9 +9,9 @@ use crate::error::Result;
 
 /// Creates all tables in the Device Library Plus database
 pub fn create_all_tables(conn: &Connection) -> Result<()> {
-  // Order matters due to foreign key constraints
-  conn.execute_batch(
-    r#"
+    // Order matters due to foreign key constraints
+    conn.execute_batch(
+        r#"
         -- Enable foreign keys
         PRAGMA foreign_keys = ON;
 
@@ -249,7 +249,7 @@ pub fn create_all_tables(conn: &Connection) -> Result<()> {
             isSelectedAsSubColumn INTEGER
         );
         "#,
-  )?;
+    )?;
 
-  Ok(())
+    Ok(())
 }

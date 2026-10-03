@@ -18,5 +18,5 @@ use crate::services::cloud_sync::backend::types::{Manifest, ManifestEtag};
 
 /// A manifest-update stream that never yields (the Phase 3 runtime polls instead).
 pub(crate) fn empty_stream() -> BoxStream<'static, (Manifest, ManifestEtag)> {
-  Box::pin(stream::empty())
+    Box::pin(stream::empty())
 }

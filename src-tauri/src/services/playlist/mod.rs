@@ -13,17 +13,17 @@ use rusqlite::Connection;
 
 use crate::error::{CrateError, Result};
 use crate::models::{
-  AddToPlaylistResult, DiscoveryRelease, DiscoveryTrack, MoveConflict, MovePlaylistResult,
-  Playlist, PlaylistCoverArt, SmartRules, Tag, Track,
+    AddToPlaylistResult, DiscoveryRelease, DiscoveryTrack, MoveConflict, MovePlaylistResult,
+    Playlist, PlaylistCoverArt, SmartRules, Tag, Track,
 };
 use crate::services::smart_rules;
 
 pub struct PlaylistService {
-  conn: Arc<Mutex<Connection>>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl PlaylistService {
-  pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
-    Self { conn }
-  }
+    pub fn new(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
 }

@@ -1,0 +1,4 @@
+# Match the upstream repo's formatting: rustfmt defaults, 4-space indent.
+# Pinned explicitly so machine-level configs (e.g. ~/.config/rustfmt) cannot
+# drift local formatting away from what CI's `cargo fmt --check` enforces.
+tab_spaces = 4

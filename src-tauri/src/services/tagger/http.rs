@@ -10,10 +10,10 @@ pub(super) const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) A
 /// TraxSource does not use this client — Cloudflare blocks `reqwest`'s
 /// fingerprint, so it shells out to the system `curl` instead (see `traxsource`).
 pub(super) fn build_client() -> Result<reqwest::Client> {
-  reqwest::Client::builder()
-    .connect_timeout(std::time::Duration::from_secs(10))
-    .timeout(std::time::Duration::from_secs(20))
-    .user_agent(USER_AGENT)
-    .build()
-    .map_err(|e| CrateError::Tagger(format!("Failed to create HTTP client: {e}")))
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent(USER_AGENT)
+        .build()
+        .map_err(|e| CrateError::Tagger(format!("Failed to create HTTP client: {e}")))
 }

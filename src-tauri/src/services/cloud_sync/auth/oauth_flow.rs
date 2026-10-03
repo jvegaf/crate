@@ -38,9 +38,9 @@ const FLOW_TIMEOUT: Duration = Duration::from_secs(300);
 /// between the `begin_sign_in` and `complete_sign_in` IPC calls so the verifier — the secret that
 /// redeems the code — never leaves Rust.
 pub struct PendingAuth {
-  pub verifier: String,
-  pub state: String,
-  pub provider_id: String,
+    pub verifier: String,
+    pub state: String,
+    pub provider_id: String,
 }
 
 /// Stage 1 (shared): build the consent URL and the secrets needed to finish the exchange.
@@ -49,49 +49,49 @@ pub struct PendingAuth {
 /// mobile passes the provider's reversed-client-id scheme (e.g.
 /// `com.googleusercontent.apps.<id>:/oauth2redirect`).
 pub fn build_auth_request(
-  provider: &dyn IdentityProvider,
-  client_id: &str,
-  redirect_uri: &str,
+    provider: &dyn IdentityProvider,
+    client_id: &str,
+    redirect_uri: &str,
 ) -> (String, PendingAuth) {
-  let verifier = random_b64url(32);
-  let challenge = code_challenge(&verifier);
-  let state = random_b64url(16);
-  let auth_url = provider.authorization_url(&AuthRequestParams {
-    client_id,
-    redirect_uri,
-    code_challenge: &challenge,
-    state: &state,
-  });
-  (
-    auth_url,
-    PendingAuth {
-      verifier,
-      state,
-      provider_id: provider.id().to_string(),
-    },
-  )
+    let verifier = random_b64url(32);
+    let challenge = code_challenge(&verifier);
+    let state = random_b64url(16);
+    let auth_url = provider.authorization_url(&AuthRequestParams {
+        client_id,
+        redirect_uri,
+        code_challenge: &challenge,
+        state: &state,
+    });
+    (
+        auth_url,
+        PendingAuth {
+            verifier,
+            state,
+            provider_id: provider.id().to_string(),
+        },
+    )
 }
 
 /// Stage 2 (shared): exchange the authorization `code` + PKCE `verifier` for the provider's ID
 /// token. `client_secret` is `None` for public mobile clients (PKCE is the proof) and `Some` for
 /// the desktop "Desktop app" client.
 pub async fn complete(
-  provider: &dyn IdentityProvider,
-  client_id: &str,
-  client_secret: Option<&str>,
-  redirect_uri: &str,
-  code: &str,
-  verifier: &str,
+    provider: &dyn IdentityProvider,
+    client_id: &str,
+    client_secret: Option<&str>,
+    redirect_uri: &str,
+    code: &str,
+    verifier: &str,
 ) -> Result<String> {
-  exchange_code(
-    provider,
-    client_id,
-    client_secret,
-    redirect_uri,
-    code,
-    verifier,
-  )
-  .await
+    exchange_code(
+        provider,
+        client_id,
+        client_secret,
+        redirect_uri,
+        code,
+        verifier,
+    )
+    .await
 }
 
 /// Run the desktop loopback OAuth + PKCE flow for `provider`, returning the provider ID token.
@@ -101,136 +101,136 @@ pub async fn complete(
 /// types).
 #[cfg(feature = "desktop")]
 pub async fn run_loopback_flow(
-  provider: &dyn IdentityProvider,
-  client_id: &str,
-  client_secret: &str,
-  open_url: impl FnOnce(&str) -> Result<()> + Send,
+    provider: &dyn IdentityProvider,
+    client_id: &str,
+    client_secret: &str,
+    open_url: impl FnOnce(&str) -> Result<()> + Send,
 ) -> Result<String> {
-  // 1. One-shot loopback listener on an OS-assigned port (mirrors proxy.rs).
-  let std_listener = std::net::TcpListener::bind("127.0.0.1:0")
-    .map_err(|e| CrateError::CloudSyncAuth(format!("bind loopback: {e}")))?;
-  let port = std_listener
-    .local_addr()
-    .map_err(|e| CrateError::CloudSyncAuth(format!("loopback addr: {e}")))?
-    .port();
-  let redirect_uri = format!("http://127.0.0.1:{port}");
+    // 1. One-shot loopback listener on an OS-assigned port (mirrors proxy.rs).
+    let std_listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| CrateError::CloudSyncAuth(format!("bind loopback: {e}")))?;
+    let port = std_listener
+        .local_addr()
+        .map_err(|e| CrateError::CloudSyncAuth(format!("loopback addr: {e}")))?
+        .port();
+    let redirect_uri = format!("http://127.0.0.1:{port}");
 
-  // 2. PKCE pair + CSRF state + consent URL.
-  let (auth_url, pending) = build_auth_request(provider, client_id, &redirect_uri);
+    // 2. PKCE pair + CSRF state + consent URL.
+    let (auth_url, pending) = build_auth_request(provider, client_id, &redirect_uri);
 
-  let (tx, rx) = oneshot::channel::<CallbackResult>();
-  let shared = Arc::new(CallbackState {
-    tx: tokio::sync::Mutex::new(Some(tx)),
-    expected_state: pending.state.clone(),
-  });
+    let (tx, rx) = oneshot::channel::<CallbackResult>();
+    let shared = Arc::new(CallbackState {
+        tx: tokio::sync::Mutex::new(Some(tx)),
+        expected_state: pending.state.clone(),
+    });
 
-  std_listener
-    .set_nonblocking(true)
-    .map_err(|e| CrateError::CloudSyncAuth(format!("loopback nonblocking: {e}")))?;
-  let listener = tokio::net::TcpListener::from_std(std_listener)
-    .map_err(|e| CrateError::CloudSyncAuth(format!("loopback tokio: {e}")))?;
+    std_listener
+        .set_nonblocking(true)
+        .map_err(|e| CrateError::CloudSyncAuth(format!("loopback nonblocking: {e}")))?;
+    let listener = tokio::net::TcpListener::from_std(std_listener)
+        .map_err(|e| CrateError::CloudSyncAuth(format!("loopback tokio: {e}")))?;
 
-  // Catch-all route so any redirect target (e.g. with an unexpected path) still hits the
-  // handler — Google sometimes appends an empty path the router would 404 on.
-  let router = axum::Router::new()
-    .route("/", axum::routing::get(callback_handler))
-    .fallback(axum::routing::get(callback_handler))
-    .with_state(shared);
-  let server = tokio::spawn(async move {
-    let _ = axum::serve(listener, router).await;
-  });
+    // Catch-all route so any redirect target (e.g. with an unexpected path) still hits the
+    // handler — Google sometimes appends an empty path the router would 404 on.
+    let router = axum::Router::new()
+        .route("/", axum::routing::get(callback_handler))
+        .fallback(axum::routing::get(callback_handler))
+        .with_state(shared);
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
 
-  // 3. Open the consent screen.
-  // On Windows, open the URL directly via cmd.exe instead of the closure. The closure routes
-  // through tauri-plugin-opener → open::that_detached → ShellExecuteExW, which can silently
-  // fail from Tokio worker threads that lack COM initialization.
-  #[cfg(target_os = "windows")]
-  {
-    let _ = open_url;
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    std::process::Command::new("cmd")
-      .arg("/c")
-      .arg("start")
-      .raw_arg("\"\"")
-      .raw_arg(format!("\"{}\"", &auth_url))
-      .creation_flags(CREATE_NO_WINDOW)
-      .spawn()
-      .map_err(|e| {
+    // 3. Open the consent screen.
+    // On Windows, open the URL directly via cmd.exe instead of the closure. The closure routes
+    // through tauri-plugin-opener → open::that_detached → ShellExecuteExW, which can silently
+    // fail from Tokio worker threads that lack COM initialization.
+    #[cfg(target_os = "windows")]
+    {
+        let _ = open_url;
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        std::process::Command::new("cmd")
+            .arg("/c")
+            .arg("start")
+            .raw_arg("\"\"")
+            .raw_arg(format!("\"{}\"", &auth_url))
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| {
+                server.abort();
+                CrateError::CloudSyncAuth(format!("failed to open browser: {e}"))
+            })?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    if let Err(e) = open_url(&auth_url) {
         server.abort();
-        CrateError::CloudSyncAuth(format!("failed to open browser: {e}"))
-      })?;
-  }
-  #[cfg(not(target_os = "windows"))]
-  if let Err(e) = open_url(&auth_url) {
+        return Err(e);
+    }
+
+    // 4. Await the redirect (with a timeout).
+    let code = match tokio::time::timeout(FLOW_TIMEOUT, rx).await {
+        Ok(Ok(CallbackResult::Code(code))) => code,
+        Ok(Ok(CallbackResult::Error(msg))) => {
+            server.abort();
+            return Err(CrateError::CloudSyncAuth(format!(
+                "authorization failed: {msg}"
+            )));
+        }
+        Ok(Err(_)) => {
+            server.abort();
+            return Err(CrateError::CloudSyncAuth("sign-in canceled".into()));
+        }
+        Err(_) => {
+            server.abort();
+            return Err(CrateError::CloudSyncAuth("sign-in timed out".into()));
+        }
+    };
     server.abort();
-    return Err(e);
-  }
 
-  // 4. Await the redirect (with a timeout).
-  let code = match tokio::time::timeout(FLOW_TIMEOUT, rx).await {
-    Ok(Ok(CallbackResult::Code(code))) => code,
-    Ok(Ok(CallbackResult::Error(msg))) => {
-      server.abort();
-      return Err(CrateError::CloudSyncAuth(format!(
-        "authorization failed: {msg}"
-      )));
-    }
-    Ok(Err(_)) => {
-      server.abort();
-      return Err(CrateError::CloudSyncAuth("sign-in canceled".into()));
-    }
-    Err(_) => {
-      server.abort();
-      return Err(CrateError::CloudSyncAuth("sign-in timed out".into()));
-    }
-  };
-  server.abort();
-
-  // 5. Exchange code + verifier for the provider ID token.
-  complete(
-    provider,
-    client_id,
-    Some(client_secret),
-    &redirect_uri,
-    &code,
-    &pending.verifier,
-  )
-  .await
+    // 5. Exchange code + verifier for the provider ID token.
+    complete(
+        provider,
+        client_id,
+        Some(client_secret),
+        &redirect_uri,
+        &code,
+        &pending.verifier,
+    )
+    .await
 }
 
 #[cfg(feature = "desktop")]
 struct CallbackState {
-  tx: tokio::sync::Mutex<Option<oneshot::Sender<CallbackResult>>>,
-  expected_state: String,
+    tx: tokio::sync::Mutex<Option<oneshot::Sender<CallbackResult>>>,
+    expected_state: String,
 }
 
 #[cfg(feature = "desktop")]
 enum CallbackResult {
-  Code(String),
-  Error(String),
+    Code(String),
+    Error(String),
 }
 
 #[cfg(feature = "desktop")]
 async fn callback_handler(
-  axum::extract::State(state): axum::extract::State<Arc<CallbackState>>,
-  axum::extract::RawQuery(query): axum::extract::RawQuery,
+    axum::extract::State(state): axum::extract::State<Arc<CallbackState>>,
+    axum::extract::RawQuery(query): axum::extract::RawQuery,
 ) -> axum::response::Html<&'static str> {
-  let params = parse_query(query.as_deref().unwrap_or(""));
-  let result = if let Some(err) = params.get("error") {
-    CallbackResult::Error(err.clone())
-  } else if params.get("state").map(String::as_str) != Some(state.expected_state.as_str()) {
-    CallbackResult::Error("state mismatch".into())
-  } else if let Some(code) = params.get("code") {
-    CallbackResult::Code(code.clone())
-  } else {
-    CallbackResult::Error("missing authorization code".into())
-  };
+    let params = parse_query(query.as_deref().unwrap_or(""));
+    let result = if let Some(err) = params.get("error") {
+        CallbackResult::Error(err.clone())
+    } else if params.get("state").map(String::as_str) != Some(state.expected_state.as_str()) {
+        CallbackResult::Error("state mismatch".into())
+    } else if let Some(code) = params.get("code") {
+        CallbackResult::Code(code.clone())
+    } else {
+        CallbackResult::Error("missing authorization code".into())
+    };
 
-  if let Some(tx) = state.tx.lock().await.take() {
-    let _ = tx.send(result);
-  }
-  axum::response::Html(CALLBACK_HTML)
+    if let Some(tx) = state.tx.lock().await.take() {
+        let _ = tx.send(result);
+    }
+    axum::response::Html(CALLBACK_HTML)
 }
 
 #[cfg(feature = "desktop")]
@@ -241,58 +241,58 @@ const CALLBACK_HTML: &str = "<!doctype html><html><head><meta charset=\"utf-8\">
 <p>You can close this tab and return to the app.</p></body></html>";
 
 async fn exchange_code(
-  provider: &dyn IdentityProvider,
-  client_id: &str,
-  client_secret: Option<&str>,
-  redirect_uri: &str,
-  code: &str,
-  verifier: &str,
+    provider: &dyn IdentityProvider,
+    client_id: &str,
+    client_secret: Option<&str>,
+    redirect_uri: &str,
+    code: &str,
+    verifier: &str,
 ) -> Result<String> {
-  let client = reqwest::Client::builder()
-    .timeout(Duration::from_secs(30))
-    .build()
-    .map_err(|e| CrateError::CloudSyncAuth(format!("token exchange client build: {e}")))?;
-  let params = build_token_params(client_id, client_secret, redirect_uri, code, verifier);
-  let resp = client
-    .post(provider.token_endpoint())
-    .form(&params)
-    .send()
-    .await
-    .map_err(|e| CrateError::CloudSyncAuth(format!("token exchange request: {e}")))?;
-  if !resp.status().is_success() {
-    let status = resp.status();
-    let text = resp.text().await.unwrap_or_default();
-    return Err(CrateError::CloudSyncAuth(format!(
-      "token exchange HTTP {status}: {text}"
-    )));
-  }
-  let body: serde_json::Value = resp
-    .json()
-    .await
-    .map_err(|e| CrateError::CloudSyncAuth(format!("token exchange decode: {e}")))?;
-  provider.extract_id_token(&body)
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| CrateError::CloudSyncAuth(format!("token exchange client build: {e}")))?;
+    let params = build_token_params(client_id, client_secret, redirect_uri, code, verifier);
+    let resp = client
+        .post(provider.token_endpoint())
+        .form(&params)
+        .send()
+        .await
+        .map_err(|e| CrateError::CloudSyncAuth(format!("token exchange request: {e}")))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(CrateError::CloudSyncAuth(format!(
+            "token exchange HTTP {status}: {text}"
+        )));
+    }
+    let body: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CrateError::CloudSyncAuth(format!("token exchange decode: {e}")))?;
+    provider.extract_id_token(&body)
 }
 
 /// Assemble the `application/x-www-form-urlencoded` token-exchange params. `client_secret` is
 /// included iff present — public mobile clients omit it and rely on PKCE.
 fn build_token_params<'a>(
-  client_id: &'a str,
-  client_secret: Option<&'a str>,
-  redirect_uri: &'a str,
-  code: &'a str,
-  verifier: &'a str,
+    client_id: &'a str,
+    client_secret: Option<&'a str>,
+    redirect_uri: &'a str,
+    code: &'a str,
+    verifier: &'a str,
 ) -> Vec<(&'a str, &'a str)> {
-  let mut params = vec![
-    ("grant_type", "authorization_code"),
-    ("code", code),
-    ("client_id", client_id),
-    ("redirect_uri", redirect_uri),
-    ("code_verifier", verifier),
-  ];
-  if let Some(secret) = client_secret {
-    params.push(("client_secret", secret));
-  }
-  params
+    let mut params = vec![
+        ("grant_type", "authorization_code"),
+        ("code", code),
+        ("client_id", client_id),
+        ("redirect_uri", redirect_uri),
+        ("code_verifier", verifier),
+    ];
+    if let Some(secret) = client_secret {
+        params.push(("client_secret", secret));
+    }
+    params
 }
 
 // --- PKCE + query helpers -------------------------------------------------------
@@ -301,117 +301,117 @@ fn build_token_params<'a>(
 /// OIDC nonce for native Sign in with Apple, where url-safe output needs no percent-encoding in
 /// the Firebase `postBody`; see [`super::apple_native`]).
 pub(super) fn random_b64url(n_bytes: usize) -> String {
-  let bytes: Vec<u8> = (0..n_bytes).map(|_| rand::random::<u8>()).collect();
-  base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+    let bytes: Vec<u8> = (0..n_bytes).map(|_| rand::random::<u8>()).collect();
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// PKCE S256 challenge: base64url-no-pad(SHA-256(verifier)).
 fn code_challenge(verifier: &str) -> String {
-  let digest = Sha256::digest(verifier.as_bytes());
-  base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+    let digest = Sha256::digest(verifier.as_bytes());
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
 }
 
 /// Parse an `x=1&y=2` query string into a decoded map.
 #[cfg(feature = "desktop")]
 fn parse_query(q: &str) -> HashMap<String, String> {
-  let mut map = HashMap::new();
-  for pair in q.split('&') {
-    if pair.is_empty() {
-      continue;
+    let mut map = HashMap::new();
+    for pair in q.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let mut it = pair.splitn(2, '=');
+        let k = it.next().unwrap_or("");
+        let v = it.next().unwrap_or("");
+        if !k.is_empty() {
+            map.insert(percent_decode(k), percent_decode(v));
+        }
     }
-    let mut it = pair.splitn(2, '=');
-    let k = it.next().unwrap_or("");
-    let v = it.next().unwrap_or("");
-    if !k.is_empty() {
-      map.insert(percent_decode(k), percent_decode(v));
-    }
-  }
-  map
+    map
 }
 
 /// Minimal `application/x-www-form-urlencoded` percent-decoder (`+` → space).
 #[cfg(feature = "desktop")]
 fn percent_decode(s: &str) -> String {
-  let bytes = s.as_bytes();
-  let mut out = Vec::with_capacity(bytes.len());
-  let mut i = 0;
-  while i < bytes.len() {
-    match bytes[i] {
-      b'%' if i + 2 < bytes.len() => match (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
-        (Some(h), Some(l)) => {
-          out.push((h << 4) | l);
-          i += 3;
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => match (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                (Some(h), Some(l)) => {
+                    out.push((h << 4) | l);
+                    i += 3;
+                }
+                _ => {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            },
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
         }
-        _ => {
-          out.push(bytes[i]);
-          i += 1;
-        }
-      },
-      b'+' => {
-        out.push(b' ');
-        i += 1;
-      }
-      b => {
-        out.push(b);
-        i += 1;
-      }
     }
-  }
-  String::from_utf8_lossy(&out).into_owned()
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[cfg(feature = "desktop")]
 fn hex_val(b: u8) -> Option<u8> {
-  match b {
-    b'0'..=b'9' => Some(b - b'0'),
-    b'a'..=b'f' => Some(b - b'a' + 10),
-    b'A'..=b'F' => Some(b - b'A' + 10),
-    _ => None,
-  }
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-  use crate::services::cloud_sync::auth::providers::google::GoogleProvider;
-  use crate::services::cloud_sync::percent_encode;
+    use super::*;
+    use crate::services::cloud_sync::auth::providers::google::GoogleProvider;
+    use crate::services::cloud_sync::percent_encode;
 
-  #[test]
-  fn build_auth_request_produces_pkce_and_consent_url() {
-    let provider = GoogleProvider::new();
-    let redirect = "com.googleusercontent.apps.123-abc:/oauth2redirect";
-    let (auth_url, pending) =
-      build_auth_request(&provider, "123-abc.apps.googleusercontent.com", redirect);
+    #[test]
+    fn build_auth_request_produces_pkce_and_consent_url() {
+        let provider = GoogleProvider::new();
+        let redirect = "com.googleusercontent.apps.123-abc:/oauth2redirect";
+        let (auth_url, pending) =
+            build_auth_request(&provider, "123-abc.apps.googleusercontent.com", redirect);
 
-    assert_eq!(pending.provider_id, "google");
-    assert!(!pending.verifier.is_empty());
-    assert!(!pending.state.is_empty());
+        assert_eq!(pending.provider_id, "google");
+        assert!(!pending.verifier.is_empty());
+        assert!(!pending.state.is_empty());
 
-    assert!(auth_url.contains("response_type=code"));
-    assert!(auth_url.contains("code_challenge_method=S256"));
-    // The challenge embedded in the URL is the S256 hash of the returned verifier.
-    assert!(auth_url.contains(&format!(
-      "code_challenge={}",
-      code_challenge(&pending.verifier)
-    )));
-    // The custom-scheme mobile redirect is percent-encoded into the query.
-    assert!(auth_url.contains(&format!("redirect_uri={}", percent_encode(redirect))));
-    assert!(auth_url.contains(&format!("state={}", pending.state)));
-  }
+        assert!(auth_url.contains("response_type=code"));
+        assert!(auth_url.contains("code_challenge_method=S256"));
+        // The challenge embedded in the URL is the S256 hash of the returned verifier.
+        assert!(auth_url.contains(&format!(
+            "code_challenge={}",
+            code_challenge(&pending.verifier)
+        )));
+        // The custom-scheme mobile redirect is percent-encoded into the query.
+        assert!(auth_url.contains(&format!("redirect_uri={}", percent_encode(redirect))));
+        assert!(auth_url.contains(&format!("state={}", pending.state)));
+    }
 
-  #[test]
-  fn token_params_include_secret_only_when_present() {
-    let with = build_token_params("cid", Some("secret"), "uri", "code", "verifier");
-    assert!(with
-      .iter()
-      .any(|(k, v)| *k == "client_secret" && *v == "secret"));
-    assert!(with.iter().any(|(k, _)| *k == "code_verifier"));
+    #[test]
+    fn token_params_include_secret_only_when_present() {
+        let with = build_token_params("cid", Some("secret"), "uri", "code", "verifier");
+        assert!(with
+            .iter()
+            .any(|(k, v)| *k == "client_secret" && *v == "secret"));
+        assert!(with.iter().any(|(k, _)| *k == "code_verifier"));
 
-    let without = build_token_params("cid", None, "uri", "code", "verifier");
-    assert!(!without.iter().any(|(k, _)| *k == "client_secret"));
-    // PKCE proof is still present for the public-client exchange.
-    assert!(without
-      .iter()
-      .any(|(k, v)| *k == "code_verifier" && *v == "verifier"));
-  }
+        let without = build_token_params("cid", None, "uri", "code", "verifier");
+        assert!(!without.iter().any(|(k, _)| *k == "client_secret"));
+        // PKCE proof is still present for the public-client exchange.
+        assert!(without
+            .iter()
+            .any(|(k, v)| *k == "code_verifier" && *v == "verifier"));
+    }
 }

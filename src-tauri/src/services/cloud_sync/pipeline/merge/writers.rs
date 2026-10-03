@@ -14,15 +14,16 @@ use serde::de::DeserializeOwned;
 
 use crate::error::{CrateError, Result};
 use crate::models::{
-  BackupDiscoveryReleaseTag, BackupDiscoveryTrackTag, BackupPlaylistDiscoveryRelease,
-  BackupPlaylistDiscoveryTrack, BackupTrack, BackupTrackTag, DiscoveryTrack, PlaylistTrack, Tag,
+    BackupDiscoveryReleaseTag, BackupDiscoveryTrackTag, BackupPlaylistDiscoveryRelease,
+    BackupPlaylistDiscoveryTrack, BackupTrack, BackupTrackTag, DiscoveryTrack, PlaylistTrack, Tag,
 };
 
 use super::super::buckets::Bucket;
 use super::super::dirty;
 use super::super::rows::{
-  CollectionAccountRow, CollectionItemRow, CueRow, DiscoveryReleaseRow, DiscoveryReleaseSourceRow,
-  FollowedSourceRow, LibraryRootRow, ParsedRow, PlaylistRow, TagCategoryRow,
+    CollectionAccountRow, CollectionItemRow, CueRow, DiscoveryReleaseRow,
+    DiscoveryReleaseSourceRow, FollowedSourceRow, LibraryRootRow, ParsedRow, PlaylistRow,
+    TagCategoryRow,
 };
 
 // SQLite extended result codes for the constraint violations we tolerate.
@@ -30,19 +31,19 @@ const SQLITE_CONSTRAINT_UNIQUE: i32 = 2067;
 const SQLITE_CONSTRAINT_PRIMARYKEY: i32 = 1555;
 
 fn de<T: DeserializeOwned>(value: &serde_json::Value) -> Result<T> {
-  serde_json::from_value(value.clone())
-    .map_err(|e| CrateError::CloudSync(format!("deserialize sync row: {e}")))
+    serde_json::from_value(value.clone())
+        .map_err(|e| CrateError::CloudSync(format!("deserialize sync row: {e}")))
 }
 
 /// True for a `UNIQUE`/`PRIMARY KEY` collision — the only constraint failures a
 /// merge tolerates (the row is skipped, the rest of the bucket still merges).
 fn is_skippable_constraint(e: &CrateError) -> bool {
-  matches!(
-      e,
-      CrateError::Database(rusqlite::Error::SqliteFailure(f, _))
-          if f.extended_code == SQLITE_CONSTRAINT_UNIQUE
-              || f.extended_code == SQLITE_CONSTRAINT_PRIMARYKEY
-  )
+    matches!(
+        e,
+        CrateError::Database(rusqlite::Error::SqliteFailure(f, _))
+            if f.extended_code == SQLITE_CONSTRAINT_UNIQUE
+                || f.extended_code == SQLITE_CONSTRAINT_PRIMARYKEY
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -53,52 +54,52 @@ fn is_skippable_constraint(e: &CrateError) -> bool {
 /// collision (e.g. duplicate `tag_categories.name`) skips this row instead of
 /// aborting the bucket transaction.
 pub(super) fn upsert_entity(tx: &Connection, bucket: &Bucket, row: &ParsedRow) -> Result<()> {
-  tx.execute_batch("SAVEPOINT merge_row")?;
-  match upsert_entity_inner(tx, bucket, row) {
-    Ok(()) => {
-      tx.execute_batch("RELEASE merge_row")?;
-      Ok(())
+    tx.execute_batch("SAVEPOINT merge_row")?;
+    match upsert_entity_inner(tx, bucket, row) {
+        Ok(()) => {
+            tx.execute_batch("RELEASE merge_row")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = tx.execute_batch("ROLLBACK TO merge_row");
+            let _ = tx.execute_batch("RELEASE merge_row");
+            if is_skippable_constraint(&e) {
+                log::warn!(
+                    "cloud_sync merge: skipped a {} row on a UNIQUE collision: {e}",
+                    bucket.as_str()
+                );
+                Ok(())
+            } else {
+                Err(e)
+            }
+        }
     }
-    Err(e) => {
-      let _ = tx.execute_batch("ROLLBACK TO merge_row");
-      let _ = tx.execute_batch("RELEASE merge_row");
-      if is_skippable_constraint(&e) {
-        log::warn!(
-          "cloud_sync merge: skipped a {} row on a UNIQUE collision: {e}",
-          bucket.as_str()
-        );
-        Ok(())
-      } else {
-        Err(e)
-      }
-    }
-  }
 }
 
 fn upsert_entity_inner(tx: &Connection, bucket: &Bucket, row: &ParsedRow) -> Result<()> {
-  let v = &row.value;
-  let hlc = &row.hlc;
-  match bucket {
-    Bucket::Tracks(_) => upsert_track(tx, &de(v)?, hlc),
-    Bucket::Playlists => upsert_playlist(tx, &de(v)?, hlc),
-    Bucket::Cues => upsert_cue(tx, &de(v)?, hlc),
-    Bucket::TagCategories => upsert_tag_category(tx, &de(v)?, hlc),
-    Bucket::Tags => upsert_tag(tx, &de(v)?, hlc),
-    Bucket::DiscoveryReleases => upsert_discovery_release(tx, &de(v)?, hlc),
-    Bucket::DiscoveryTracks => upsert_discovery_track(tx, &de(v)?, hlc),
-    Bucket::FollowedSources => upsert_followed_source(tx, &de(v)?, hlc),
-    Bucket::CollectionAccounts => upsert_collection_account(tx, &de(v)?, hlc),
-    Bucket::CollectionItems => upsert_collection_item(tx, &de(v)?, hlc),
-    Bucket::LibraryRoots => upsert_library_root(tx, &de(v)?, hlc),
-    _ => Err(CrateError::CloudSync(format!(
-      "upsert_entity on non-entity bucket {}",
-      bucket.as_str()
-    ))),
-  }
+    let v = &row.value;
+    let hlc = &row.hlc;
+    match bucket {
+        Bucket::Tracks(_) => upsert_track(tx, &de(v)?, hlc),
+        Bucket::Playlists => upsert_playlist(tx, &de(v)?, hlc),
+        Bucket::Cues => upsert_cue(tx, &de(v)?, hlc),
+        Bucket::TagCategories => upsert_tag_category(tx, &de(v)?, hlc),
+        Bucket::Tags => upsert_tag(tx, &de(v)?, hlc),
+        Bucket::DiscoveryReleases => upsert_discovery_release(tx, &de(v)?, hlc),
+        Bucket::DiscoveryTracks => upsert_discovery_track(tx, &de(v)?, hlc),
+        Bucket::FollowedSources => upsert_followed_source(tx, &de(v)?, hlc),
+        Bucket::CollectionAccounts => upsert_collection_account(tx, &de(v)?, hlc),
+        Bucket::CollectionItems => upsert_collection_item(tx, &de(v)?, hlc),
+        Bucket::LibraryRoots => upsert_library_root(tx, &de(v)?, hlc),
+        _ => Err(CrateError::CloudSync(format!(
+            "upsert_entity on non-entity bucket {}",
+            bucket.as_str()
+        ))),
+    }
 }
 
 fn upsert_track(tx: &Connection, t: &BackupTrack, hlc: &str) -> Result<()> {
-  tx.execute(
+    tx.execute(
         "INSERT INTO tracks \
             (id, file_path, file_hash, title, artist, album, year, genre, label, catalog_number, \
              duration_ms, bpm, key, bitrate, sample_rate, format, rating, play_count, date_added, \
@@ -121,11 +122,11 @@ fn upsert_track(tx: &Connection, t: &BackupTrack, hlc: &str) -> Result<()> {
             t.artwork_path, t.artwork_source, t.color, t.url, hlc,
         ],
     )?;
-  Ok(())
+    Ok(())
 }
 
 fn upsert_playlist(tx: &Connection, p: &PlaylistRow, hlc: &str) -> Result<()> {
-  tx.execute(
+    tx.execute(
         "INSERT INTO playlists \
             (id, name, parent_id, is_folder, is_smart, smart_rules, sort_order, context, \
              date_created, date_modified, _hlc) \
@@ -140,56 +141,56 @@ fn upsert_playlist(tx: &Connection, p: &PlaylistRow, hlc: &str) -> Result<()> {
             p.context, p.date_created, p.date_modified, hlc,
         ],
     )?;
-  Ok(())
+    Ok(())
 }
 
 fn upsert_cue(tx: &Connection, c: &CueRow, hlc: &str) -> Result<()> {
-  tx.execute(
-    "INSERT INTO cues \
+    tx.execute(
+        "INSERT INTO cues \
             (id, track_id, position_ms, type, loop_end_ms, hot_cue_index, name, color, _hlc) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9) \
          ON CONFLICT(id) DO UPDATE SET \
             track_id=excluded.track_id, position_ms=excluded.position_ms, type=excluded.type, \
             loop_end_ms=excluded.loop_end_ms, hot_cue_index=excluded.hot_cue_index, \
             name=excluded.name, color=excluded.color, _hlc=excluded._hlc",
-    params![
-      c.id,
-      c.track_id,
-      c.position_ms,
-      c.cue_type,
-      c.loop_end_ms,
-      c.hot_cue_index,
-      c.name,
-      c.color,
-      hlc,
-    ],
-  )?;
-  Ok(())
+        params![
+            c.id,
+            c.track_id,
+            c.position_ms,
+            c.cue_type,
+            c.loop_end_ms,
+            c.hot_cue_index,
+            c.name,
+            c.color,
+            hlc,
+        ],
+    )?;
+    Ok(())
 }
 
 fn upsert_tag_category(tx: &Connection, c: &TagCategoryRow, hlc: &str) -> Result<()> {
-  tx.execute(
+    tx.execute(
         "INSERT INTO tag_categories (id, name, color, sort_order, _hlc) VALUES (?1,?2,?3,?4,?5) \
          ON CONFLICT(id) DO UPDATE SET \
             name=excluded.name, color=excluded.color, sort_order=excluded.sort_order, _hlc=excluded._hlc",
         params![c.id, c.name, c.color, c.sort_order, hlc],
     )?;
-  Ok(())
+    Ok(())
 }
 
 fn upsert_tag(tx: &Connection, t: &Tag, hlc: &str) -> Result<()> {
-  tx.execute(
+    tx.execute(
     "INSERT INTO tags (id, category_id, name, color, sort_order, _hlc) VALUES (?1,?2,?3,?4,?5,?6) \
          ON CONFLICT(id) DO UPDATE SET \
             category_id=excluded.category_id, name=excluded.name, color=excluded.color, \
             sort_order=excluded.sort_order, _hlc=excluded._hlc",
     params![t.id, t.category_id, t.name, t.color, t.sort_order, hlc],
   )?;
-  Ok(())
+    Ok(())
 }
 
 fn upsert_discovery_release(tx: &Connection, d: &DiscoveryReleaseRow, hlc: &str) -> Result<()> {
-  tx.execute(
+    tx.execute(
         "INSERT INTO discovery_releases \
             (id, url, source_type, artist, title, label, release_date, artwork_url, artwork_path, \
              notes, parent_url, source_page_url, date_added, date_modified, is_new, surfaced_at, _hlc) \
@@ -207,50 +208,50 @@ fn upsert_discovery_release(tx: &Connection, d: &DiscoveryReleaseRow, hlc: &str)
             d.surfaced_at, hlc,
         ],
     )?;
-  Ok(())
+    Ok(())
 }
 
 pub(super) fn upsert_discovery_track(tx: &Connection, d: &DiscoveryTrack, hlc: &str) -> Result<()> {
-  // Whole-row LWW: a peer on an older build (no `url` / `liked_at` in its snapshot →
-  // deserialized None) can null a backfilled url or a like stamp out; accepted — the
-  // NULL-only `update_track_urls` backfill re-populates urls on the next metadata refresh
-  // and pushes the heal back to peers, and a nulled stamp only demotes the (still liked)
-  // track to the end of the Date Liked sort until it is re-liked.
-  tx.execute(
-    "INSERT INTO discovery_tracks \
+    // Whole-row LWW: a peer on an older build (no `url` / `liked_at` in its snapshot →
+    // deserialized None) can null a backfilled url or a like stamp out; accepted — the
+    // NULL-only `update_track_urls` backfill re-populates urls on the next metadata refresh
+    // and pushes the heal back to peers, and a nulled stamp only demotes the (still liked)
+    // track to the end of the Date Liked sort until it is re-liked.
+    tx.execute(
+        "INSERT INTO discovery_tracks \
             (id, release_id, name, position, duration_ms, video_id, url, is_liked, liked_at, _hlc) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) \
          ON CONFLICT(id) DO UPDATE SET \
             release_id=excluded.release_id, name=excluded.name, position=excluded.position, \
             duration_ms=excluded.duration_ms, video_id=excluded.video_id, url=excluded.url, \
             is_liked=excluded.is_liked, liked_at=excluded.liked_at, _hlc=excluded._hlc",
-    params![
-      d.id,
-      d.release_id,
-      d.name,
-      d.position,
-      d.duration_ms,
-      d.video_id,
-      d.url,
-      d.is_liked,
-      d.liked_at,
-      hlc,
-    ],
-  )?;
-  Ok(())
+        params![
+            d.id,
+            d.release_id,
+            d.name,
+            d.position,
+            d.duration_ms,
+            d.video_id,
+            d.url,
+            d.is_liked,
+            d.liked_at,
+            hlc,
+        ],
+    )?;
+    Ok(())
 }
 
 fn upsert_library_root(tx: &Connection, l: &LibraryRootRow, hlc: &str) -> Result<()> {
-  tx.execute(
-    "INSERT INTO library_roots (id, name, _hlc) VALUES (?1,?2,?3) \
+    tx.execute(
+        "INSERT INTO library_roots (id, name, _hlc) VALUES (?1,?2,?3) \
          ON CONFLICT(id) DO UPDATE SET name=excluded.name, _hlc=excluded._hlc",
-    params![l.id, l.name, hlc],
-  )?;
-  Ok(())
+        params![l.id, l.name, hlc],
+    )?;
+    Ok(())
 }
 
 fn upsert_followed_source(tx: &Connection, f: &FollowedSourceRow, hlc: &str) -> Result<()> {
-  tx.execute(
+    tx.execute(
         "INSERT INTO followed_sources \
             (id, url, source_type, follow_type, name, artwork_url, artwork_path, enabled, \
              date_added, date_modified, _hlc) \
@@ -265,20 +266,20 @@ fn upsert_followed_source(tx: &Connection, f: &FollowedSourceRow, hlc: &str) -> 
             f.enabled, f.date_added, f.date_modified, hlc,
         ],
     )?;
-  // A source synced in from another device has no local watch state yet. Seed a
-  // default row (baseline_established=0) so the watch loop establishes a baseline on
-  // first sight and does NOT flood Discovery with the back catalog. OR IGNORE leaves
-  // any existing local state untouched.
-  tx.execute(
-    "INSERT OR IGNORE INTO followed_source_state (source_id) VALUES (?1)",
-    params![f.id],
-  )?;
-  Ok(())
+    // A source synced in from another device has no local watch state yet. Seed a
+    // default row (baseline_established=0) so the watch loop establishes a baseline on
+    // first sight and does NOT flood Discovery with the back catalog. OR IGNORE leaves
+    // any existing local state untouched.
+    tx.execute(
+        "INSERT OR IGNORE INTO followed_source_state (source_id) VALUES (?1)",
+        params![f.id],
+    )?;
+    Ok(())
 }
 
 fn upsert_collection_account(tx: &Connection, a: &CollectionAccountRow, hlc: &str) -> Result<()> {
-  tx.execute(
-    "INSERT INTO collection_accounts \
+    tx.execute(
+        "INSERT INTO collection_accounts \
             (id, url, source_type, external_id, username, name, avatar_url, enabled, \
              date_added, date_modified, _hlc) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) \
@@ -287,33 +288,33 @@ fn upsert_collection_account(tx: &Connection, a: &CollectionAccountRow, hlc: &st
             username=excluded.username, name=excluded.name, avatar_url=excluded.avatar_url, \
             enabled=excluded.enabled, date_added=excluded.date_added, \
             date_modified=excluded.date_modified, _hlc=excluded._hlc",
-    params![
-      a.id,
-      a.url,
-      a.source_type,
-      a.external_id,
-      a.username,
-      a.name,
-      a.avatar_url,
-      a.enabled,
-      a.date_added,
-      a.date_modified,
-      hlc,
-    ],
-  )?;
-  // An account synced in from another device has no local refresh state yet. Seed a
-  // default row so the refresh loop can gate on it; OR IGNORE leaves existing local
-  // state untouched.
-  tx.execute(
-    "INSERT OR IGNORE INTO collection_account_state (account_id) VALUES (?1)",
-    params![a.id],
-  )?;
-  Ok(())
+        params![
+            a.id,
+            a.url,
+            a.source_type,
+            a.external_id,
+            a.username,
+            a.name,
+            a.avatar_url,
+            a.enabled,
+            a.date_added,
+            a.date_modified,
+            hlc,
+        ],
+    )?;
+    // An account synced in from another device has no local refresh state yet. Seed a
+    // default row so the refresh loop can gate on it; OR IGNORE leaves existing local
+    // state untouched.
+    tx.execute(
+        "INSERT OR IGNORE INTO collection_account_state (account_id) VALUES (?1)",
+        params![a.id],
+    )?;
+    Ok(())
 }
 
 fn upsert_collection_item(tx: &Connection, i: &CollectionItemRow, hlc: &str) -> Result<()> {
-  tx.execute(
-    "INSERT INTO collection_items \
+    tx.execute(
+        "INSERT INTO collection_items \
             (id, account_id, source_type, item_type, url, external_id, artist, title, \
              artwork_url, purchased_at, date_added, date_modified, _hlc) \
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) \
@@ -323,31 +324,31 @@ fn upsert_collection_item(tx: &Connection, i: &CollectionItemRow, hlc: &str) -> 
             artist=excluded.artist, title=excluded.title, artwork_url=excluded.artwork_url, \
             purchased_at=excluded.purchased_at, date_added=excluded.date_added, \
             date_modified=excluded.date_modified, _hlc=excluded._hlc",
-    params![
-      i.id,
-      i.account_id,
-      i.source_type,
-      i.item_type,
-      i.url,
-      i.external_id,
-      i.artist,
-      i.title,
-      i.artwork_url,
-      i.purchased_at,
-      i.date_added,
-      i.date_modified,
-      hlc,
-    ],
-  )?;
-  Ok(())
+        params![
+            i.id,
+            i.account_id,
+            i.source_type,
+            i.item_type,
+            i.url,
+            i.external_id,
+            i.artist,
+            i.title,
+            i.artwork_url,
+            i.purchased_at,
+            i.date_added,
+            i.date_modified,
+            hlc,
+        ],
+    )?;
+    Ok(())
 }
 
 /// Hard-delete an entity by its single PK. FK `ON DELETE CASCADE` removes its
 /// children/junction rows (mirroring what the deleting device did).
 pub(super) fn hard_delete_entity(tx: &Connection, bucket: &Bucket, cid: &str) -> Result<()> {
-  let table = bucket.table();
-  tx.execute(&format!("DELETE FROM {table} WHERE id = ?1"), [cid])?;
-  Ok(())
+    let table = bucket.table();
+    tx.execute(&format!("DELETE FROM {table} WHERE id = ?1"), [cid])?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -355,159 +356,159 @@ pub(super) fn hard_delete_entity(tx: &Connection, bucket: &Bucket, cid: &str) ->
 // ---------------------------------------------------------------------------
 
 pub(super) fn insert_junction(tx: &Connection, bucket: &Bucket, row: &ParsedRow) -> Result<()> {
-  let v = &row.value;
-  let hlc = &row.hlc;
-  match bucket {
-    Bucket::PlaylistTracks => {
-      let p: PlaylistTrack = de(v)?;
-      tx.execute(
-        "INSERT INTO playlist_tracks (playlist_id, track_id, position, date_added, _hlc) \
+    let v = &row.value;
+    let hlc = &row.hlc;
+    match bucket {
+        Bucket::PlaylistTracks => {
+            let p: PlaylistTrack = de(v)?;
+            tx.execute(
+                "INSERT INTO playlist_tracks (playlist_id, track_id, position, date_added, _hlc) \
                  VALUES (?1,?2,?3,?4,?5) \
                  ON CONFLICT(playlist_id, track_id) DO UPDATE SET \
                     position=excluded.position, date_added=excluded.date_added, _hlc=excluded._hlc",
-        params![p.playlist_id, p.track_id, p.position, p.date_added, hlc],
-      )?;
-    }
-    Bucket::PlaylistDiscoveryReleases => {
-      let p: BackupPlaylistDiscoveryRelease = de(v)?;
-      tx.execute(
+                params![p.playlist_id, p.track_id, p.position, p.date_added, hlc],
+            )?;
+        }
+        Bucket::PlaylistDiscoveryReleases => {
+            let p: BackupPlaylistDiscoveryRelease = de(v)?;
+            tx.execute(
                 "INSERT INTO playlist_discovery_releases (playlist_id, release_id, position, date_added, _hlc) \
                  VALUES (?1,?2,?3,?4,?5) \
                  ON CONFLICT(playlist_id, release_id) DO UPDATE SET \
                     position=excluded.position, date_added=excluded.date_added, _hlc=excluded._hlc",
                 params![p.playlist_id, p.release_id, p.position, p.date_added, hlc],
             )?;
-    }
-    Bucket::PlaylistDiscoveryTracks => {
-      let p: BackupPlaylistDiscoveryTrack = de(v)?;
-      tx.execute(
+        }
+        Bucket::PlaylistDiscoveryTracks => {
+            let p: BackupPlaylistDiscoveryTrack = de(v)?;
+            tx.execute(
                 "INSERT INTO playlist_discovery_tracks (playlist_id, track_id, position, date_added, _hlc) \
                  VALUES (?1,?2,?3,?4,?5) \
                  ON CONFLICT(playlist_id, track_id) DO UPDATE SET \
                     position=excluded.position, date_added=excluded.date_added, _hlc=excluded._hlc",
                 params![p.playlist_id, p.track_id, p.position, p.date_added, hlc],
             )?;
-    }
-    Bucket::TrackTags => {
-      let t: BackupTrackTag = de(v)?;
-      tx.execute(
-        "INSERT INTO track_tags (track_id, tag_id, _hlc) VALUES (?1,?2,?3) \
+        }
+        Bucket::TrackTags => {
+            let t: BackupTrackTag = de(v)?;
+            tx.execute(
+                "INSERT INTO track_tags (track_id, tag_id, _hlc) VALUES (?1,?2,?3) \
                  ON CONFLICT(track_id, tag_id) DO UPDATE SET _hlc=excluded._hlc",
-        params![t.track_id, t.tag_id, hlc],
-      )?;
-    }
-    Bucket::DiscoveryTrackTags => {
-      let t: BackupDiscoveryTrackTag = de(v)?;
-      tx.execute(
-        "INSERT INTO discovery_track_tags (track_id, tag_id, _hlc) VALUES (?1,?2,?3) \
+                params![t.track_id, t.tag_id, hlc],
+            )?;
+        }
+        Bucket::DiscoveryTrackTags => {
+            let t: BackupDiscoveryTrackTag = de(v)?;
+            tx.execute(
+                "INSERT INTO discovery_track_tags (track_id, tag_id, _hlc) VALUES (?1,?2,?3) \
                  ON CONFLICT(track_id, tag_id) DO UPDATE SET _hlc=excluded._hlc",
-        params![t.track_id, t.tag_id, hlc],
-      )?;
-    }
-    Bucket::DiscoveryReleaseTags => {
-      let t: BackupDiscoveryReleaseTag = de(v)?;
-      tx.execute(
-        "INSERT INTO discovery_release_tags (release_id, tag_id, _hlc) VALUES (?1,?2,?3) \
+                params![t.track_id, t.tag_id, hlc],
+            )?;
+        }
+        Bucket::DiscoveryReleaseTags => {
+            let t: BackupDiscoveryReleaseTag = de(v)?;
+            tx.execute(
+                "INSERT INTO discovery_release_tags (release_id, tag_id, _hlc) VALUES (?1,?2,?3) \
                  ON CONFLICT(release_id, tag_id) DO UPDATE SET _hlc=excluded._hlc",
-        params![t.release_id, t.tag_id, hlc],
-      )?;
-    }
-    Bucket::DiscoveryReleaseSources => {
-      let s: DiscoveryReleaseSourceRow = de(v)?;
-      tx.execute(
+                params![t.release_id, t.tag_id, hlc],
+            )?;
+        }
+        Bucket::DiscoveryReleaseSources => {
+            let s: DiscoveryReleaseSourceRow = de(v)?;
+            tx.execute(
         "INSERT INTO discovery_release_sources (release_id, source_id, _hlc) VALUES (?1,?2,?3) \
                  ON CONFLICT(release_id, source_id) DO UPDATE SET _hlc=excluded._hlc",
         params![s.release_id, s.source_id, hlc],
       )?;
+        }
+        _ => {
+            return Err(CrateError::CloudSync(format!(
+                "insert_junction on non-junction bucket {}",
+                bucket.as_str()
+            )))
+        }
     }
-    _ => {
-      return Err(CrateError::CloudSync(format!(
-        "insert_junction on non-junction bucket {}",
-        bucket.as_str()
-      )))
-    }
-  }
-  Ok(())
+    Ok(())
 }
 
 /// Overwrite the ordering fields (position, date_added) + `_hlc` of an existing
 /// ordered-junction row (LWW). Only `playlist_tracks` / `playlist_discovery_releases` /
 /// `playlist_discovery_tracks`.
 pub(super) fn upsert_junction_ordering(
-  tx: &Connection,
-  bucket: &Bucket,
-  row: &ParsedRow,
+    tx: &Connection,
+    bucket: &Bucket,
+    row: &ParsedRow,
 ) -> Result<()> {
-  let v = &row.value;
-  let hlc = &row.hlc;
-  match bucket {
-    Bucket::PlaylistTracks => {
-      let p: PlaylistTrack = de(v)?;
-      tx.execute(
-        "UPDATE playlist_tracks SET position=?1, date_added=?2, _hlc=?3 \
+    let v = &row.value;
+    let hlc = &row.hlc;
+    match bucket {
+        Bucket::PlaylistTracks => {
+            let p: PlaylistTrack = de(v)?;
+            tx.execute(
+                "UPDATE playlist_tracks SET position=?1, date_added=?2, _hlc=?3 \
                  WHERE playlist_id=?4 AND track_id=?5",
-        params![p.position, p.date_added, hlc, p.playlist_id, p.track_id],
-      )?;
-    }
-    Bucket::PlaylistDiscoveryReleases => {
-      let p: BackupPlaylistDiscoveryRelease = de(v)?;
-      tx.execute(
-        "UPDATE playlist_discovery_releases SET position=?1, date_added=?2, _hlc=?3 \
+                params![p.position, p.date_added, hlc, p.playlist_id, p.track_id],
+            )?;
+        }
+        Bucket::PlaylistDiscoveryReleases => {
+            let p: BackupPlaylistDiscoveryRelease = de(v)?;
+            tx.execute(
+                "UPDATE playlist_discovery_releases SET position=?1, date_added=?2, _hlc=?3 \
                  WHERE playlist_id=?4 AND release_id=?5",
-        params![p.position, p.date_added, hlc, p.playlist_id, p.release_id],
-      )?;
-    }
-    Bucket::PlaylistDiscoveryTracks => {
-      let p: BackupPlaylistDiscoveryTrack = de(v)?;
-      tx.execute(
-        "UPDATE playlist_discovery_tracks SET position=?1, date_added=?2, _hlc=?3 \
+                params![p.position, p.date_added, hlc, p.playlist_id, p.release_id],
+            )?;
+        }
+        Bucket::PlaylistDiscoveryTracks => {
+            let p: BackupPlaylistDiscoveryTrack = de(v)?;
+            tx.execute(
+                "UPDATE playlist_discovery_tracks SET position=?1, date_added=?2, _hlc=?3 \
                  WHERE playlist_id=?4 AND track_id=?5",
-        params![p.position, p.date_added, hlc, p.playlist_id, p.track_id],
-      )?;
+                params![p.position, p.date_added, hlc, p.playlist_id, p.track_id],
+            )?;
+        }
+        _ => {
+            return Err(CrateError::CloudSync(format!(
+                "upsert_junction_ordering on non-ordered bucket {}",
+                bucket.as_str()
+            )))
+        }
     }
-    _ => {
-      return Err(CrateError::CloudSync(format!(
-        "upsert_junction_ordering on non-ordered bucket {}",
-        bucket.as_str()
-      )))
-    }
-  }
-  Ok(())
+    Ok(())
 }
 
 /// Advance an existing junction row's `_hlc` (used for tag junctions, which have
 /// no ordering fields — only the clock needs to converge).
 pub(super) fn advance_junction_hlc(
-  tx: &Connection,
-  bucket: &Bucket,
-  cid: &str,
-  hlc: &str,
+    tx: &Connection,
+    bucket: &Bucket,
+    cid: &str,
+    hlc: &str,
 ) -> Result<()> {
-  let (a, b) = split_pk(cid)?;
-  let cols = bucket.pk_columns();
-  let table = bucket.table();
-  tx.execute(
-    &format!(
-      "UPDATE {table} SET _hlc=?1 WHERE {}=?2 AND {}=?3",
-      cols[0], cols[1]
-    ),
-    params![hlc, a, b],
-  )?;
-  Ok(())
+    let (a, b) = split_pk(cid)?;
+    let cols = bucket.pk_columns();
+    let table = bucket.table();
+    tx.execute(
+        &format!(
+            "UPDATE {table} SET _hlc=?1 WHERE {}=?2 AND {}=?3",
+            cols[0], cols[1]
+        ),
+        params![hlc, a, b],
+    )?;
+    Ok(())
 }
 
 pub(super) fn delete_junction(tx: &Connection, bucket: &Bucket, cid: &str) -> Result<()> {
-  let (a, b) = split_pk(cid)?;
-  let cols = bucket.pk_columns();
-  let table = bucket.table();
-  tx.execute(
-    &format!(
-      "DELETE FROM {table} WHERE {}=?1 AND {}=?2",
-      cols[0], cols[1]
-    ),
-    params![a, b],
-  )?;
-  Ok(())
+    let (a, b) = split_pk(cid)?;
+    let cols = bucket.pk_columns();
+    let table = bucket.table();
+    tx.execute(
+        &format!(
+            "DELETE FROM {table} WHERE {}=?1 AND {}=?2",
+            cols[0], cols[1]
+        ),
+        params![a, b],
+    )?;
+    Ok(())
 }
 
 /// Whether a live entity row's NOT NULL parent (FK target) exists locally. Mirrors
@@ -518,80 +519,82 @@ pub(super) fn delete_junction(tx: &Connection, bucket: &Bucket, cid: &str) -> Re
 /// Convergence: the deleting device's cascade removed these children from its live
 /// rows, so its next push rewrites the remote bucket without them.
 pub(super) fn entity_parent_exists(
-  tx: &Connection,
-  bucket: &Bucket,
-  row: &ParsedRow,
+    tx: &Connection,
+    bucket: &Bucket,
+    row: &ParsedRow,
 ) -> Result<bool> {
-  let (parent_table, fk_field) = match bucket {
-    Bucket::DiscoveryTracks => ("discovery_releases", "release_id"),
-    Bucket::Cues => ("tracks", "track_id"),
-    Bucket::Tags => ("tag_categories", "category_id"),
-    Bucket::CollectionItems => ("collection_accounts", "account_id"),
-    // `playlists.parent_id` is a nullable SELF-reference resolved by the deferred-FK
-    // single-transaction merge of its own bucket; `tracks.library_root_id` is
-    // nullable ON DELETE SET NULL and never written by the merge UPSERT.
-    _ => return Ok(true),
-  };
-  let Some(parent_id) = row.value.get(fk_field).and_then(|v| v.as_str()) else {
-    // Malformed row: let the typed writer surface a proper deserialize error.
-    return Ok(true);
-  };
-  let exists: bool = tx.query_row(
-    &format!("SELECT EXISTS(SELECT 1 FROM {parent_table} WHERE id=?1)"),
-    [parent_id],
-    |r| r.get(0),
-  )?;
-  Ok(exists)
+    let (parent_table, fk_field) = match bucket {
+        Bucket::DiscoveryTracks => ("discovery_releases", "release_id"),
+        Bucket::Cues => ("tracks", "track_id"),
+        Bucket::Tags => ("tag_categories", "category_id"),
+        Bucket::CollectionItems => ("collection_accounts", "account_id"),
+        // `playlists.parent_id` is a nullable SELF-reference resolved by the deferred-FK
+        // single-transaction merge of its own bucket; `tracks.library_root_id` is
+        // nullable ON DELETE SET NULL and never written by the merge UPSERT.
+        _ => return Ok(true),
+    };
+    let Some(parent_id) = row.value.get(fk_field).and_then(|v| v.as_str()) else {
+        // Malformed row: let the typed writer surface a proper deserialize error.
+        return Ok(true);
+    };
+    let exists: bool = tx.query_row(
+        &format!("SELECT EXISTS(SELECT 1 FROM {parent_table} WHERE id=?1)"),
+        [parent_id],
+        |r| r.get(0),
+    )?;
+    Ok(exists)
 }
 
 /// Whether both of a junction row's endpoints exist locally. A junction is only
 /// inserted when this holds, so a concurrent re-add over a cascade-deleted parent
 /// is skipped instead of violating an FK at commit.
 pub(super) fn junction_endpoints_exist(
-  tx: &Connection,
-  bucket: &Bucket,
-  row: &ParsedRow,
+    tx: &Connection,
+    bucket: &Bucket,
+    row: &ParsedRow,
 ) -> Result<bool> {
-  let (p0_table, p0_col, p1_table, p1_col) = match bucket {
-    Bucket::PlaylistTracks => ("playlists", "playlist_id", "tracks", "track_id"),
-    Bucket::TrackTags => ("tracks", "track_id", "tags", "tag_id"),
-    Bucket::DiscoveryReleaseTags => ("discovery_releases", "release_id", "tags", "tag_id"),
-    Bucket::PlaylistDiscoveryReleases => (
-      "playlists",
-      "playlist_id",
-      "discovery_releases",
-      "release_id",
-    ),
-    Bucket::PlaylistDiscoveryTracks => ("playlists", "playlist_id", "discovery_tracks", "track_id"),
-    Bucket::DiscoveryTrackTags => ("discovery_tracks", "track_id", "tags", "tag_id"),
-    Bucket::DiscoveryReleaseSources => (
-      "discovery_releases",
-      "release_id",
-      "followed_sources",
-      "source_id",
-    ),
-    _ => return Ok(true),
-  };
-  let v = &row.value;
-  let id0 = v
-    .get(p0_col)
-    .and_then(|x| x.as_str())
-    .ok_or_else(|| CrateError::CloudSync(format!("junction row missing {p0_col}")))?;
-  let id1 = v
-    .get(p1_col)
-    .and_then(|x| x.as_str())
-    .ok_or_else(|| CrateError::CloudSync(format!("junction row missing {p1_col}")))?;
-  let e0: bool = tx.query_row(
-    &format!("SELECT EXISTS(SELECT 1 FROM {p0_table} WHERE id=?1)"),
-    [id0],
-    |r| r.get(0),
-  )?;
-  let e1: bool = tx.query_row(
-    &format!("SELECT EXISTS(SELECT 1 FROM {p1_table} WHERE id=?1)"),
-    [id1],
-    |r| r.get(0),
-  )?;
-  Ok(e0 && e1)
+    let (p0_table, p0_col, p1_table, p1_col) = match bucket {
+        Bucket::PlaylistTracks => ("playlists", "playlist_id", "tracks", "track_id"),
+        Bucket::TrackTags => ("tracks", "track_id", "tags", "tag_id"),
+        Bucket::DiscoveryReleaseTags => ("discovery_releases", "release_id", "tags", "tag_id"),
+        Bucket::PlaylistDiscoveryReleases => (
+            "playlists",
+            "playlist_id",
+            "discovery_releases",
+            "release_id",
+        ),
+        Bucket::PlaylistDiscoveryTracks => {
+            ("playlists", "playlist_id", "discovery_tracks", "track_id")
+        }
+        Bucket::DiscoveryTrackTags => ("discovery_tracks", "track_id", "tags", "tag_id"),
+        Bucket::DiscoveryReleaseSources => (
+            "discovery_releases",
+            "release_id",
+            "followed_sources",
+            "source_id",
+        ),
+        _ => return Ok(true),
+    };
+    let v = &row.value;
+    let id0 = v
+        .get(p0_col)
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| CrateError::CloudSync(format!("junction row missing {p0_col}")))?;
+    let id1 = v
+        .get(p1_col)
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| CrateError::CloudSync(format!("junction row missing {p1_col}")))?;
+    let e0: bool = tx.query_row(
+        &format!("SELECT EXISTS(SELECT 1 FROM {p0_table} WHERE id=?1)"),
+        [id0],
+        |r| r.get(0),
+    )?;
+    let e1: bool = tx.query_row(
+        &format!("SELECT EXISTS(SELECT 1 FROM {p1_table} WHERE id=?1)"),
+        [id1],
+        |r| r.get(0),
+    )?;
+    Ok(e0 && e1)
 }
 
 // ---------------------------------------------------------------------------
@@ -601,28 +604,28 @@ pub(super) fn junction_endpoints_exist(
 /// Record or advance a tombstone, keeping the lexicographically-larger `_hlc`
 /// (`MAX`), so a caller can never accidentally lower an existing tombstone.
 pub(super) fn upsert_tombstone(
-  tx: &Connection,
-  bucket: &Bucket,
-  cid: &str,
-  hlc: &str,
+    tx: &Connection,
+    bucket: &Bucket,
+    cid: &str,
+    hlc: &str,
 ) -> Result<()> {
-  tx.execute(
-    "INSERT INTO sync_tombstones (entity_type, entity_id, _hlc) VALUES (?1, ?2, ?3) \
+    tx.execute(
+        "INSERT INTO sync_tombstones (entity_type, entity_id, _hlc) VALUES (?1, ?2, ?3) \
          ON CONFLICT(entity_type, entity_id) DO UPDATE SET _hlc = MAX(_hlc, excluded._hlc)",
-    params![bucket.entity_type(), cid, hlc],
-  )?;
-  Ok(())
+        params![bucket.entity_type(), cid, hlc],
+    )?;
+    Ok(())
 }
 
 pub(super) fn delete_tombstone(tx: &Connection, bucket: &Bucket, cid: &str) -> Result<()> {
-  tx.execute(
-    "DELETE FROM sync_tombstones WHERE entity_type=?1 AND entity_id=?2",
-    params![bucket.entity_type(), cid],
-  )?;
-  Ok(())
+    tx.execute(
+        "DELETE FROM sync_tombstones WHERE entity_type=?1 AND entity_id=?2",
+        params![bucket.entity_type(), cid],
+    )?;
+    Ok(())
 }
 
 fn split_pk(cid: &str) -> Result<(&str, &str)> {
-  dirty::split_junction_id(cid)
-    .ok_or_else(|| CrateError::CloudSync(format!("malformed junction id {cid:?}")))
+    dirty::split_junction_id(cid)
+        .ok_or_else(|| CrateError::CloudSync(format!("malformed junction id {cid:?}")))
 }

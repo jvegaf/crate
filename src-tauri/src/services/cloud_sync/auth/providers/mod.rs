@@ -11,14 +11,14 @@ use super::provider::IdentityProvider;
 
 /// The providers enabled in this build, in display order.
 pub fn enabled_providers() -> Vec<Arc<dyn IdentityProvider>> {
-  vec![
-    Arc::new(google::GoogleProvider::new()),
-    // Arc::new(apple::AppleProvider::new()),
-    // Arc::new(microsoft::MicrosoftProvider::new()),
-  ]
+    vec![
+        Arc::new(google::GoogleProvider::new()),
+        // Arc::new(apple::AppleProvider::new()),
+        // Arc::new(microsoft::MicrosoftProvider::new()),
+    ]
 }
 
 /// Look up an enabled provider by its [`IdentityProvider::id`].
 pub fn provider_by_id(id: &str) -> Option<Arc<dyn IdentityProvider>> {
-  enabled_providers().into_iter().find(|p| p.id() == id)
+    enabled_providers().into_iter().find(|p| p.id() == id)
 }
