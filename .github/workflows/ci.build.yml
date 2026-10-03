@@ -139,7 +139,7 @@ jobs:
   # ------------------------------------------------------------------
   # Tests — Rust unit tests + frontend Vitest + Playwright E2E
   # ------------------------------------------------------------------
-  tests/rust:
+  tests-rust:
     name: Rust tests
     runs-on: ubuntu-latest
     defaults:
@@ -166,7 +166,7 @@ jobs:
       - name: Run Rust tests
         run: cargo test --features desktop
 
-  tests/frontend:
+  tests-frontend:
     name: Frontend tests (Vitest)
     runs-on: ubuntu-latest
     steps:
@@ -186,7 +186,7 @@ jobs:
       - name: Run Vitest
         run: npx vitest run --reporter=verbose
 
-  tests/e2e:
+  tests-e2e:
     name: E2E tests (Playwright)
     runs-on: ubuntu-latest
     # Only gate main development branch; allow others to pass-with-warnings
