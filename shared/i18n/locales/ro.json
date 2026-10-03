@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Eliminați această melodie din bibliotecă?} other {Eliminați {count} melodii din bibliotecă?}}",
 			"removeFromLibraryWarning": "Această acțiune nu poate fi anulată. Melodiile vor fi eliminate din toate playlisturile.",
 			"deleteTracksFromCollection": "Șterge și melodiile din colecția ta",
+			"deleteFilesFromDisk": "Șterge și fișierele de pe disc",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Ștergeți lansarea} few {Ștergeți lansările} other {Ștergeți lansările}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Ștergeți această lansare?} few {Ștergeți {count} lansări?} other {Ștergeți {count} lansări?}}",
 			"removeDiscoveryReleasesWarning": "Această acțiune nu poate fi anulată. Lanserile vor fi eliminate din toate playlisturile.",

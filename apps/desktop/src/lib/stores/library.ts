@@ -181,11 +181,12 @@ function createLibraryStore() {
 		},
 
 		/**
-		 * Delete tracks by IDs
+		 * Delete tracks by IDs. When `deleteFiles` is true the audio files are also
+		 * removed from disk (default: false, library entry only).
 		 */
-		async deleteTracks(ids: string[]) {
+		async deleteTracks(ids: string[], deleteFiles: boolean = false) {
 			try {
-				await libraryApi.deleteTracks(ids)
+				await libraryApi.deleteTracks(ids, deleteFiles)
 				update((state) => ({
 					...state,
 					tracks: state.tracks.filter((t) => !ids.includes(t.id)),

@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Rimuovere questa traccia dalla tua libreria?} other {Rimuovere {count} tracce dalla tua libreria?}}",
 			"removeFromLibraryWarning": "Questa azione non può essere annullata. Le tracce verranno rimosse da tutte le playlist.",
 			"deleteTracksFromCollection": "Elimina anche le tracce dalla tua collezione",
+			"deleteFilesFromDisk": "Elimina anche i file dal disco",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Elimina rilascio} other {Elimina rilasci}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Eliminare questo rilascio?} other {Eliminare {count} rilasci?}}",
 			"removeDiscoveryReleasesWarning": "Questa azione non può essere annullata. Le uscite verranno rimosse da tutte le playlist.",

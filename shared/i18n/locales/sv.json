@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Ta bort detta spår från ditt bibliotek?} other {Ta bort {count} spår från ditt bibliotek?}}",
 			"removeFromLibraryWarning": "Denna åtgärd kan inte ångras. Spår kommer att tas bort från alla spellistor.",
 			"deleteTracksFromCollection": "Ta även bort spår från din samling",
+			"deleteFilesFromDisk": "Ta även bort filer från disken",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Ta bort utgåva} other {Ta bort utgåvor}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Ta bort den här utgåvan?} other {Ta bort {count} utgåvor?}}",
 			"removeDiscoveryReleasesWarning": "Denna åtgärd kan inte ångras. Släppen kommer att tas bort från alla spellistor.",

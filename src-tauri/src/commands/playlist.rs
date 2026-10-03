@@ -60,7 +60,8 @@ pub async fn delete_playlist(
         let (track_ids, release_ids) = playlists.collect_associated_item_ids(&id)?;
         playlists.delete_playlist(&id)?;
         if !track_ids.is_empty() {
-            library.delete_tracks(track_ids)?;
+            // The "delete from collection" checkbox must never touch disk files.
+            library.delete_tracks(track_ids, false)?;
         }
         if !release_ids.is_empty() {
             discovery.delete_releases(release_ids)?;

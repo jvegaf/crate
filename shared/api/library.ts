@@ -46,10 +46,12 @@ export async function updateTrackMetadata(id: string, patch: TrackMetadataPatch)
 }
 
 /**
- * Delete tracks by IDs
+ * Delete tracks by IDs.
+ * @param deleteFiles - When true, the resolved audio files are also removed from disk
+ * (best-effort on the backend). Defaults to false: library entry only.
  */
-export async function deleteTracks(ids: string[]): Promise<void> {
-	return invoke<void>('delete_tracks', { ids })
+export async function deleteTracks(ids: string[], deleteFiles: boolean = false): Promise<void> {
+	return invoke<void>('delete_tracks', { ids, deleteFiles })
 }
 
 /**

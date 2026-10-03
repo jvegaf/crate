@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Вилучити цю доріжку з бібліотеки?} other {Вилучити {count} доріжок з бібліотеки?}}",
 			"removeFromLibraryWarning": "Цю дію не можна скасувати. Доріжки будуть вилучені з усіх плейлистів.",
 			"deleteTracksFromCollection": "Також видалити доріжки з вашої колекції",
+			"deleteFilesFromDisk": "Також видалити файли з диска",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Видалити видання} one {Видалити видання} few {Видалити видання} many {Видалити видань} other {Видалити видань}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Видалити це видання?} one {Видалити це видання?} few {Видалити ці {count} видання?} many {Видалити ці {count} видань?} other {Видалити ці {count} видань?}}",
 			"removeDiscoveryReleasesWarning": "Цю дію не можна скасувати. Видання будуть вилучені з усіх плейлистів.",

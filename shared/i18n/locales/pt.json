@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Remover esta faixa da sua biblioteca?} other {Remover {count} faixas da sua biblioteca?}}",
 			"removeFromLibraryWarning": "Esta ação não pode ser desfeita. As faixas serão removidas de todas as playlists.",
 			"deleteTracksFromCollection": "Também excluir faixas da sua coleção",
+			"deleteFilesFromDisk": "Também excluir arquivos do disco",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Excluir lançamento} other {Excluir lançamentos}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Excluir este lançamento?} other {Excluir {count} lançamentos?}}",
 			"removeDiscoveryReleasesWarning": "Esta ação não pode ser desfeita. Os lançamentos serão removidos de todas as playlists.",

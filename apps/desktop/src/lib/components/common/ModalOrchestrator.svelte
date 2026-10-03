@@ -140,7 +140,7 @@
 		onDeleteTag: (id: string) => Promise<void>
 		onDeleteCategory: (id: string) => Promise<void>
 		onRemoveFromPlaylist: (trackIds: string[], playlistId: string, deleteFromCollection: boolean) => Promise<void>
-		onRemoveFromLibrary: (trackIds: string[]) => Promise<void>
+		onRemoveFromLibrary: (trackIds: string[], deleteFilesFromDisk: boolean) => Promise<void>
 		onRemoveDiscoveryReleases: (releaseIds: string[]) => Promise<void>
 		onRemoveDiscoveryReleasesFromPlaylist: (
 			releaseIds: string[],
@@ -221,6 +221,7 @@
 	let activeModal = $state<ActiveModal>({ type: 'none' })
 	let pendingMergeConflicts = $state<MoveConflict[]>([])
 	let deleteTracksFromCollection = $state(false)
+	let deleteFilesFromDisk = $state(false)
 
 	// =========================================================================
 	// Modal open state tracking
@@ -251,6 +252,7 @@
 	export function closeAll() {
 		activeModal = { type: 'none' }
 		deleteTracksFromCollection = false
+		deleteFilesFromDisk = false
 	}
 
 	// Creation modals
@@ -317,6 +319,7 @@
 	}
 
 	export function openRemoveFromLibraryModal(trackIds: string[]) {
+		deleteFilesFromDisk = false
 		activeModal = { type: 'removeFromLibrary', trackIds }
 	}
 
@@ -517,11 +520,11 @@
 		}
 	}
 
-	async function handleRemoveFromLibraryConfirm() {
+	async function handleRemoveFromLibraryConfirm(deleteFilesToo: boolean) {
 		if (activeModal.type === 'removeFromLibrary') {
 			const trackIds = activeModal.trackIds
 			closeAll()
-			await onRemoveFromLibrary(trackIds)
+			await onRemoveFromLibrary(trackIds, deleteFilesToo)
 		}
 	}
 
@@ -1074,6 +1077,8 @@
 		title={$translate('modals.confirm.removeFromLibraryTitle')}
 		message={$translate('modals.confirm.removeFromLibraryMessage', { values: { count: activeModal.trackIds.length } })}
 		warnings={[$translate('modals.confirm.removeFromLibraryWarning')]}
+		checkboxLabel={$translate('modals.confirm.deleteFilesFromDisk')}
+		bind:checkboxChecked={deleteFilesFromDisk}
 		confirmLabel={$translate('common.remove')}
 		destructive={true}
 		onConfirm={handleRemoveFromLibraryConfirm}

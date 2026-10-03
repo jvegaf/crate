@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Deze track verwijderen uit je bibliotheek?} other {{count} tracks verwijderen uit je bibliotheek?}}",
 			"removeFromLibraryWarning": "Deze actie kan niet ongedaan worden gemaakt. Tracks worden uit alle afspeellijsten verwijderd.",
 			"deleteTracksFromCollection": "Tracks ook uit mijn collectie verwijderen",
+			"deleteFilesFromDisk": "Bestanden ook van schijf verwijderen",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Release verwijderen} other {Releases verwijderen}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Deze release verwijderen?} other {{count} releases verwijderen?}}",
 			"removeDiscoveryReleasesWarning": "Deze actie kan niet ongedaan worden gemaakt. Releases worden uit alle afspeellijsten verwijderd.",

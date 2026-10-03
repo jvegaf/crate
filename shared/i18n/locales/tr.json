@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Bu şarkıyı kütüphaneden kaldırmak istiyor musunuz?} other {{count} şarkıyı kütüphaneden kaldırmak istiyor musunuz?}}",
 			"removeFromLibraryWarning": "Bu işlem geri alınamaz. Şarkılar tüm çalma listelerinden kaldırılacaktır.",
 			"deleteTracksFromCollection": "Şarkıları koleksiyonundan da sil",
+			"deleteFilesFromDisk": "Dosyaları diskten de sil",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Yayını Sil} other {Yayınları Sil}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Bu yayını silmek istiyor musunuz?} other {{count} yayını silmek istiyor musunuz?}}",
 			"removeDiscoveryReleasesWarning": "Bu işlem geri alınamaz. Yayınlar tüm çalma listelerinden kaldırılacaktır.",

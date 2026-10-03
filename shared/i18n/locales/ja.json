@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {このトラックをライブラリから削除しますか？} other {{count}曲のトラックをライブラリから削除しますか？}}",
 			"removeFromLibraryWarning": "この操作は取り消せません。トラックはすべてのプレイリストから削除されます。",
 			"deleteTracksFromCollection": "あなたのコレクションからもトラックを削除",
+			"deleteFilesFromDisk": "ディスク上のファイルも削除",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {リリースを削除} other {リリースを削除}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {このリリースを削除しますか？} other {この{count}件のリリースを削除しますか？}}",
 			"removeDiscoveryReleasesWarning": "この操作は元に戻せません。リリースはすべてのプレイリストから削除されます。",

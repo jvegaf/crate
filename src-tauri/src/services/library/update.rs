@@ -1,5 +1,6 @@
 use super::*;
 use crate::services::cloud_sync::pipeline::{buckets, dirty};
+use crate::services::cloud_sync::resolution;
 use std::path::PathBuf;
 
 impl LibraryService {
@@ -264,41 +265,98 @@ impl LibraryService {
         Ok(())
     }
 
-    pub fn delete_tracks(&self, ids: Vec<String>) -> Result<()> {
+    /// Remove tracks from the library. When `delete_files` is true, the resolved audio
+    /// files are also removed from disk on a best-effort basis AFTER the DB rows are gone.
+    pub fn delete_tracks(&self, ids: Vec<String>, delete_files: bool) -> Result<()> {
         // Delete artwork files for each track
         for id in &ids {
             self.artwork_service.delete(id);
         }
 
-        let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        // The guard must be released before any fs call, so the resolved paths are
+        // computed inside the DB block and the removal happens after it closes.
+        let paths_to_delete = {
+            let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
 
-        let placeholders: Vec<String> = ids
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("?{}", i + 1))
-            .collect();
+            let placeholders: Vec<String> = ids
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
 
-        let sql = format!(
-            "DELETE FROM tracks WHERE id IN ({})",
-            placeholders.join(", ")
-        );
+            let params_refs: Vec<&dyn rusqlite::ToSql> =
+                ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            // Resolve file paths while the rows still exist, mirroring
+            // `check_track_file_exists`: synced tracks join their `relative_path`
+            // against the root's local mapping (an unmapped root resolves to nothing
+            // on this device), device-local tracks use the stored absolute path.
+            // Deduped so a file imported twice is only removed once.
+            let mut paths: Vec<PathBuf> = Vec::new();
+            if delete_files {
+                let select = format!(
+                    "SELECT file_path, library_root_id, relative_path FROM tracks WHERE id IN ({})",
+                    placeholders.join(", ")
+                );
+                let mut stmt = conn.prepare(&select)?;
+                let rows = stmt
+                    .query_map(params_refs.as_slice(), |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, Option<String>>(2)?,
+                        ))
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                drop(stmt);
 
-        let hlc = dirty::next_hlc(&conn)?;
-        for id in &ids {
-            dirty::record_tombstone(&conn, buckets::TRACKS_ENTITY, id, &hlc)?;
+                for (file_path, library_root_id, relative_path) in rows {
+                    let resolved = match (library_root_id.as_deref(), relative_path.as_deref()) {
+                        (Some(root_id), Some(relative)) => {
+                            resolution::root_mapping(&conn, root_id)?
+                                .map(|local_root| PathBuf::from(local_root).join(relative))
+                        }
+                        _ => Some(PathBuf::from(file_path)),
+                    };
+                    if let Some(path) = resolved {
+                        if !paths.contains(&path) {
+                            paths.push(path);
+                        }
+                    }
+                }
+            }
+
+            let sql = format!(
+                "DELETE FROM tracks WHERE id IN ({})",
+                placeholders.join(", ")
+            );
+
+            let hlc = dirty::next_hlc(&conn)?;
+            for id in &ids {
+                dirty::record_tombstone(&conn, buckets::TRACKS_ENTITY, id, &hlc)?;
+            }
+
+            conn.execute(&sql, params_refs.as_slice())?;
+
+            // The deleted tracks' shards, plus the cascade-deleted child buckets
+            // (playlist memberships, tag links, cues).
+            dirty::mark_dirty_track_shards(&conn, &ids)?;
+            dirty::mark_dirty(&conn, buckets::PLAYLIST_TRACKS)?;
+            dirty::mark_dirty(&conn, buckets::TRACK_TAGS)?;
+            dirty::mark_dirty(&conn, buckets::CUES)?;
+
+            paths
+        };
+
+        // Best-effort disk removal: the DB delete already succeeded, so a stuck file
+        // must not fail the command. Missing files are skipped silently.
+        for path in &paths_to_delete {
+            match std::fs::remove_file(path) {
+                Ok(()) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => log::warn!("Failed to delete audio file {path:?}: {err}"),
+            }
         }
-
-        conn.execute(&sql, params_refs.as_slice())?;
-
-        // The deleted tracks' shards, plus the cascade-deleted child buckets
-        // (playlist memberships, tag links, cues).
-        dirty::mark_dirty_track_shards(&conn, &ids)?;
-        dirty::mark_dirty(&conn, buckets::PLAYLIST_TRACKS)?;
-        dirty::mark_dirty(&conn, buckets::TRACK_TAGS)?;
-        dirty::mark_dirty(&conn, buckets::CUES)?;
 
         Ok(())
     }
@@ -403,5 +461,101 @@ mod tests {
         let reread = library.get_track(&track_a.id).unwrap();
         assert_eq!(reread.genre, updated[0].genre);
         assert_eq!(reread.url, track_a.url);
+    }
+
+    /// Seed a device-local track (no root mapping, absolute `file_path` — the fallback
+    /// branch of the delete-path resolution) pointing at `file_path`.
+    fn insert_local_track(conn: &Connection, id: &str, file_path: &std::path::Path) {
+        let mut track = test_utils::fixture_track(id, "Delete candidate", "hash-delete-candidate");
+        track.file_path = file_path.to_string_lossy().to_string();
+        test_utils::insert_sentinel_track(conn, &track);
+    }
+
+    /// Opt-in disk removal: the resolved audio file is deleted together with its row.
+    #[test]
+    fn delete_tracks_with_delete_files_removes_the_audio_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("song-a.mp3");
+        std::fs::write(&file, b"fake audio bytes").unwrap();
+
+        let conn = test_utils::make_memory_db();
+        insert_local_track(&conn, "delete-a", &file);
+        let library = library(conn, dir.path());
+
+        library
+            .delete_tracks(vec!["delete-a".to_string()], true)
+            .unwrap();
+
+        assert!(
+            !file.exists(),
+            "audio file must be gone when delete_files is true"
+        );
+        assert!(library.get_track("delete-a").is_err(), "row must be gone");
+    }
+
+    /// The default path keeps today's behavior: rows leave the library, files stay.
+    #[test]
+    fn delete_tracks_without_delete_files_keeps_the_audio_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("song-b.mp3");
+        std::fs::write(&file, b"fake audio bytes").unwrap();
+
+        let conn = test_utils::make_memory_db();
+        insert_local_track(&conn, "delete-b", &file);
+        let library = library(conn, dir.path());
+
+        library
+            .delete_tracks(vec!["delete-b".to_string()], false)
+            .unwrap();
+
+        assert!(
+            file.exists(),
+            "audio file must survive when delete_files is false"
+        );
+        assert!(library.get_track("delete-b").is_err(), "row must be gone");
+    }
+
+    /// A file already missing on disk must not surface an error: disk removal is
+    /// best-effort and `NotFound` is skipped silently.
+    #[test]
+    fn delete_tracks_with_delete_files_tolerates_missing_files() {
+        let dir = tempfile::tempdir().unwrap();
+        // Never created on purpose — only the DB row points at it.
+        let missing = dir.path().join("already-gone.mp3");
+
+        let conn = test_utils::make_memory_db();
+        insert_local_track(&conn, "delete-c", &missing);
+        let library = library(conn, dir.path());
+
+        library
+            .delete_tracks(vec!["delete-c".to_string()], true)
+            .unwrap();
+
+        assert!(library.get_track("delete-c").is_err(), "row must be gone");
+    }
+
+    /// A batched removal resolves and deletes every selected path; the per-path
+    /// dedupe cannot be exercised through the schema (`tracks.file_path` is UNIQUE,
+    /// so one file never backs two rows), but a second `remove_file` attempt would
+    /// only hit the silently-skipped NotFound branch anyway.
+    #[test]
+    fn delete_tracks_with_delete_files_removes_every_batched_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_a = dir.path().join("song-d1.mp3");
+        let file_b = dir.path().join("song-d2.mp3");
+        std::fs::write(&file_a, b"first copy").unwrap();
+        std::fs::write(&file_b, b"second copy").unwrap();
+
+        let conn = test_utils::make_memory_db();
+        insert_local_track(&conn, "delete-d1", &file_a);
+        insert_local_track(&conn, "delete-d2", &file_b);
+        let library = library(conn, dir.path());
+
+        library
+            .delete_tracks(vec!["delete-d1".to_string(), "delete-d2".to_string()], true)
+            .unwrap();
+
+        assert!(!file_a.exists(), "first batched file must be gone");
+        assert!(!file_b.exists(), "second batched file must be gone");
     }
 }

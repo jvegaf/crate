@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Usunąć tę ścieżkę z biblioteki?} other {Usunąć {count} ścieżek z biblioteki?}}",
 			"removeFromLibraryWarning": "Tej czynności nie można cofnąć. Ścieżki zostaną usunięte ze wszystkich playlist.",
 			"deleteTracksFromCollection": "Usuń również ścieżki z twojej kolekcji",
+			"deleteFilesFromDisk": "Usuń również pliki z dysku",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Usuń wydanie} other {Usuń wydania}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Usunąć to wydanie?} other {Usunąć {count} wydania?}}",
 			"removeDiscoveryReleasesWarning": "Tej czynności nie można cofnąć. Wydania zostaną usunięte ze wszystkich playlist.",

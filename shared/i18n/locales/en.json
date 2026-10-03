@@ -723,6 +723,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {Remove this track from your library?} other {Remove {count} tracks from your library?}}",
 			"removeFromLibraryWarning": "This action cannot be undone. Tracks will be removed from all playlists.",
 			"deleteTracksFromCollection": "Also delete tracks from your collection",
+			"deleteFilesFromDisk": "Also delete files from disk",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Delete Release} other {Delete Releases}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Delete this release?} other {Delete {count} releases?}}",
 			"removeDiscoveryReleasesWarning": "This action cannot be undone. Releases will be removed from all playlists.",

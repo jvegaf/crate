@@ -731,6 +731,7 @@
 			"removeFromLibraryMessage": "{count, plural, =0 {Retirer cette piste de votre bibliothèque ?} =1 {Retirer cette piste de votre bibliothèque ?} other {Retirer {count} pistes de votre bibliothèque ?}}",
 			"removeFromLibraryWarning": "Cette action est irréversible. Les pistes seront retirées de toutes les playlists.",
 			"deleteTracksFromCollection": "Supprimer également les pistes de ma collection",
+			"deleteFilesFromDisk": "Supprimer également les fichiers du disque",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Supprimer la sortie} other {Supprimer les sorties}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {Supprimer cette sortie ?} other {Supprimer {count} sorties ?}}",
 			"removeDiscoveryReleasesWarning": "Cette action est irréversible. Les sorties seront supprimées de toutes les playlists.",

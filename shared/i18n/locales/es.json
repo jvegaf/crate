@@ -730,6 +730,7 @@
 			"removeFromLibraryMessage": "{count, plural, =1 {¿Quitar esta pista de tu biblioteca?} other {¿Quitar {count} pistas de tu biblioteca?}}",
 			"removeFromLibraryWarning": "Esta acción no se puede deshacer. Las pistas se quitarán de todas las listas de reproducción.",
 			"deleteTracksFromCollection": "También eliminar pistas de mi colección",
+			"deleteFilesFromDisk": "También eliminar los archivos del disco",
 			"removeDiscoveryReleasesTitle": "{count, plural, =1 {Eliminar lanzamiento} other {Eliminar lanzamientos}}",
 			"removeDiscoveryReleasesMessage": "{count, plural, =1 {¿Eliminar este lanzamiento?} other {¿Eliminar {count} lanzamientos?}}",
 			"removeDiscoveryReleasesWarning": "Esta acción no se puede deshacer. Los lanzamientos se eliminarán de todas las listas de reproducción.",

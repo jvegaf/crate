@@ -53,8 +53,12 @@ pub async fn update_track_metadata(
 }
 
 #[tauri::command]
-pub async fn delete_tracks(ids: Vec<String>, library: State<'_, LibraryService>) -> Result<()> {
-    library.delete_tracks(ids)
+pub async fn delete_tracks(
+    ids: Vec<String>,
+    delete_files: bool,
+    library: State<'_, LibraryService>,
+) -> Result<()> {
+    library.delete_tracks(ids, delete_files)
 }
 
 #[tauri::command]

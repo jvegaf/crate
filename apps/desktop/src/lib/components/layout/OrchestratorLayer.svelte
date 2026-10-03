@@ -463,8 +463,8 @@
 		uiStore.clearReleaseSelection()
 		await playlistsStore.load()
 	}}
-	onRemoveFromLibrary={async (trackIds) => {
-		await libraryStore.deleteTracks(trackIds)
+	onRemoveFromLibrary={async (trackIds, deleteFilesFromDisk) => {
+		await libraryStore.deleteTracks(trackIds, deleteFilesFromDisk)
 		uiStore.clearSelection()
 		if (selectedPlaylistId) {
 			await libraryStore.loadPlaylistTracks(selectedPlaylistId)
