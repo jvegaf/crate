@@ -1,6 +1,6 @@
 [package]
 name = "crate-app"
-version = "0.3.0"
+version = "0.4.0"
 description = "Cross-platform DJ library manager with music discovery, track analysis, and USB export"
 authors = ["you"]
 edition = "2021"
@@ -66,7 +66,9 @@ souvlaki = { version = "0.8", optional = true }
 raw-window-handle = { version = "0.6", optional = true }
 
 # Database
-rusqlite = { version = "0.38.0", features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { version = "0.38.0", features = [
+  "bundled-sqlcipher-vendored-openssl",
+] }
 
 # Audio (desktop-only: playback, decoding, metadata extraction)
 rodio = { version = "0.21.1", optional = true }
@@ -89,7 +91,11 @@ futures = "0.3"
 bytes = "1"
 
 # Image processing
-image = { version = "0.25.9", default-features = false, features = ["png", "jpeg", "webp"] }
+image = { version = "0.25.9", default-features = false, features = [
+  "png",
+  "jpeg",
+  "webp",
+] }
 # Transitive dep of `image` (via zune-jpeg), pinned: zune-core 0.5.2 changed its no-op log
 # macros to expand to nothing, which breaks every published zune-jpeg 0.5.x (`warn!(...)` in
 # tail-expression position no longer parses). Drop this pin once a zune-jpeg built against the
@@ -159,7 +165,10 @@ objc2-foundation = { version = "0.3.2", features = [
   "NSOperation",
   "block2",
 ] }
-objc2-avf-audio = { version = "0.3.2", features = ["AVAudioSession", "AVAudioSessionTypes"] }
+objc2-avf-audio = { version = "0.3.2", features = [
+  "AVAudioSession",
+  "AVAudioSessionTypes",
+] }
 # `block2` + `dispatch2` + `objc2-core-media` are needed for AVPlayer.addPeriodicTimeObserver
 # (block handler, dispatch-queue param type, and CMTime in the player's time methods).
 objc2-av-foundation = { version = "0.3.2", features = [
@@ -186,7 +195,10 @@ objc2-media-player = { version = "0.3.2", features = [
 # that the Rust App Check exchange (services/cloud_sync/backend/firebase/appcheck/app_attest.rs)
 # trades for a Firebase App Check token. `block2` backs the generateKey / attestKey /
 # generateAssertion completion handlers. Reconcile against `cargo check --target aarch64-apple-ios`.
-objc2-device-check = { version = "0.3.2", features = ["DCAppAttestService", "block2"] }
+objc2-device-check = { version = "0.3.2", features = [
+  "DCAppAttestService",
+  "block2",
+] }
 # Native Sign in with Apple (App Store Guideline 4.8): ASAuthorizationController /
 # ASAuthorizationAppleIDProvider mint an Apple identity token that the Rust auth flow exchanges into
 # Firebase via signInWithIdp (services/cloud_sync/auth/apple_native.rs). `default-features = false` +
@@ -229,4 +241,3 @@ android_logger = "0.14"
 tempfile = "3"
 serial_test = "3"
 wiremock = "0.6"
-

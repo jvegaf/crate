@@ -1,28 +1,28 @@
 {
-	"productName": "Crate Staging",
-	"identifier": "com.bbx-audio.crate.staging",
-	"bundle": {
-		"createUpdaterArtifacts": true,
-		"icon": [
-			"icons/staging/32x32.png",
-			"icons/staging/128x128.png",
-			"icons/staging/128x128@2x.png",
-			"icons/staging/icon.icns",
-			"icons/staging/icon.ico"
-		]
-	},
-	"app": {
-		"windows": [
-			{
-				"title": "Crate [STAGING]"
-			}
-		]
-	},
-	"plugins": {
-		"updater": {
-			"endpoints": [
-				"https://storage.googleapis.com/crate-releases/staging/latest.json"
-			]
-		}
-	}
+  "productName": "Crate Staging",
+  "identifier": "com.bbx-audio.crate.staging",
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons/staging/32x32.png",
+      "icons/staging/128x128.png",
+      "icons/staging/128x128@2x.png",
+      "icons/staging/icon.icns",
+      "icons/staging/icon.ico"
+    ]
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Crate [STAGING]"
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://storage.googleapis.com/crate-releases/staging/latest.json"
+      ]
+    }
+  }
 }
