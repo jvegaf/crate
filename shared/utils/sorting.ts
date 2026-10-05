@@ -9,6 +9,7 @@ import type {
 } from '../types'
 import { COLOR_SORT_ORDER } from '../types'
 import { getTrackOriginFolder } from './tracklistColumns'
+import { getStoreName } from './storeUrl'
 
 /**
  * Sort tracks by the given configuration
@@ -21,18 +22,33 @@ export function sortTracks(tracks: Track[], config: SortConfig): Track[] {
 		const valueA = getTrackSortValue(a, field)
 		const valueB = getTrackSortValue(b, field)
 
-		// Handle nulls - push them to the end
-		if (valueA === null && valueB === null) return 0
-		if (valueA === null) return 1
-		if (valueB === null) return -1
+		const isEmpty = (v: string | number | null): boolean =>
+			v === null || v === undefined || (typeof v === 'string' && v === '')
 
-		// Compare values
-		if (typeof valueA === 'string' && typeof valueB === 'string') {
-			return valueA.localeCompare(valueB) * multiplier
+		// For rating, 0 means "no rating" and should group with empties
+		const isEmptyOrZero = (v: string | number | null): boolean =>
+			isEmpty(v) || (field === 'rating' && v === 0)
+
+		const aEmpty = isEmptyOrZero(valueA)
+		const bEmpty = isEmptyOrZero(valueB)
+
+		// Both empty → equal
+		if (aEmpty && bEmpty) return 0
+
+		// Empty vs non-empty: direction-aware (asc → end, desc → start)
+		if (aEmpty && !bEmpty) return multiplier
+		if (!aEmpty && bEmpty) return -multiplier
+
+		// Both non-empty, non-zero: normal comparison
+		// At this point valueA and valueB are guaranteed non-null
+		const valA = valueA!
+		const valB = valueB!
+		if (typeof valA === 'string' && typeof valB === 'string') {
+			return valA.localeCompare(valB) * multiplier
 		}
 
-		if (valueA < valueB) return -1 * multiplier
-		if (valueA > valueB) return 1 * multiplier
+		if (valA < valB) return -1 * multiplier
+		if (valA > valB) return 1 * multiplier
 		return 0
 	})
 }
@@ -70,6 +86,10 @@ function getTrackSortValue(track: Track, field: TrackSortField): string | number
 			// No color goes to end (use 999), otherwise use ROYGBIV order
 			if (!track.color) return 999
 			return COLOR_SORT_ORDER[track.color as TrackColor] ?? 999
+		case 'year':
+			return track.year
+		case 'provider':
+			return getStoreName(track.url)?.toLowerCase() ?? null
 		default:
 			return null
 	}

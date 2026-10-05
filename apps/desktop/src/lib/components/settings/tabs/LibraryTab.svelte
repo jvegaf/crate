@@ -278,7 +278,10 @@
 	{#if showRecalcConfirm}
 		<div
 			class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+			role="button"
+			tabindex="-1"
 			onclick={(e) => e.target === e.currentTarget && (showRecalcConfirm = false)}
+			onkeydown={(e) => e.key === 'Escape' && (showRecalcConfirm = false)}
 		>
 			<div class="w-full max-w-sm rounded-lg border border-stroke-subtle bg-surface-1 p-6 shadow-xl">
 				<Text variant="body-2" class="mb-4">{$translate('settings.library.recalcConfirm')}</Text>

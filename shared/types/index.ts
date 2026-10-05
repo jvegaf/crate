@@ -478,6 +478,8 @@ export type TrackSortField =
 	| 'label'
 	| 'bitrate'
 	| 'origin'
+	| 'year'
+	| 'provider'
 
 export type TracklistColumnId =
 	| 'color'

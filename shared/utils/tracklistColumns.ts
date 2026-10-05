@@ -29,11 +29,11 @@ export const TRACKLIST_COLUMN_DEFINITIONS: TracklistColumnDefinition[] = [
 	{ id: 'key', labelKey: 'library.columns.key', width: '60px', sortable: true, defaultVisible: true },
 	{ id: 'duration_ms', labelKey: 'library.columns.time', width: '80px', sortable: true, defaultVisible: true },
 	{ id: 'bitrate', labelKey: 'library.columns.bitrate', width: '90px', sortable: true, defaultVisible: false },
-	{ id: 'year', labelKey: 'library.columns.year', width: '56px', sortable: false, defaultVisible: false },
+	{ id: 'year', labelKey: 'library.columns.year', width: '56px', sortable: true, defaultVisible: false },
 	{ id: 'date_added', labelKey: 'library.columns.dateAdded', width: '110px', sortable: true, defaultVisible: false },
-	{ id: 'provider', labelKey: 'library.columns.provider', width: '100px', sortable: false, defaultVisible: true },
+	{ id: 'provider', labelKey: 'library.columns.provider', width: '100px', sortable: true, defaultVisible: true },
 	{ id: 'tags', labelKey: 'library.columns.tags', width: '1fr', sortable: false, defaultVisible: true },
-	{ id: 'rating', labelKey: 'library.columns.rating', width: '72px', sortable: false, defaultVisible: true },
+	{ id: 'rating', labelKey: 'library.columns.rating', width: '72px', sortable: true, defaultVisible: true},
 ]
 
 const definitionsById = new Map(TRACKLIST_COLUMN_DEFINITIONS.map((definition) => [definition.id, definition]))
