@@ -387,7 +387,8 @@
 			"year": "Anno",
 			"dateAdded": "Aggiunto il",
 			"tags": "Tag",
-			"rating": "Valutazione"
+			"rating": "Valutazione",
+			"provider": "Fornitore"
 		},
 		"columnMenu": {
 			"reset": "Ripristina colonne predefinite",

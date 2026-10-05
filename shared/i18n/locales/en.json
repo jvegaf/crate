@@ -385,7 +385,8 @@
 			"bitrate": "Bitrate",
 			"year": "Year",
 			"dateAdded": "Date Added",
-			"rating": "Rating"
+			"rating": "Rating",
+			"provider": "Provider"
 		},
 		"track": "track",
 		"tracks": "tracks",

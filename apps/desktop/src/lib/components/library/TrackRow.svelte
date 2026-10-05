@@ -12,6 +12,7 @@
 		nextRatingSelection,
 	} from '$shared/utils'
 	import { getTrackOriginFolder, visibleTracklistColumns, tracklistGridTemplate } from '$shared/utils/tracklistColumns'
+	import { getStoreName } from '$shared/utils/storeUrl'
 	import { TagChip } from '$lib/components/tags'
 	import Icon from '$lib/components/common/Icon.svelte'
 	import { AlbumArt, AlbumArtModal, Spinner, Text, Tooltip } from '$lib/components/common'
@@ -254,6 +255,11 @@
 		{:else if column.id === 'date_added'}
 			<div class="text-text-secondary tabular-nums">
 				{formatDate(track.date_added, $dateFormat, $language)}
+			</div>
+		{:else if column.id === 'provider'}
+			<!-- Provider (store name from WOAR URL) -->
+			<div class="truncate text-text-secondary">
+				{getStoreName(track.url) ?? ''}
 			</div>
 		{:else if column.id === 'tags'}
 			<!-- Tags -->

@@ -387,7 +387,8 @@
 			"year": "Rok",
 			"dateAdded": "Data dodania",
 			"tags": "Tagi",
-			"rating": "Ocena"
+			"rating": "Ocena",
+			"provider": "Dostawca"
 		},
 		"columnMenu": {
 			"reset": "Przywróć domyślne kolumny",

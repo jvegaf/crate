@@ -496,6 +496,7 @@ export type TracklistColumnId =
 	| 'date_added'
 	| 'tags'
 	| 'rating'
+	| 'provider'
 
 export interface TracklistColumnPref {
 	id: TracklistColumnId

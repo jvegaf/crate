@@ -387,7 +387,8 @@
 			"year": "År",
 			"dateAdded": "Tillagd",
 			"tags": "Taggar",
-			"rating": "Betyg"
+			"rating": "Betyg",
+			"provider": "Leverantör"
 		},
 		"columnMenu": {
 			"reset": "Återställ standardkolumner",

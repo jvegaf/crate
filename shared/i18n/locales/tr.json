@@ -387,7 +387,8 @@
 			"year": "Yıl",
 			"dateAdded": "Eklenme tarihi",
 			"tags": "Etiketler",
-			"rating": "Değerlendirme"
+			"rating": "Değerlendirme",
+			"provider": "Sağlayıcı"
 		},
 		"columnMenu": {
 			"reset": "Varsayılan sütunlara sıfırla",

@@ -387,7 +387,8 @@
 			"year": "Ano",
 			"dateAdded": "Adicionado em",
 			"tags": "Tags",
-			"rating": "Classificação"
+			"rating": "Classificação",
+			"provider": "Fornecedor"
 		},
 		"columnMenu": {
 			"reset": "Redefinir colunas padrão",

@@ -387,7 +387,8 @@
 			"year": "Jaar",
 			"dateAdded": "Toegevoegd op",
 			"tags": "Tags",
-			"rating": "Beoordeling"
+			"rating": "Beoordeling",
+			"provider": "Aanbieder"
 		},
 		"columnMenu": {
 			"reset": "Standaardkolommen herstellen",

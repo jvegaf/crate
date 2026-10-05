@@ -387,7 +387,8 @@
 			"year": "An",
 			"dateAdded": "Adăugat la",
 			"tags": "Etichete",
-			"rating": "Evaluare"
+			"rating": "Evaluare",
+			"provider": "Furnizor"
 		},
 		"columnMenu": {
 			"reset": "Resetează coloanele la valorile implicite",

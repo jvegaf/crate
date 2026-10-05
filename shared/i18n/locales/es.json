@@ -385,7 +385,8 @@
 			"year": "Año",
 			"dateAdded": "Añadido",
 			"tags": "Etiquetas",
-			"rating": "Calificación"
+			"rating": "Calificación",
+			"provider": "Proveedor"
 		},
 		"columnMenu": {
 			"reset": "Restablecer columnas predeterminadas",

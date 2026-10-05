@@ -387,7 +387,8 @@
 			"year": "Jahr",
 			"dateAdded": "Hinzugefügt am",
 			"tags": "Tags",
-			"rating": "Bewertung"
+			"rating": "Bewertung",
+			"provider": "Anbieter"
 		},
 		"columnMenu": {
 			"reset": "Standardspalten wiederherstellen",

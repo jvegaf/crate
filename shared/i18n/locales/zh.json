@@ -387,7 +387,8 @@
 			"year": "年份",
 			"dateAdded": "添加日期",
 			"tags": "标签",
-			"rating": "评分"
+			"rating": "评分",
+			"provider": "提供商"
 		},
 		"columnMenu": {
 			"reset": "重置为默认列",

@@ -387,7 +387,8 @@
 			"year": "Année",
 			"dateAdded": "Date d’ajout",
 			"tags": "Tags",
-			"rating": "Note"
+			"rating": "Note",
+			"provider": "Fournisseur"
 		},
 		"columnMenu": {
 			"reset": "Rétablir les colonnes par défaut",

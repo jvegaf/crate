@@ -387,7 +387,8 @@
 			"year": "年",
 			"dateAdded": "追加日",
 			"tags": "タグ",
-			"rating": "評価"
+			"rating": "評価",
+			"provider": "プロバイダー"
 		},
 		"columnMenu": {
 			"reset": "列を既定値に戻す",

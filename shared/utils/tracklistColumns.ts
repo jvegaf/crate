@@ -31,6 +31,7 @@ export const TRACKLIST_COLUMN_DEFINITIONS: TracklistColumnDefinition[] = [
 	{ id: 'bitrate', labelKey: 'library.columns.bitrate', width: '90px', sortable: true, defaultVisible: false },
 	{ id: 'year', labelKey: 'library.columns.year', width: '56px', sortable: false, defaultVisible: false },
 	{ id: 'date_added', labelKey: 'library.columns.dateAdded', width: '110px', sortable: true, defaultVisible: false },
+	{ id: 'provider', labelKey: 'library.columns.provider', width: '100px', sortable: false, defaultVisible: true },
 	{ id: 'tags', labelKey: 'library.columns.tags', width: '1fr', sortable: false, defaultVisible: true },
 	{ id: 'rating', labelKey: 'library.columns.rating', width: '72px', sortable: false, defaultVisible: true },
 ]

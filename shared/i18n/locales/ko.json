@@ -387,7 +387,8 @@
 			"year": "연도",
 			"dateAdded": "추가일",
 			"tags": "태그",
-			"rating": "평가"
+			"rating": "평가",
+			"provider": "제공자"
 		},
 		"columnMenu": {
 			"reset": "기본 열로 재설정",
