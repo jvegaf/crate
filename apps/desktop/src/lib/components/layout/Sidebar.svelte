@@ -150,10 +150,14 @@
 
 	<!-- Library -->
 	<div class="mx-0 border-t border-stroke px-2 pt-6">
-		<div class="-mx-0 flex items-center px-3 py-1.5">
+		<button
+			type="button"
+			class="-mx-0 flex w-full items-center px-3 py-1.5 hover:cursor-pointer"
+			onclick={() => onLibraryClick?.()}
+		>
 			<Text variant="header-4">{$translate($activeView === 'discovery' ? 'nav.discovery' : 'nav.library')}</Text>
 			<Text variant="caption" class="mr-1 ml-auto">{trackCount}</Text>
-		</div>
+		</button>
 	</div>
 
 	<!-- Section tabs + contextual create button -->
