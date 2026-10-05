@@ -152,11 +152,13 @@
 	<div class="mx-0 border-t border-stroke px-2 pt-6">
 		<button
 			type="button"
-			class="-mx-0 flex w-full items-center px-3 py-1.5 hover:cursor-pointer"
+			class="-mx-0 flex w-full items-center gap-2 rounded px-3 py-1.5 text-text-secondary transition-colors select-none hover:cursor-pointer hover:bg-surface-2 hover:text-text-primary"
 			onclick={() => onLibraryClick?.()}
 		>
-			<Text variant="header-4">{$translate($activeView === 'discovery' ? 'nav.discovery' : 'nav.library')}</Text>
-			<Text variant="caption" class="mr-1 ml-auto">{trackCount}</Text>
+			<Text as="span" truncate class="flex-1 text-left"
+				>{$translate($activeView === 'discovery' ? 'nav.discovery' : 'nav.library')}</Text
+			>
+			<Text variant="caption" class="mr-1">{trackCount}</Text>
 		</button>
 	</div>
 
