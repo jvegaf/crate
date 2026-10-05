@@ -71,6 +71,7 @@
 		onTrackSetColor: (color: TrackColor | null, tracks: Track[]) => void
 		onTrackAnalyze: (tracks: Track[]) => void
 		onTrackToggleTag?: (tracks: Track[], tagId: string, assigned: boolean) => void
+		onTrackCreatePlaylistWithTracks?: (tracks: Track[]) => void
 
 		// Playlist callbacks
 		onPlaylistCreatePlaylist: (playlist: Playlist) => void
@@ -168,6 +169,7 @@
 		onTrackSetColor,
 		onTrackAnalyze,
 		onTrackToggleTag,
+		onTrackCreatePlaylistWithTracks,
 		onPlaylistCreatePlaylist,
 		onPlaylistCreateSmartPlaylist,
 		onPlaylistCreateFolder,
@@ -507,6 +509,14 @@
 		}
 	}
 
+	function handleTrackCreatePlaylistWithTracks() {
+		if (activeMenu.type === 'track') {
+			const tracks = activeMenu.tracks
+			closeAll()
+			onTrackCreatePlaylistWithTracks?.(tracks)
+		}
+	}
+
 	// Playlist handlers
 	function handlePlaylistCreatePlaylist(playlist: Playlist) {
 		closeAll()
@@ -843,6 +853,7 @@
 		onClosed={handleMenuClosed}
 		onRevealInExplorer={handleTrackRevealInExplorer}
 		onAddToPlaylist={handleTrackAddToPlaylist}
+		onCreatePlaylistWithTracks={handleTrackCreatePlaylistWithTracks}
 		onRemoveFromPlaylist={handleTrackRemoveFromPlaylist}
 		onRemoveFromLibrary={handleTrackRemoveFromLibrary}
 		onRelocate={handleTrackRelocate}

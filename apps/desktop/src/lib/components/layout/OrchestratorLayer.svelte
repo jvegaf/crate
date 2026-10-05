@@ -32,6 +32,7 @@
 	import { discoveryPlaylistStore } from '$shared/stores/discoveryPlaylist'
 	import { translate } from '$shared/i18n'
 	import { extractBeatportTrackId } from '$shared/utils/beatport'
+	import { toastPlaylistAdd } from '$shared/utils/playlistToast'
 	import { setMenuItemEnabled } from '$shared/api/app'
 	import { openUrl } from '@tauri-apps/plugin-opener'
 	import * as discoveryApi from '$shared/api/discovery'
@@ -100,6 +101,7 @@
 	let purchaseRelease = $state<DiscoveryRelease | null>(null)
 	let mergeReleases = $state<DiscoveryRelease[] | null>(null)
 	let exportReleases = $state<DiscoveryRelease[] | null>(null)
+	let pendingTracksForPlaylist = $state<Track[] | null>(null)
 
 	// =============================================================================
 	// Derived
@@ -231,6 +233,10 @@
 			tagId,
 			assigned
 		)}
+	onTrackCreatePlaylistWithTracks={(tracks) => {
+		pendingTracksForPlaylist = tracks
+		modalOrchestrator.openCreatePlaylistModal(null)
+	}}
 	onPlaylistCreatePlaylist={(p) => modalOrchestrator.openCreatePlaylistModal(p.id)}
 	onPlaylistCreateSmartPlaylist={(p) => modalOrchestrator.openCreateSmartPlaylistModal(p.id, p.context)}
 	onPlaylistCreateFolder={(p) => modalOrchestrator.openCreateFolderModal(p.id)}
@@ -341,6 +347,21 @@
 			if (context === 'library') {
 				await libraryStore.loadPlaylistTracks(playlist.id)
 			}
+			// Add pending tracks from context menu "New Playlist..." action
+			if (pendingTracksForPlaylist && pendingTracksForPlaylist.length > 0) {
+				const trackIds = pendingTracksForPlaylist.map((t) => t.id)
+				pendingTracksForPlaylist = null
+				const result = await playlistsStore.addTracks(playlist.id, trackIds)
+				toastPlaylistAdd(result, playlist.name)
+				// Reload to show the newly added tracks in the tracklist
+				if (context === 'library') {
+					await libraryStore.loadPlaylistTracks(playlist.id)
+				}
+			} else {
+				pendingTracksForPlaylist = null
+			}
+		} else {
+			pendingTracksForPlaylist = null
 		}
 		return playlist
 	}}
