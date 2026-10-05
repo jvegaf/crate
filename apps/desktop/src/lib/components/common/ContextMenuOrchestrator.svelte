@@ -146,6 +146,7 @@
 		onDiscoveryTrackLikeToggle: (release: DiscoveryRelease, trackIndex: number) => void
 		onDiscoveryTrackPlayPreview: (release: DiscoveryRelease, trackIndex: number) => void
 		onDiscoveryTrackAddToPlaylist?: (playlistId: string, tracks: DiscoveryTrack[]) => void
+		onDiscoveryTrackCreatePlaylistWithTracks?: (tracks: DiscoveryTrack[]) => void
 		onDiscoveryTrackRemoveFromPlaylist?: (playlistId: string, tracks: DiscoveryTrack[]) => void
 		onDiscoveryTrackToggleTag?: (tracks: DiscoveryTrack[], tagId: string, assigned: boolean) => void
 
@@ -216,6 +217,7 @@
 		onDiscoveryTrackLikeToggle,
 		onDiscoveryTrackPlayPreview,
 		onDiscoveryTrackAddToPlaylist,
+		onDiscoveryTrackCreatePlaylistWithTracks,
 		onDiscoveryTrackRemoveFromPlaylist,
 		onDiscoveryTrackToggleTag,
 		onClose,
@@ -796,6 +798,14 @@
 		}
 	}
 
+	function handleDiscoveryTrackCreatePlaylistWithTracks() {
+		if (activeMenu.type === 'discoveryTrack') {
+			const { tracks } = activeMenu
+			closeAll()
+			onDiscoveryTrackCreatePlaylistWithTracks?.(tracks)
+		}
+	}
+
 	function handleDiscoveryTrackRemoveFromPlaylist() {
 		if (activeMenu.type === 'discoveryTrack' && currentPlaylistId) {
 			const { tracks } = activeMenu
@@ -1075,6 +1085,7 @@
 		onLikeToggle={handleDiscoveryTrackLikeToggle}
 		onPlayPreview={handleDiscoveryTrackPlayPreview}
 		onAddToPlaylist={handleDiscoveryTrackAddToPlaylist}
+		onCreatePlaylistWithTracks={handleDiscoveryTrackCreatePlaylistWithTracks}
 		onRemoveFromPlaylist={currentPlaylistId ? handleDiscoveryTrackRemoveFromPlaylist : undefined}
 		onToggleTag={handleDiscoveryTrackToggleTag}
 	/>

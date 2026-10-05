@@ -28,6 +28,7 @@
 		onLikeToggle: () => void
 		onPlayPreview: () => void
 		onAddToPlaylist?: (playlistId: string) => void
+		onCreatePlaylistWithTracks?: (tracks: DiscoveryTrack[]) => void
 		onRemoveFromPlaylist?: () => void
 		onToggleTag?: (tagId: string, assigned: boolean) => void
 	}
@@ -47,6 +48,7 @@
 		onLikeToggle,
 		onPlayPreview,
 		onAddToPlaylist,
+		onCreatePlaylistWithTracks,
 		onRemoveFromPlaylist,
 		onToggleTag,
 	}: Props = $props()
@@ -110,11 +112,26 @@
 		const organize: ContextMenuItem[] = []
 		if (onAddToPlaylist) {
 			const playlistItems = buildPlaylistMenuItems(playlists, (playlistId) => () => onAddToPlaylist(playlistId))
+			const playlistSubmenu: ContextMenuItem[] = []
+			if (onCreatePlaylistWithTracks) {
+				playlistSubmenu.push({
+					id: 'new-playlist',
+					label: get(translate)('contextMenu.newPlaylist'),
+					icon: 'plus',
+					action: () => onCreatePlaylistWithTracks(tracks),
+				})
+			}
+			if (playlistItems.length > 0) {
+				if (playlistSubmenu.length > 0) {
+					playlistSubmenu.push({ id: 'new-playlist-divider', label: '', divider: true })
+				}
+				playlistSubmenu.push(...playlistItems)
+			}
 			organize.push({
 				id: 'add-to-playlist',
 				label: get(translate)('contextMenu.addToPlaylist'),
 				icon: 'playlist',
-				...(playlistItems.length > 0 ? { submenu: playlistItems } : { disabled: true }),
+				...(playlistSubmenu.length > 0 ? { submenu: playlistSubmenu } : { disabled: true }),
 			})
 		}
 		if (onToggleTag) {

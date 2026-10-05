@@ -659,6 +659,7 @@
 		"viewInFileManager": "在文件管理器中显示",
 		"viewOnStore": "在 {store} 查看",
 		"viewInStore": "在商店查看",
+		"newPlaylist": "新建播放列表…",
 		"addToPlaylist": "添加到播放列表",
 		"setColor": "设置颜色",
 		"removeColor": "移除颜色",

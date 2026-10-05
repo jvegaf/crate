@@ -5,6 +5,7 @@
 		Track,
 		DiscoveryRelease,
 		DiscoveryReleaseCreate,
+		DiscoveryTrack,
 		ImportResultWithDuplicates,
 		Playlist,
 		TagCategory,
@@ -83,7 +84,7 @@
 		exportController,
 		playlistController,
 		onDiscoveryTrackPlayPreview,
-		onEditorSave,
+		onEditorSave: _onEditorSave,
 	}: Props = $props()
 
 	// =============================================================================
@@ -102,6 +103,7 @@
 	let mergeReleases = $state<DiscoveryRelease[] | null>(null)
 	let exportReleases = $state<DiscoveryRelease[] | null>(null)
 	let pendingTracksForPlaylist = $state<Track[] | null>(null)
+	let pendingDiscoveryTracksForPlaylist = $state<DiscoveryTrack[] | null>(null)
 
 	// =============================================================================
 	// Derived
@@ -317,6 +319,10 @@
 			tracks.map((t) => t.id)
 		)
 	}}
+	onDiscoveryTrackCreatePlaylistWithTracks={(tracks) => {
+		pendingDiscoveryTracksForPlaylist = tracks
+		modalOrchestrator.openCreatePlaylistModal(null)
+	}}
 	onDiscoveryTrackRemoveFromPlaylist={async (playlistId, tracks) => {
 		const trackIds = tracks.map((t) => t.id)
 		await playlistsStore.removeDiscoveryTracks(playlistId, trackIds)
@@ -360,8 +366,21 @@
 			} else {
 				pendingTracksForPlaylist = null
 			}
+			// Add pending discovery tracks from context menu "New Playlist..." action
+			if (pendingDiscoveryTracksForPlaylist && pendingDiscoveryTracksForPlaylist.length > 0) {
+				const trackIds = pendingDiscoveryTracksForPlaylist.map((t) => t.id)
+				pendingDiscoveryTracksForPlaylist = null
+				const result = await playlistsStore.addDiscoveryTracks(playlist.id, trackIds)
+				toastPlaylistAdd(result, playlist.name)
+				if (context === 'library') {
+					await libraryStore.loadPlaylistTracks(playlist.id)
+				}
+			} else {
+				pendingDiscoveryTracksForPlaylist = null
+			}
 		} else {
 			pendingTracksForPlaylist = null
+			pendingDiscoveryTracksForPlaylist = null
 		}
 		return playlist
 	}}
