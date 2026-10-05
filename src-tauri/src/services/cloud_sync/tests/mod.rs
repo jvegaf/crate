@@ -26,8 +26,8 @@ mod convergence;
 fn new_device(node_id: u32) -> Connection {
     let conn = Connection::open_in_memory().unwrap();
     conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-    for sql in get_migrations() {
-        conn.execute_batch(sql).unwrap();
+    for migration in get_migrations() {
+        conn.execute_batch(migration.sql).unwrap();
     }
     // node_id is stored as 8 hex chars (how hlc::load_node_id parses it).
     conn.execute(

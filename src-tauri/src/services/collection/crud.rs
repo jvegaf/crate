@@ -421,8 +421,8 @@ mod tests {
     fn service() -> CollectionService {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        for sql in crate::db::schema::get_migrations() {
-            conn.execute_batch(sql).unwrap();
+        for migration in crate::db::schema::get_migrations() {
+            conn.execute_batch(migration.sql).unwrap();
         }
         CollectionService::new(Arc::new(Mutex::new(conn)), PathBuf::new())
     }

@@ -58,12 +58,13 @@ fn apply_migrations(conn: &Connection) {
     )
     .expect("failed to create schema_version");
 
-    for (idx, sql) in get_migrations().iter().enumerate() {
+    for (idx, migration) in get_migrations().iter().enumerate() {
         let version = idx as i32 + 1;
         let tx = conn
             .unchecked_transaction()
             .expect("failed to begin migration transaction");
-        tx.execute_batch(sql).expect("failed to run migration");
+        tx.execute_batch(migration.sql)
+            .expect("failed to run migration");
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
             [version],

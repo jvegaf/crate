@@ -99,9 +99,13 @@ cargo check --target aarch64-apple-ios --no-default-features --features mobile  
    `compile_error!` rejects any build that is neither desktop nor iOS/Android.
 5. **Database.** One `Arc<Mutex<Connection>>` (rusqlite with bundled SQLCipher); no pool, no sqlx,
    no `migrations/` directory. Lock with `self.conn.lock().map_err(|_| CrateError::LockPoisoned)?`,
-   never `.unwrap()`. **Never hold the guard across an `.await`.** Migrations are SQL strings
-   appended to `get_migrations()` in `src-tauri/src/db/schema.rs` and versioned by index — append,
-   never edit an existing entry.
+   never `.unwrap()`. **Never hold the guard across an `.await`.** Migrations are `Migration`
+   entries appended to `get_migrations()` in `src-tauri/src/db/schema.rs`, each declaring an exact
+   `effects` footprint of the objects its SQL creates. The runner applies a footprinted migration
+   when a declared effect is missing and only falls back to the index-based `schema_version` gate
+   for entries with no footprint (data repairs). Append — never edit or renumber an existing entry —
+   and keep the footprint exact: an effect the SQL never creates makes the migration re-run on
+   every launch.
 6. **Serde naming is per struct.** Most domain models cross the wire in `snake_case` (`Track`, `Tag`,
    `Playlist`, `TagCategory`); `AppSettings`, menu and diagnostics types are camelCase. Check the
    struct before mirroring it in `shared/types/index.ts`. Tauri command *arguments* are camelCase in

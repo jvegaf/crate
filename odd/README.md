@@ -41,6 +41,7 @@ A feature moves `pending` → `in progress` → `done` as it lands.
 | Track Editor UI redesign | Done | [`tasks/track-editor-ui.md`](tasks/track-editor-ui.md) |
 | Track Metadata Modal | Done | [`tasks/track-metadata-modal.md`](tasks/track-metadata-modal.md) |
 | Tracklist column configuration | Done — UI confirmed by the user; native review unattested | [`tasks/tracklist-column-config.md`](tasks/tracklist-column-config.md) |
+| Migration effect reconciliation | In progress — implemented, gates green, verified against a copy of the wedged dev database; left uncommitted by request | [`tasks/migration-effect-reconciliation.md`](tasks/migration-effect-reconciliation.md) |
 
 Update this table whenever a feature is added or closes. It is the front door — if it is stale, the
 record may as well not exist.

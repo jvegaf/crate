@@ -1,7 +1,41 @@
-pub fn get_migrations() -> Vec<&'static str> {
+/// One schema migration: the SQL to apply and the effects that prove it already ran.
+pub struct Migration {
+    /// DDL and/or data repair. **Append-only**: never edit or renumber a shipped entry, because
+    /// a released database may already carry its effects.
+    pub sql: &'static str,
+    /// What this migration leaves behind. The runner treats a migration as applied once every
+    /// declared effect is present, so the footprint is what makes an untrustworthy
+    /// `schema_version` counter recoverable. Empty = "no structural effect": the counter alone
+    /// decides, which is only safe for data repairs that are gated some other way.
+    ///
+    /// Keep footprints exact: declaring an effect the SQL does not create makes the migration
+    /// re-run on every launch.
+    pub effects: &'static [Effect],
+}
+
+/// One observable consequence of a migration.
+pub enum Effect {
+    /// A table the migration creates.
+    Table(&'static str),
+    /// A column the migration adds. `ALTER TABLE ... ADD COLUMN` has no `IF NOT EXISTS` form in
+    /// SQLite, which is why the decision to run it cannot be left to the version counter.
+    Column {
+        table: &'static str,
+        column: &'static str,
+    },
+    /// An index the migration creates.
+    Index(&'static str),
+    /// An idempotent data repair: satisfied when this query returns no rows. Because the probe
+    /// reads the data rather than the counter, the repair still runs on a database whose
+    /// numbering drifted.
+    NoRows(&'static str),
+}
+
+pub fn get_migrations() -> Vec<Migration> {
     vec![
         // Migration 1: Initial schema
-        r#"
+        Migration {
+            sql: r#"
 -- Core tables
 CREATE TABLE tracks (
     id TEXT PRIMARY KEY,
@@ -236,16 +270,57 @@ CREATE TABLE discovery_audio_cache (
     PRIMARY KEY (release_id, track_position)
 );
 "#,
+            effects: &[
+                Effect::Table("tracks"),
+                Effect::Index("idx_tracks_artist"),
+                Effect::Index("idx_tracks_bpm"),
+                Effect::Index("idx_tracks_key"),
+                Effect::Index("idx_tracks_date_added"),
+                Effect::Index("idx_tracks_color"),
+                Effect::Table("tag_categories"),
+                Effect::Table("tags"),
+                Effect::Table("track_tags"),
+                Effect::Table("playlists"),
+                Effect::Index("idx_playlists_context"),
+                Effect::Table("playlist_tracks"),
+                Effect::Table("cues"),
+                Effect::Index("idx_cues_track"),
+                Effect::Table("settings"),
+                Effect::Table("device_exports"),
+                Effect::Index("idx_device_exports_device"),
+                Effect::Index("idx_device_exports_playlist"),
+                Effect::Table("device_tracks"),
+                Effect::Index("idx_device_tracks_device"),
+                Effect::Table("export_checkpoints"),
+                Effect::Index("idx_export_checkpoints_device"),
+                Effect::Table("discovery_releases"),
+                Effect::Index("idx_discovery_releases_date_added"),
+                Effect::Table("discovery_tracks"),
+                Effect::Index("idx_discovery_tracks_release"),
+                Effect::Table("discovery_release_tags"),
+                Effect::Table("playlist_discovery_releases"),
+                Effect::Table("discovery_stream_cache"),
+                Effect::Table("discovery_sc_client_id_cache"),
+                Effect::Table("discovery_audio_cache"),
+            ],
+        },
         // Migration 2: Track-level likes for discovery releases
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE discovery_tracks ADD COLUMN is_liked INTEGER NOT NULL DEFAULT 0;
 "#,
+            effects: &[Effect::Column {
+                table: "discovery_tracks",
+                column: "is_liked",
+            }],
+        },
         // Migration 3: Cloud-sync foundations — HLC columns, track rooting, indexes.
         // `library_roots` is created first so the `tracks.library_root_id` FK resolves.
         // `_hlc TEXT NOT NULL DEFAULT ''` back-fills existing rows with the "never stamped"
         // sentinel (which sorts below every real HLC). A REFERENCES column added via
         // ALTER TABLE must default to NULL (it does), which SQLite permits.
-        r#"
+        Migration {
+            sql: r#"
 CREATE TABLE library_roots (
     id   TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -280,9 +355,78 @@ CREATE INDEX idx_discovery_release_tags_hlc      ON discovery_release_tags(_hlc)
 CREATE INDEX idx_playlist_discovery_releases_hlc ON playlist_discovery_releases(_hlc);
 CREATE INDEX idx_library_roots_hlc               ON library_roots(_hlc);
 "#,
+            effects: &[
+                Effect::Table("library_roots"),
+                Effect::Column {
+                    table: "tracks",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "playlists",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "playlist_tracks",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "cues",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "tag_categories",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "tags",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "track_tags",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "discovery_releases",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "discovery_tracks",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "discovery_release_tags",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "playlist_discovery_releases",
+                    column: "_hlc",
+                },
+                Effect::Column {
+                    table: "tracks",
+                    column: "library_root_id",
+                },
+                Effect::Column {
+                    table: "tracks",
+                    column: "relative_path",
+                },
+                Effect::Index("idx_tracks_hlc"),
+                Effect::Index("idx_playlists_hlc"),
+                Effect::Index("idx_playlist_tracks_hlc"),
+                Effect::Index("idx_cues_hlc"),
+                Effect::Index("idx_tag_categories_hlc"),
+                Effect::Index("idx_tags_hlc"),
+                Effect::Index("idx_track_tags_hlc"),
+                Effect::Index("idx_discovery_releases_hlc"),
+                Effect::Index("idx_discovery_tracks_hlc"),
+                Effect::Index("idx_discovery_release_tags_hlc"),
+                Effect::Index("idx_playlist_discovery_releases_hlc"),
+                Effect::Index("idx_library_roots_hlc"),
+            ],
+        },
         // Migration 4: Cloud-sync bookkeeping. These tables are device-local — they are
         // never themselves serialized as sync buckets.
-        r#"
+        Migration {
+            sql: r#"
 -- Per-device mapping from a synced library_root to its local absolute folder.
 CREATE TABLE IF NOT EXISTS sync_root_mappings (
     library_root_id     TEXT PRIMARY KEY,
@@ -311,13 +455,22 @@ CREATE TABLE IF NOT EXISTS sync_state (
     value TEXT NOT NULL
 );
 "#,
+            effects: &[
+                Effect::Table("sync_root_mappings"),
+                Effect::Table("sync_tombstones"),
+                Effect::Index("idx_sync_tombstones_hlc"),
+                Effect::Table("sync_dirty_buckets"),
+                Effect::Table("sync_state"),
+            ],
+        },
         // Migration 5: Follow artists & labels.
         // `followed_sources`, `discovery_release_sources`, and the new
         // `discovery_releases` columns (`is_new`, `surfaced_at`) SYNC — they carry
         // `_hlc` and are registered as sync buckets (see pipeline::buckets). The
         // per-device watch bookkeeping (`followed_source_state`,
         // `followed_source_releases`) stays LOCAL and is never serialized as a bucket.
-        r#"
+        Migration {
+            sql: r#"
 -- SYNCED: the artists/labels the user follows.
 CREATE TABLE followed_sources (
     id            TEXT PRIMARY KEY,
@@ -375,48 +528,93 @@ CREATE INDEX idx_discovery_release_sources_hlc ON discovery_release_sources(_hlc
 ALTER TABLE discovery_releases ADD COLUMN is_new INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE discovery_releases ADD COLUMN surfaced_at TEXT;
 "#,
+            effects: &[
+                Effect::Table("followed_sources"),
+                Effect::Index("idx_followed_sources_hlc"),
+                Effect::Table("followed_source_state"),
+                Effect::Table("followed_source_releases"),
+                Effect::Index("idx_followed_source_releases_status"),
+                Effect::Table("discovery_release_sources"),
+                Effect::Index("idx_discovery_release_sources_hlc"),
+                Effect::Column {
+                    table: "discovery_releases",
+                    column: "is_new",
+                },
+                Effect::Column {
+                    table: "discovery_releases",
+                    column: "surfaced_at",
+                },
+            ],
+        },
         // discovery_releases.source_page_url — the artist/label page a release was
         // discovered from. Bandcamp label discographies span many artist subdomains, so a
         // release's own URL host isn't the followed page; recording the scanned page lets a
         // label follow match every release imported from it. Synced.
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE discovery_releases ADD COLUMN source_page_url TEXT;
 "#,
+            effects: &[Effect::Column {
+                table: "discovery_releases",
+                column: "source_page_url",
+            }],
+        },
         // idx_tracks_file_hash — the folder scan looks a track up by content hash once
         // per discovered file. Without a covering index every lookup full-scans `tracks`
         // and builds a whole row even when nothing matches, making the first import
         // quadratic. `IF NOT EXISTS` keeps the appended migration idempotent.
-        r#"
+        Migration {
+            sql: r#"
 CREATE INDEX IF NOT EXISTS idx_tracks_file_hash ON tracks(file_hash);
 "#,
+            effects: &[Effect::Index("idx_tracks_file_hash")],
+        },
         // Migration 8: Data repair, not a schema change. The Symphonia fallback stored
         // bit depth (`bits_per_sample`) in the bitrate column; the producer was fixed in
         // commit 1b667d0. Clearing values below 96 removes those corrupt depths while
         // preserving plausible music bitrates. This is idempotent: a second run matches nothing.
-        r#"
+        Migration {
+            sql: r#"
 UPDATE tracks SET bitrate = NULL WHERE bitrate IS NOT NULL AND bitrate < 96;
 "#,
+            effects: &[Effect::NoRows(
+                "SELECT 1 FROM tracks WHERE bitrate IS NOT NULL AND bitrate < 96 LIMIT 1",
+            )],
+        },
         // Migration 9: Store page URL (Beatport/Bandcamp/Traxsource). Nullable TEXT; existing
         // rows stay NULL until the user tags a track or sets the URL manually. Persisted to the
         // audio file's ID3v2 WOAR frame (`ItemKey::TrackArtistUrl`).
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE tracks ADD COLUMN url TEXT;
 "#,
+            effects: &[Effect::Column {
+                table: "tracks",
+                column: "url",
+            }],
+        },
         // Migration 10: LRU eviction for the on-disk audio-byte cache. `last_accessed_at`
         // (RFC 3339) is touched on every cache write and on every playback read so the
         // eviction sweep can drop the least-recently-played tracks once the cache exceeds
         // its size cap. Device-local (the cache itself is never synced). Backfilled from
         // `cached_at` so pre-existing entries have a sensible ordering.
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE discovery_audio_cache ADD COLUMN last_accessed_at TEXT;
 UPDATE discovery_audio_cache SET last_accessed_at = cached_at WHERE last_accessed_at IS NULL;
 "#,
+            effects: &[Effect::Column {
+                table: "discovery_audio_cache",
+                column: "last_accessed_at",
+            }],
+        },
         // Migration 11: on-disk cache for remote discovery artwork, giving mobile offline
         // album art. Keyed by release_id (one cover per release). `last_accessed_at` (RFC
         // 3339) is touched on every render read so the eviction sweep drops the least-
         // recently-shown covers once the cache exceeds its (user-configurable) size cap.
         // Device-local — the cache is never synced.
-        r#"
+        Migration {
+            sql: r#"
 CREATE TABLE discovery_artwork_cache (
     release_id       TEXT    PRIMARY KEY,
     ext              TEXT    NOT NULL DEFAULT 'webp',
@@ -425,19 +623,33 @@ CREATE TABLE discovery_artwork_cache (
     last_accessed_at TEXT    NOT NULL
 );
 "#,
+            effects: &[Effect::Table("discovery_artwork_cache")],
+        },
         // Migration 12: pinned downloads. `pinned = 1` marks tracks cached via the explicit
         // "Download for Offline" action; the LRU eviction sweep skips them so heavy listening
         // can never silently evict a download (only "Remove Download" / "Clear cache" delete
         // them). Device-local — the cache is never synced.
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE discovery_audio_cache ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
 "#,
+            effects: &[Effect::Column {
+                table: "discovery_audio_cache",
+                column: "pinned",
+            }],
+        },
         // Migration 13: per-track page URLs (Bandcamp `/track/...`, SoundCloud permalinks) for
         // track-level share/copy. Nullable — YouTube/Discogs tracks have no page of their own,
         // and pre-existing rows backfill lazily on metadata refresh. Synced (`_hlc` table).
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE discovery_tracks ADD COLUMN url TEXT;
 "#,
+            effects: &[Effect::Column {
+                table: "discovery_tracks",
+                column: "url",
+            }],
+        },
         // Migration 14: purchased-collection accounts (Bandcamp fan pages in v1;
         // `source_type` discriminates future purchase sources). `collection_accounts` and
         // `collection_items` SYNC — they carry `_hlc` and are registered as sync buckets
@@ -445,7 +657,8 @@ ALTER TABLE discovery_tracks ADD COLUMN url TEXT;
         // (`collection_account_state`) stays LOCAL, mirroring `followed_source_state`.
         // Ownership of discovery releases/tracks is DERIVED from `collection_items.url`
         // at read time — no ownership columns are added anywhere else.
-        r#"
+        Migration {
+            sql: r#"
 -- SYNCED: linked collection accounts (a Bandcamp fan page URL each).
 CREATE TABLE collection_accounts (
     id            TEXT PRIMARY KEY,               -- deterministic v5 of the normalized url
@@ -495,12 +708,23 @@ CREATE TABLE collection_account_state (
     last_item_count      INTEGER
 );
 "#,
+            effects: &[
+                Effect::Table("collection_accounts"),
+                Effect::Index("idx_collection_accounts_hlc"),
+                Effect::Table("collection_items"),
+                Effect::Index("idx_collection_items_hlc"),
+                Effect::Index("idx_collection_items_account"),
+                Effect::Index("idx_collection_items_url"),
+                Effect::Table("collection_account_state"),
+            ],
+        },
         // Migration 15: per-track preview availability. A row means the source currently
         // serves NO stream for that track position (Bandcamp pre-order albums stream only
         // the featured single; the rest are unreleased). Rows are replaced wholesale per
         // release on every successful stream extraction, so a released album self-heals on
         // the next check. Derived source state, re-fetchable anywhere — LOCAL, never synced.
-        r#"
+        Migration {
+            sql: r#"
 CREATE TABLE discovery_preview_unavailable (
     release_id TEXT    NOT NULL,
     position   INTEGER NOT NULL,
@@ -508,23 +732,37 @@ CREATE TABLE discovery_preview_unavailable (
     PRIMARY KEY (release_id, position)
 );
 "#,
+            effects: &[Effect::Table("discovery_preview_unavailable")],
+        },
         // Migration 16: whether the last collection walk covered the whole collection.
         // The incremental scrape's stop-on-all-known rule assumes stored items form a
         // newest-first prefix; an interrupted initial walk breaks that (newest items
         // known, older never fetched) and every later incremental sync would exit on
         // page 1 forever. Defaults 0 so existing wedged accounts heal with one full
         // walk on their next refresh. LOCAL, never synced.
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE collection_account_state ADD COLUMN last_walk_complete INTEGER NOT NULL DEFAULT 0;
 "#,
+            effects: &[Effect::Column {
+                table: "collection_account_state",
+                column: "last_walk_complete",
+            }],
+        },
         // Migration 17: when a discovery track was (last) liked, so the liked pool can be
         // sorted by like recency. Nullable RFC3339: NULL for unliked rows and for likes
         // that predate this column (they sort last rather than getting a fake date).
         // Cleared on unlike so re-liking records a fresh date. Synced — rides the row's
         // `_hlc` with `is_liked`, so the pair never splits under whole-row LWW.
-        r#"
+        Migration {
+            sql: r#"
 ALTER TABLE discovery_tracks ADD COLUMN liked_at TEXT;
 "#,
+            effects: &[Effect::Column {
+                table: "discovery_tracks",
+                column: "liked_at",
+            }],
+        },
         // Migration 18: track-level discovery playlist membership and track-level tags.
         // Membership moves from whole releases to individual tracks so a playlist records
         // WHICH track motivated the add. `playlist_discovery_releases` is NOT dropped: it
@@ -537,7 +775,8 @@ ALTER TABLE discovery_tracks ADD COLUMN liked_at TEXT;
         // once per device. Both tables are synced (Junction buckets, add-wins).
         // Positions/date_added are NOT NULL — the nullable columns on the release
         // junction were a wart every reader has to coalesce around.
-        r#"
+        Migration {
+            sql: r#"
 CREATE TABLE playlist_discovery_tracks (
     playlist_id TEXT    NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
     track_id    TEXT    NOT NULL REFERENCES discovery_tracks(id) ON DELETE CASCADE,
@@ -558,5 +797,14 @@ CREATE TABLE discovery_track_tags (
 CREATE INDEX idx_discovery_track_tags_tag ON discovery_track_tags(tag_id);
 CREATE INDEX idx_discovery_track_tags_hlc ON discovery_track_tags(_hlc);
 "#,
+            effects: &[
+                Effect::Table("playlist_discovery_tracks"),
+                Effect::Index("idx_playlist_discovery_tracks_track"),
+                Effect::Index("idx_playlist_discovery_tracks_hlc"),
+                Effect::Table("discovery_track_tags"),
+                Effect::Index("idx_discovery_track_tags_tag"),
+                Effect::Index("idx_discovery_track_tags_hlc"),
+            ],
+        },
     ]
 }

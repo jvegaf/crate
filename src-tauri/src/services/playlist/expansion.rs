@@ -162,8 +162,8 @@ mod tests {
     fn mem_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        for sql in crate::db::schema::get_migrations() {
-            conn.execute_batch(sql).unwrap();
+        for migration in crate::db::schema::get_migrations() {
+            conn.execute_batch(migration.sql).unwrap();
         }
         conn
     }

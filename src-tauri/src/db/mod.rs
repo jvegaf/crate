@@ -2,7 +2,7 @@ pub mod handle;
 mod key_provider;
 pub mod schema;
 
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -206,39 +206,122 @@ impl Clone for Database {
     }
 }
 
-/// Apply any pending schema migrations to `conn`, version-gated and atomic.
+/// Whether a table exists in the schema.
+fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [name],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+/// Whether an index exists in the schema.
+fn index_exists(conn: &Connection, name: &str) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+            [name],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+/// Whether a column exists on a table. `table` comes from a static footprint in `schema.rs`,
+/// never from user input.
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Whether a single declared effect is present.
+fn effect_satisfied(conn: &Connection, effect: &schema::Effect) -> Result<bool> {
+    match effect {
+        schema::Effect::Table(name) => table_exists(conn, name),
+        schema::Effect::Column { table, column } => column_exists(conn, table, column),
+        schema::Effect::Index(name) => index_exists(conn, name),
+        // A data repair is satisfied once its probe stops matching rows. Reading the data
+        // instead of the version counter is what keeps the repair due on a drifted database.
+        schema::Effect::NoRows(probe) => {
+            Ok(conn.query_row(probe, [], |_| Ok(())).optional()?.is_none())
+        }
+    }
+}
+
+/// Whether every effect a migration declares is already present.
+fn effects_satisfied(conn: &Connection, effects: &[schema::Effect]) -> Result<bool> {
+    for effect in effects {
+        if !effect_satisfied(conn, effect)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Apply any pending schema migrations to `conn`, reconciled by effect and atomic.
 ///
-/// Each migration's DDL and its `schema_version` bump commit together in one
-/// transaction, so an interrupted run (e.g. the process is killed mid-migration)
-/// rolls back cleanly and is retried from scratch on the next launch — never
-/// leaving a half-applied schema. Migrations run in order, each exactly once.
+/// Each migration's SQL and its `schema_version` bump commit together in one transaction, so an
+/// interrupted run (e.g. the process is killed mid-migration) rolls back cleanly and is retried
+/// from scratch on the next launch — never leaving a half-applied schema.
+///
+/// A migration runs when a declared effect is missing (DDL) or when the counter says it is still
+/// due (data repairs, and any entry that declares no footprint). The counter is therefore an
+/// optimization, never the source of truth: a database whose numbering drifted — a dev branch
+/// that renumbered migrations, a restored backup, a hand-edited file — carries some later
+/// migrations' effects under lower numbers, and a version-only gate would replay
+/// `ALTER TABLE ... ADD COLUMN` on columns that already exist and panic the app at setup.
 fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)",
         [],
     )?;
 
-    let current_version: i32 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
+    let migrations = schema::get_migrations();
 
-    for (idx, sql) in schema::get_migrations().iter().enumerate() {
+    let current_version: i32 = conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+        [],
+        |row| row.get(0),
+    )?;
+
+    for (idx, migration) in migrations.iter().enumerate() {
         let version = idx as i32 + 1;
-        if version > current_version {
+        let due = if migration.effects.is_empty() {
+            version > current_version
+        } else {
+            !effects_satisfied(conn, migration.effects)?
+        };
+        if due {
             log::info!("Running migration {version}");
             let tx = conn.unchecked_transaction()?;
-            tx.execute_batch(sql)?;
+            tx.execute_batch(migration.sql)?;
+            // `OR REPLACE`: a migration whose effect was missing can run while its version row
+            // already exists (a renumbered or restored database), and re-recording a number it
+            // already occupies is a no-op under `MAX(version)`, not an error.
             tx.execute(
-                "INSERT INTO schema_version (version) VALUES (?1)",
+                "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
                 [version],
             )?;
             tx.commit()?;
         }
     }
+
+    // Every migration is satisfied by now, so record the head. A reconciled database must not
+    // keep a counter that describes some other chain: `MAX()` makes this monotone, so a database
+    // whose counter is genuinely ahead of this chain is left alone.
+    conn.execute(
+        "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)",
+        [migrations.len() as i32],
+    )?;
 
     Ok(())
 }
@@ -275,6 +358,17 @@ mod tests {
             .filter_map(|r| r.ok())
             .collect();
         cols.iter().any(|c| c == column)
+    }
+
+    fn index_exists(conn: &Connection, name: &str) -> bool {
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1",
+            [name],
+            |_| Ok(()),
+        )
+        .optional()
+        .unwrap()
+        .is_some()
     }
 
     fn version(conn: &Connection) -> i32 {
@@ -374,8 +468,8 @@ mod tests {
             [],
         )
         .unwrap();
-        for (idx, sql) in migrations.iter().take(REPAIR_MIGRATION_INDEX).enumerate() {
-            conn.execute_batch(sql).unwrap();
+        for (idx, migration) in migrations.iter().take(REPAIR_MIGRATION_INDEX).enumerate() {
+            conn.execute_batch(migration.sql).unwrap();
             conn.execute(
                 "INSERT INTO schema_version (version) VALUES (?1)",
                 [(idx as i32) + 1],
@@ -415,7 +509,7 @@ mod tests {
         }
 
         // Reapplying the repair SQL is an idempotent no-op: no rows match after repair.
-        conn.execute_batch(migrations[REPAIR_MIGRATION_INDEX])
+        conn.execute_batch(migrations[REPAIR_MIGRATION_INDEX].sql)
             .unwrap();
         assert_eq!(conn.changes(), 0);
         for (id, (_, expected_bitrate)) in track_ids.iter().zip(cases) {
@@ -438,8 +532,8 @@ mod tests {
             [],
         )
         .unwrap();
-        for (idx, sql) in schema::get_migrations().iter().take(2).enumerate() {
-            conn.execute_batch(sql).unwrap();
+        for (idx, migration) in schema::get_migrations().iter().take(2).enumerate() {
+            conn.execute_batch(migration.sql).unwrap();
             conn.execute(
                 "INSERT INTO schema_version (version) VALUES (?1)",
                 [(idx as i32) + 1],
@@ -452,6 +546,108 @@ mod tests {
         // Upgrading applies only the new migrations (3 & 4), atomically.
         run_migrations(&conn).unwrap();
         assert_sync_schema(&conn);
+        assert_eq!(version(&conn), schema::get_migrations().len() as i32);
+    }
+
+    /// Guards the footprints themselves: an effect a migration's SQL never actually creates would
+    /// stay unsatisfied forever, re-running that migration on every launch (a crash on the next
+    /// `ALTER TABLE ... ADD COLUMN`).
+    #[test]
+    fn fresh_db_satisfies_every_declared_effect() {
+        let conn = open_mem();
+        run_migrations(&conn).unwrap();
+
+        for (idx, migration) in schema::get_migrations().iter().enumerate() {
+            assert!(
+                effects_satisfied(&conn, migration.effects).unwrap(),
+                "migration {} declares an effect its SQL does not create",
+                idx + 1
+            );
+        }
+    }
+
+    /// A database that lost a column while reporting the head version gets it back: the counter
+    /// is not evidence about the schema, only about what has run so far.
+    #[test]
+    fn drifted_schema_reconciles_despite_a_current_counter() {
+        let conn = open_mem();
+        run_migrations(&conn).unwrap();
+        assert_eq!(version(&conn), schema::get_migrations().len() as i32);
+
+        conn.execute("ALTER TABLE tracks DROP COLUMN url", [])
+            .unwrap();
+        assert!(!column_exists(&conn, "tracks", "url"));
+
+        run_migrations(&conn).unwrap();
+        assert!(column_exists(&conn, "tracks", "url"));
+    }
+    /// effects of later migrations under a *lower* version, and is missing earlier ones.
+    ///
+    /// That chain was `[0..=5] + [9..=17]` over the current list (0-based): `tracks.url` (index 8)
+    /// and `idx_tracks_file_hash` (index 6) were never applied, while `last_walk_complete`
+    /// (index 15) landed as its 13th migration. The database reports version 15 — high enough that
+    /// a purely version-gated runner replays DDL it already ran and dies on
+    /// `duplicate column name: last_walk_complete`, panicking the Tauri setup hook.
+    #[test]
+    fn renumbered_chain_recovers_cleanly() {
+        const LEGACY_ORDER: [usize; 15] = [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+        const CORRUPT_BITRATE: i64 = 16; // a bit depth written into `bitrate`
+
+        let conn = open_mem();
+        let migrations = schema::get_migrations();
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY)",
+            [],
+        )
+        .unwrap();
+        for (idx, migration) in LEGACY_ORDER.iter().enumerate() {
+            conn.execute_batch(migrations[*migration].sql).unwrap();
+            conn.execute(
+                "INSERT INTO schema_version (version) VALUES (?1)",
+                [(idx as i32) + 1],
+            )
+            .unwrap();
+        }
+        // The drift, stated as facts about the database rather than about numbers:
+        assert_eq!(version(&conn), 15);
+        assert!(!column_exists(&conn, "tracks", "url"));
+        assert!(!index_exists(&conn, "idx_tracks_file_hash"));
+        assert!(column_exists(
+            &conn,
+            "collection_account_state",
+            "last_walk_complete"
+        ));
+
+        conn.execute(
+            "INSERT INTO tracks (id, file_path, duration_ms, date_added, date_modified, bitrate) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                "renumbered-repair",
+                "/music/renumbered.mp3",
+                180_000,
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T00:00:00Z",
+                CORRUPT_BITRATE,
+            ],
+        )
+        .unwrap();
+
+        // Must reconcile by effect instead of replaying `ADD COLUMN` on existing columns.
+        run_migrations(&conn).unwrap();
+
+        assert!(column_exists(&conn, "tracks", "url"));
+        assert!(index_exists(&conn, "idx_tracks_file_hash"));
+        let bitrate: Option<i64> = conn
+            .query_row(
+                "SELECT bitrate FROM tracks WHERE id = ?1",
+                ["renumbered-repair"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            bitrate, None,
+            "the data repair must run even though the counter says its version passed"
+        );
         assert_eq!(version(&conn), schema::get_migrations().len() as i32);
     }
 }
