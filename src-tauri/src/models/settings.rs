@@ -433,6 +433,12 @@ pub struct AppSettings {
     /// Device-local, desktop-only webview page zoom (1.0 = 100%). Never cloud-synced: it
     /// depends on the display, not the user.
     pub ui_zoom: f64,
+    /// Tagger scoring weights as JSON. Format: `{"title":0.4,"artist":0.25,"duration":0.1,"genre":0.1,"label":0.08,"bpm":0.04,"key":0.03}`
+    pub tagger_weights: Option<String>,
+    /// Auto-apply threshold for the tagger (0.0-1.0). Candidates scoring above this are applied without user confirmation.
+    pub tagger_auto_apply_threshold: f64,
+    /// Whether auto-apply is enabled.
+    pub tagger_auto_apply_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -467,6 +473,9 @@ impl Default for AppSettings {
             discovery_audio_cache_limit_mb: 500,
             discovery_artwork_cache_limit_mb: 250,
             ui_zoom: 1.0,
+            tagger_weights: None,
+            tagger_auto_apply_threshold: 0.95,
+            tagger_auto_apply_enabled: true,
         }
     }
 }

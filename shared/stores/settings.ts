@@ -59,6 +59,12 @@ interface SettingsState {
 	discoveryAudioCacheLimitMb: number
 	discoveryArtworkCacheLimitMb: number
 	uiZoom: number
+	/** Auto-apply threshold (0.0-1.0); candidates at or above it apply without confirmation. */
+	taggerAutoApplyThreshold: number
+	/** Whether auto-apply is enabled; when false no candidate is auto-applied. */
+	taggerAutoApplyEnabled: boolean
+	/** Tagger scoring weights as JSON string. */
+	taggerWeights: string | null
 	loading: boolean
 	error: string | null
 }
@@ -96,6 +102,9 @@ const initialState: SettingsState = {
 	discoveryAudioCacheLimitMb: 500,
 	discoveryArtworkCacheLimitMb: 250,
 	uiZoom: 1,
+	taggerAutoApplyThreshold: 0.95,
+	taggerAutoApplyEnabled: true,
+	taggerWeights: null,
 	loading: false,
 	error: null,
 }
@@ -347,6 +356,9 @@ function createSettingsStore() {
 					discoveryAudioCacheLimitMb: settings.discoveryAudioCacheLimitMb ?? 500,
 					discoveryArtworkCacheLimitMb: settings.discoveryArtworkCacheLimitMb ?? 250,
 					uiZoom: settings.uiZoom ?? 1,
+					taggerAutoApplyThreshold: settings.taggerAutoApplyThreshold ?? 0.95,
+					taggerAutoApplyEnabled: settings.taggerAutoApplyEnabled ?? true,
+					taggerWeights: settings.taggerWeights ?? null,
 					resolvedTheme,
 					loading: false,
 				}))
@@ -783,6 +795,43 @@ function createSettingsStore() {
 		},
 
 		/**
+		 * Set tagger auto-apply enabled
+		 */
+		async setTaggerAutoApplyEnabled(enabled: boolean) {
+			update((s) => ({ ...s, taggerAutoApplyEnabled: enabled }))
+			try {
+				await settingsApi.setSetting('tagger_auto_apply_enabled', enabled ? 'true' : 'false')
+			} catch (error) {
+				console.error('Failed to save tagger auto-apply enabled setting:', error)
+			}
+		},
+
+		/**
+		 * Set tagger auto-apply threshold (0.0 - 1.0)
+		 */
+		async setTaggerAutoApplyThreshold(threshold: number) {
+			const clamped = Math.max(0, Math.min(1, threshold))
+			update((s) => ({ ...s, taggerAutoApplyThreshold: clamped }))
+			try {
+				await settingsApi.setSetting('tagger_auto_apply_threshold', String(clamped))
+			} catch (error) {
+				console.error('Failed to save tagger auto-apply threshold setting:', error)
+			}
+		},
+
+		/**
+		 * Set tagger scoring weights (JSON string)
+		 */
+		async setTaggerWeights(weights: string | null) {
+			update((s) => ({ ...s, taggerWeights: weights }))
+			try {
+				await settingsApi.setSetting('tagger_weights', weights ?? '')
+			} catch (error) {
+				console.error('Failed to save tagger weights setting:', error)
+			}
+		},
+
+		/**
 		 * Reset store to initial state
 		 */
 		reset() {
@@ -861,3 +910,9 @@ export const hasCompletedOnboarding = derived(settingsStore, ($s) => $s.hasCompl
 export const hasCompletedWizard = derived(settingsStore, ($s) => $s.hasCompletedWizard)
 
 export const settingsLoading = derived(settingsStore, ($s) => $s.loading)
+
+export const taggerAutoApplyThreshold = derived(settingsStore, ($s) => $s.taggerAutoApplyThreshold)
+
+export const taggerAutoApplyEnabled = derived(settingsStore, ($s) => $s.taggerAutoApplyEnabled)
+
+export const taggerWeights = derived(settingsStore, ($s) => $s.taggerWeights)

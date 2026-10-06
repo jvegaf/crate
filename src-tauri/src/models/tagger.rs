@@ -65,7 +65,8 @@ pub struct ScoredTagCandidate {
     /// Flattened: the wire shape is the candidate's own fields plus `similarity_score`.
     #[serde(flatten)]
     pub candidate: TagCandidate,
-    /// Weighted similarity, 0.0..=1.0 (title 0.5, artist 0.3, duration 0.2).
+    /// Weighted similarity, 0.0..=1.0 (default weights: title 0.40, artist 0.25,
+    /// duration 0.10, genre 0.10, label 0.08, bpm 0.04, key 0.03).
     pub similarity_score: f64,
 }
 

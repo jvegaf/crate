@@ -190,6 +190,20 @@ impl SettingsService {
 
         let ui_zoom = ui_zoom::parse_setting(self.get_setting_value(&conn, ui_zoom::SETTING_KEY)?);
 
+        // Raw JSON blob; parsed (or ignored) by the tagger when scoring candidates.
+        let tagger_weights = self.get_setting_value(&conn, "tagger_weights")?;
+
+        let tagger_auto_apply_threshold = self
+            .get_setting_value(&conn, "tagger_auto_apply_threshold")?
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| *v >= 0.0 && *v <= 1.0)
+            .unwrap_or(0.95);
+
+        let tagger_auto_apply_enabled = self
+            .get_setting_value(&conn, "tagger_auto_apply_enabled")?
+            .map(|v| v != "false")
+            .unwrap_or(true);
+
         Ok(AppSettings {
             theme,
             accent_color,
@@ -220,6 +234,9 @@ impl SettingsService {
             discovery_audio_cache_limit_mb,
             discovery_artwork_cache_limit_mb,
             ui_zoom,
+            tagger_weights,
+            tagger_auto_apply_threshold,
+            tagger_auto_apply_enabled,
         })
     }
 

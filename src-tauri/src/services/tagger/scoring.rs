@@ -1,27 +1,43 @@
 //! Candidate scoring for the automatic tagger.
 //!
-//! A faithful port of Harmony's unified scorer: title, artist and duration each
-//! contribute a similarity in `0.0..=1.0`, combined into a weighted sum. Text
-//! similarity normalizes punctuation and case, then compares word by word with a
+//! A faithful port of Harmony's unified scorer, extended with four more
+//! signals: title, artist, duration, genre, label, bpm and key each contribute
+//! a similarity in `0.0..=1.0`, combined into a weighted sum. Text similarity
+//! normalizes punctuation and case, then compares word by word with a
 //! hand-rolled Levenshtein metric — no new dependency.
 
 use std::cmp::Ordering;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::{CrateError, Result};
 use crate::models::ScoredTagCandidate;
 
-/// Relative weights of the three similarity signals (must sum to `1.0`).
+/// Relative weights of the seven similarity signals (must sum to `1.0`).
+///
+/// The struct doubles as the JSON shape persisted in
+/// `AppSettings::tagger_weights`, so field names stay snake_case on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ScoringWeights {
     pub title: f64,
     pub artist: f64,
     pub duration: f64,
+    pub genre: f64,
+    pub label: f64,
+    pub bpm: f64,
+    pub key: f64,
 }
 
-/// Harmony's defaults: mostly title, then artist, duration as a nudge.
+/// Default weights: mostly title, then artist, with duration, genre, label,
+/// bpm and key as secondary signals. They sum to exactly `1.0`.
 pub(crate) const DEFAULT_WEIGHTS: ScoringWeights = ScoringWeights {
-    title: 0.5,
-    artist: 0.3,
-    duration: 0.2,
+    title: 0.40,
+    artist: 0.25,
+    duration: 0.10,
+    genre: 0.10,
+    label: 0.08,
+    bpm: 0.04,
+    key: 0.03,
 };
 
 /// Two scores closer than this are treated as tied and broken by provider order.
@@ -94,6 +110,57 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     previous[b.len()]
 }
 
+/// Genre similarity: [`hybrid_text_similarity`] over the genre text.
+///
+/// Empty against non-empty scores `0.0`; empty against empty scores `1.0`
+/// (both unknown — no penalty either way).
+pub(crate) fn genre_score(local: &str, candidate: &str) -> f64 {
+    hybrid_text_similarity(local, candidate)
+}
+
+/// Label similarity, same rule as [`genre_score`].
+pub(crate) fn label_score(local: &str, candidate: &str) -> f64 {
+    hybrid_text_similarity(local, candidate)
+}
+
+/// BPM similarity bucketed like [`duration_score`]: `±1 -> 1.0`, `±3 -> 0.8`,
+/// `±5 -> 0.5`, larger gaps `-> 0.2`. A zero local or candidate BPM is neutral
+/// (`0.7`), so a provider that omits BPM neither rewards nor punishes.
+pub(crate) fn bpm_score(local: f64, candidate: Option<f64>) -> f64 {
+    let candidate_bpm = match candidate {
+        Some(candidate) if candidate != 0.0 => candidate,
+        _ => return 0.7,
+    };
+    if local == 0.0 {
+        return 0.7;
+    }
+
+    let diff = (local - candidate_bpm).abs();
+    if diff <= 1.0 {
+        1.0
+    } else if diff <= 3.0 {
+        0.8
+    } else if diff <= 5.0 {
+        0.5
+    } else {
+        0.2
+    }
+}
+
+/// Musical-key match: exact equality scores `1.0`, two known but different keys
+/// score `0.2`, and an empty local or candidate key is neutral (`0.5`). The
+/// comparison is literal — Camelot short notation and standard names are not
+/// cross-converted here — so callers should feed consistent key text.
+pub(crate) fn key_score(local: &str, candidate: &str) -> f64 {
+    if local.is_empty() || candidate.is_empty() {
+        0.5
+    } else if local == candidate {
+        1.0
+    } else {
+        0.2
+    }
+}
+
 /// Asymmetric word-level similarity between two free-text strings.
 ///
 /// Both sides are normalized; equality short-circuits to `1.0`. For each query
@@ -155,7 +222,7 @@ pub(crate) fn duration_score(local_ms: i64, candidate_ms: Option<i64>) -> f64 {
     }
 }
 
-/// The weighted scorer over title / artist / duration.
+/// The weighted scorer over title / artist / duration / genre / label / bpm / key.
 pub(crate) struct UnifiedScorer {
     weights: ScoringWeights,
 }
@@ -163,11 +230,17 @@ pub(crate) struct UnifiedScorer {
 impl UnifiedScorer {
     /// Build a scorer, rejecting weights whose sum is off by more than `0.001`.
     ///
-    /// Only custom-weight callers (currently the hermetic tests) use this; the
-    /// production path constructs the scorer via [`UnifiedScorer::default_weights`].
-    #[allow(dead_code)]
+    /// Production constructs the scorer here when the user configured custom
+    /// weights through `AppSettings::tagger_weights`; [`Self::default_weights`]
+    /// remains the infallible path for absent or invalid configurations.
     pub(crate) fn new(weights: ScoringWeights) -> Result<Self> {
-        let sum = weights.title + weights.artist + weights.duration;
+        let sum = weights.title
+            + weights.artist
+            + weights.duration
+            + weights.genre
+            + weights.label
+            + weights.bpm
+            + weights.key;
         if (sum - 1.0).abs() > 0.001 {
             return Err(CrateError::Tagger(format!(
                 "scoring weights must sum to 1.0, got {sum}"
@@ -176,26 +249,43 @@ impl UnifiedScorer {
         Ok(Self { weights })
     }
 
-    /// The infallible default scorer (title 0.5, artist 0.3, duration 0.2).
+    /// The infallible default scorer (title 0.40, artist 0.25, duration 0.10,
+    /// genre 0.10, label 0.08, bpm 0.04, key 0.03).
     pub(crate) fn default_weights() -> Self {
         Self {
             weights: DEFAULT_WEIGHTS,
         }
     }
 
-    /// Weighted sum of the title, artist and duration similarities.
+    /// Weighted sum of the title, artist, duration, genre, label, bpm and key
+    /// similarities.
+    // The IPC-driven flat signature is deliberate: callers stay positional and
+    // the weights stay the single configuration surface.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn score(
         &self,
         local_title: &str,
         local_artist: &str,
         local_duration_ms: i64,
+        local_genre: &str,
+        local_label: &str,
+        local_bpm: f64,
+        local_key: &str,
         candidate_title: &str,
         candidate_artist: &str,
         candidate_duration_ms: Option<i64>,
+        candidate_genre: Option<&str>,
+        candidate_label: Option<&str>,
+        candidate_bpm: Option<f64>,
+        candidate_key: Option<&str>,
     ) -> f64 {
         hybrid_text_similarity(local_title, candidate_title) * self.weights.title
             + hybrid_text_similarity(local_artist, candidate_artist) * self.weights.artist
             + duration_score(local_duration_ms, candidate_duration_ms) * self.weights.duration
+            + genre_score(local_genre, candidate_genre.unwrap_or("")) * self.weights.genre
+            + label_score(local_label, candidate_label.unwrap_or("")) * self.weights.label
+            + bpm_score(local_bpm, candidate_bpm) * self.weights.bpm
+            + key_score(local_key, candidate_key.unwrap_or("")) * self.weights.key
     }
 }
 

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { RankedSearchResult, TagCandidate, Track } from '../types'
+import type { RankedSearchResult, ScoredTagCandidate, TagCandidate, Track } from '../types'
 
 /**
  * Search every metadata provider for candidates matching `artist` + `title` and
@@ -7,12 +7,17 @@ import type { RankedSearchResult, TagCandidate, Track } from '../types'
  * per-provider failures.
  *
  * Command arguments are camelCase in TS; Tauri maps them to the Rust
- * `snake_case` parameters (`duration_ms`, `max_candidates`, `min_score`).
+ * `snake_case` parameters (`duration_ms`, `genre`, `label`, `bpm`, `key`,
+ * `max_candidates`, `min_score`).
  */
 export async function searchRankedTrackTags(params: {
 	artist: string | null
 	title: string
 	durationMs: number | null
+	genre?: string | null
+	label?: string | null
+	bpm?: number | null
+	key?: string | null
 	limit?: number
 	maxCandidates?: number
 	minScore?: number
@@ -21,10 +26,22 @@ export async function searchRankedTrackTags(params: {
 		artist: params.artist,
 		title: params.title,
 		durationMs: params.durationMs,
+		genre: params.genre ?? null,
+		label: params.label ?? null,
+		bpm: params.bpm ?? null,
+		key: params.key ?? null,
 		limit: params.limit ?? null,
 		maxCandidates: params.maxCandidates ?? null,
 		minScore: params.minScore ?? null,
 	})
+}
+
+/**
+ * Skip the search and fetch metadata directly from the store URL.
+ * Returns null if the URL is not a recognized store URL.
+ */
+export async function searchTrackByUrl(url: string): Promise<ScoredTagCandidate | null> {
+	return invoke<ScoredTagCandidate | null>('search_track_by_url', { url })
 }
 
 /**

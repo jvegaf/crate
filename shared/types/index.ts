@@ -630,6 +630,7 @@ export type SettingsPage =
 	| 'cloudSync'
 	| 'diagnostics'
 	| 'about'
+	| 'tagger'
 
 export type FollowCheckCadence = 'on-launch' | 'hourly' | 'daily' | 'manual'
 export type AutoFollowOnImport = 'off' | 'artist' | 'label' | 'both'
@@ -668,6 +669,12 @@ export interface AppSettings {
 	discoveryArtworkCacheLimitMb: number
 	/** Device-local, desktop-only webview page zoom (1 = 100%). */
 	uiZoom: number
+	/** Tagger scoring weights as JSON string. */
+	taggerWeights: string | null
+	/** Auto-apply threshold (0.0-1.0). Candidates above this are applied without confirmation. */
+	taggerAutoApplyThreshold: number
+	/** Whether auto-apply is enabled. */
+	taggerAutoApplyEnabled: boolean
 }
 
 export interface AudioDevice {

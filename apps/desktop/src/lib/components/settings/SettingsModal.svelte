@@ -15,6 +15,7 @@
 		CloudSyncTab,
 		DiagnosticsTab,
 		AboutTab,
+		TaggerTab,
 	} from './tabs'
 	import { isSyncAvailable, cloudSyncStore } from '$shared/stores/cloudSync'
 
@@ -35,6 +36,7 @@
 		{ page: 'discovery', icon: 'globe' },
 		{ page: 'library', icon: 'library' },
 		{ page: 'sound', icon: 'volume-full', fill: true },
+		{ page: 'tagger', icon: 'tag' },
 		{ page: 'cloudSync', icon: 'cloud', requireSync: true },
 		{ page: 'diagnostics', icon: 'terminal' },
 		{ page: 'about', icon: 'info' },
@@ -118,6 +120,8 @@
 				<DiagnosticsTab />
 			{:else if activePage === 'about'}
 				<AboutTab />
+			{:else if activePage === 'tagger'}
+				<TaggerTab />
 			{/if}
 		</div>
 	</div>

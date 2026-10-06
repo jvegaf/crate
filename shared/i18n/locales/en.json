@@ -55,7 +55,8 @@
 			"cloudSync": "Cloud Sync",
 			"storage": "Storage",
 			"diagnostics": "Diagnostics",
-			"about": "About"
+			"about": "About",
+			"tagger": "Tagger"
 		},
 		"general": {
 			"language": "Language",
@@ -94,6 +95,26 @@
 				"backupTypeManual": "(Manual)",
 				"backupContents": "This backup contains {tracks, plural, =0 {no tracks} =1 {1 track} other {{tracks} tracks}}, {playlists, plural, =0 {no playlists} =1 {1 playlist} other {{playlists} playlists}}, {tags, plural, =0 {no tags} =1 {1 tag} other {{tags} tags}}, and {discoveryReleases, plural, =0 {no discovery releases} =1 {1 discovery release} other {{discoveryReleases} discovery releases}}. Created on {date}."
 			}
+		},
+		"tagger": {
+			"title": "Tagger",
+			"autoApply": "Auto-Apply",
+			"autoApplyDescription": "Automatically apply metadata when the match confidence is very high.",
+			"autoApplyEnabled": "Enable Auto-Apply",
+			"autoApplyEnabledDescription": "Skip confirmation for tracks with high-confidence matches.",
+			"autoApplyThreshold": "Auto-Apply Threshold",
+			"autoApplyThresholdDescription": "Minimum similarity score (0-100%) to auto-apply. Higher is stricter.",
+			"weights": "Scoring Weights",
+			"weightsDescription": "Adjust how much each metadata field influences the match score. Weights must sum to 100%.",
+			"weightTitle": "Title",
+			"weightArtist": "Artist",
+			"weightDuration": "Duration",
+			"weightGenre": "Genre",
+			"weightLabel": "Label",
+			"weightBpm": "BPM",
+			"weightKey": "Key",
+			"weightsSumError": "Weights must sum to 100% (currently {current}%)",
+			"resetWeights": "Reset to Defaults"
 		},
 		"library": {
 			"analysis": "Analysis",

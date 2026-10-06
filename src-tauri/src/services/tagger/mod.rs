@@ -19,7 +19,7 @@ mod tests;
 #[cfg(feature = "desktop")]
 mod traxsource;
 
-use scoring::{rank_candidates, UnifiedScorer};
+use scoring::{rank_candidates, ScoringWeights, UnifiedScorer};
 #[cfg(feature = "desktop")]
 use traxsource::TraxSourceProvider;
 
@@ -108,16 +108,26 @@ impl TaggerService {
     /// A failing provider contributes a [`ProviderError`] through
     /// [`RankedSearchResult::errors`], and any candidates it did return are still
     /// scored rather than dropped; the remaining providers still count. Scoring
-    /// uses the default weights (title 0.5, artist 0.3, duration 0.2), with the
-    /// candidate artist joined as `", "` and a missing local artist treated as
-    /// empty.
+    /// uses the weights in `weights_json` (the `AppSettings::tagger_weights`
+    /// JSON form, defaulting to [`scoring::DEFAULT_WEIGHTS`] when absent or
+    /// invalid), with the candidate artist joined as `", "` and a missing local
+    /// artist treated as empty. Missing local metadata falls back to the
+    /// per-signal neutral scores.
+    // The seven local-metadata fields plus the four ranking knobs are the full
+    // scoring contract; bundling them would only hide the shape.
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_and_rank(
         &self,
         query: &TagSearchQuery,
         local_duration_ms: Option<i64>,
+        local_genre: Option<String>,
+        local_label: Option<String>,
+        local_bpm: Option<f64>,
+        local_key: Option<String>,
         search_limit: usize,
         min_score: f64,
         max_candidates: usize,
+        weights_json: Option<&str>,
     ) -> Result<RankedSearchResult> {
         let results = self.search_all(query, search_limit).await?;
 
@@ -125,9 +135,14 @@ impl TaggerService {
             results,
             query,
             local_duration_ms.unwrap_or(0),
+            local_genre.as_deref().unwrap_or(""),
+            local_label.as_deref().unwrap_or(""),
+            local_bpm.unwrap_or(0.0),
+            local_key.as_deref().unwrap_or(""),
             &self.provider_priority(),
             min_score,
             max_candidates,
+            weights_json,
         ))
     }
 
@@ -148,6 +163,46 @@ impl TaggerService {
             })?;
 
         provider.extend(&self.client, candidate).await
+    }
+
+    /// Skip the search and go directly to the provider identified by the store
+    /// `url`, enriching through that provider's `extend` and returning a single
+    /// candidate at `1.0` similarity.
+    ///
+    /// Returns `Ok(None)` when the URL is not a recognized store URL, or when
+    /// its provider is unavailable in this build (e.g. TraxSource on mobile).
+    pub async fn search_by_url(&self, url: &str) -> Result<Option<ScoredTagCandidate>> {
+        let Some((provider_id, track_ref)) = parse_provider_url(url) else {
+            return Ok(None);
+        };
+
+        let Some(provider) = self
+            .providers
+            .iter()
+            .find(|provider| provider.id() == provider_id)
+        else {
+            // Provider not available in this build (e.g. traxsource on mobile).
+            return Ok(None);
+        };
+
+        let (candidate_url, provider_track_id) = match &track_ref {
+            ProviderTrackRef::Id(id) => (url.to_string(), Some(id.clone())),
+            ProviderTrackRef::Url(track_url) => (track_url.clone(), None),
+        };
+        let candidate = TagCandidate {
+            provider: provider_id.to_string(),
+            url: candidate_url,
+            provider_track_id,
+            ..Default::default()
+        };
+
+        // Enrich from the provider; a network failure is an error, not a miss.
+        let candidate = provider.extend(&self.client, &candidate).await?;
+
+        Ok(Some(ScoredTagCandidate {
+            candidate,
+            similarity_score: 1.0,
+        }))
     }
 
     /// Download a remote artwork URL to a temporary file and return its path.
@@ -235,23 +290,88 @@ fn artwork_extension(content_type: Option<&str>, url: &str) -> &'static str {
     }
 }
 
+/// What [`parse_provider_url`] extracted from a store URL.
+#[derive(Debug, PartialEq)]
+pub(crate) enum ProviderTrackRef {
+    /// A provider track ID (Beatport, TraxSource) — the `extend` step fetches
+    /// the track detail endpoint directly.
+    Id(String),
+    /// The full track page URL (Bandcamp) — the `extend` step scrapes it.
+    Url(String),
+}
+
+/// Parse a store URL and return the provider id and either a track ID (for
+/// Beatport/TraxSource) or the full URL (for Bandcamp).
+///
+/// Returns `None` for any URL that is not a recognized store track URL.
+pub(crate) fn parse_provider_url(url: &str) -> Option<(&'static str, ProviderTrackRef)> {
+    // Beatport: beatport.com/track/{slug}/{id} or beatport.com/track/{id}
+    if url.contains("beatport.com/track/") {
+        let path = url.split("beatport.com/track/").nth(1)?;
+        let id = path.trim_end_matches('/').split('/').next_back()?;
+        if !id.is_empty() {
+            return Some(("beatport", ProviderTrackRef::Id(id.to_string())));
+        }
+    }
+
+    // TraxSource: traxsource.com/track/{id}/{slug} or traxsource.com/track/{id}
+    if url.contains("traxsource.com/track/") {
+        let path = url.split("traxsource.com/track/").nth(1)?;
+        let id = path.trim_end_matches('/').split('/').next()?;
+        if !id.is_empty() {
+            return Some(("traxsource", ProviderTrackRef::Id(id.to_string())));
+        }
+    }
+
+    // Bandcamp: {artist}.bandcamp.com/track/{slug}
+    if url.contains(".bandcamp.com/track/") {
+        return Some(("bandcamp", ProviderTrackRef::Url(url.to_string())));
+    }
+
+    None
+}
+
 /// Aggregate raw provider results into the ranked best-N answer.
 ///
 /// Pure: no providers, no I/O. A failing provider contributes a
 /// [`ProviderError`], and any candidates it did return are still scored rather
-/// than dropped; the remaining providers still count. Scoring uses the default
-/// weights (title 0.5, artist 0.3, duration 0.2),
-/// with the candidate artist joined as `", "` and a missing local artist treated
-/// as empty.
+/// than dropped; the remaining providers still count. Scoring uses the weights
+/// in `weights_json` (the `AppSettings::tagger_weights` JSON form); when the
+/// blob is absent, unparsable, or parses to a set that fails
+/// [`UnifiedScorer::new`]'s sum validation, the default weights apply — a bad
+/// stored setting degrades scoring instead of failing the search. The candidate
+/// artist is joined as `", "`, and missing local metadata falls back to the
+/// per-signal neutral scores.
+// Mirrors `search_and_rank`'s flat scoring contract; see the note there.
+#[allow(clippy::too_many_arguments)]
 fn rank_results(
     results: Vec<ProviderSearchResult>,
     query: &TagSearchQuery,
     local_duration_ms: i64,
+    local_genre: &str,
+    local_label: &str,
+    local_bpm: f64,
+    local_key: &str,
     provider_priority: &[String],
     min_score: f64,
     max_candidates: usize,
+    weights_json: Option<&str>,
 ) -> RankedSearchResult {
-    let scorer = UnifiedScorer::default_weights();
+    let scorer = match weights_json {
+        None => UnifiedScorer::default_weights(),
+        Some(json) => {
+            match serde_json::from_str::<ScoringWeights>(json)
+                .map_err(|e| CrateError::Tagger(format!("invalid tagger_weights JSON: {e}")))
+                .and_then(UnifiedScorer::new)
+            {
+                Ok(scorer) => scorer,
+                Err(e) => {
+                    log::warn!("Tagger scoring weights rejected ({e}); using defaults");
+                    UnifiedScorer::default_weights()
+                }
+            }
+        }
+    };
     let local_title = query.title.as_str();
     let local_artist = query.artist.as_deref().unwrap_or("");
 
@@ -269,9 +389,17 @@ fn rank_results(
                 local_title,
                 local_artist,
                 local_duration_ms,
+                local_genre,
+                local_label,
+                local_bpm,
+                local_key,
                 &candidate.title,
                 &candidate.artists.join(", "),
                 candidate.duration_ms,
+                candidate.genre.as_deref(),
+                candidate.label.as_deref(),
+                candidate.bpm,
+                candidate.key.as_deref(),
             );
             candidates.push(ScoredTagCandidate {
                 candidate,
@@ -307,5 +435,93 @@ pub(super) trait TaggerProvider: Send + Sync {
         candidate: &TagCandidate,
     ) -> Result<TagCandidate> {
         Ok(candidate.clone())
+    }
+}
+
+// The sibling `tests` module holds the provider/parsing suite; the store-URL
+// direct-match helpers are tested here beside the function under test.
+#[cfg(test)]
+mod store_url_tests {
+    use super::{parse_provider_url, ProviderTrackRef, TaggerService};
+
+    #[test]
+    fn parses_beatport_slug_and_id_url() {
+        let parsed = parse_provider_url("https://www.beatport.com/track/your-mind/123456");
+        assert_eq!(
+            parsed,
+            Some(("beatport", ProviderTrackRef::Id("123456".to_string())))
+        );
+    }
+
+    #[test]
+    fn parses_beatport_bare_id_url() {
+        let parsed = parse_provider_url("https://www.beatport.com/track/123456");
+        assert_eq!(
+            parsed,
+            Some(("beatport", ProviderTrackRef::Id("123456".to_string())))
+        );
+    }
+
+    #[test]
+    fn parses_beatport_url_with_trailing_slash() {
+        let parsed = parse_provider_url("https://www.beatport.com/track/your-mind/123456/");
+        assert_eq!(
+            parsed,
+            Some(("beatport", ProviderTrackRef::Id("123456".to_string())))
+        );
+    }
+
+    #[test]
+    fn parses_traxsource_id_and_slug_url() {
+        let parsed = parse_provider_url("https://www.traxsource.com/track/123456/your-mind");
+        assert_eq!(
+            parsed,
+            Some(("traxsource", ProviderTrackRef::Id("123456".to_string())))
+        );
+    }
+
+    #[test]
+    fn parses_traxsource_bare_id_url() {
+        let parsed = parse_provider_url("https://www.traxsource.com/track/123456");
+        assert_eq!(
+            parsed,
+            Some(("traxsource", ProviderTrackRef::Id("123456".to_string())))
+        );
+    }
+
+    #[test]
+    fn bandcamp_url_is_kept_verbatim() {
+        let url = "https://artist.bandcamp.com/track/your-mind";
+        let parsed = parse_provider_url(url);
+        assert_eq!(
+            parsed,
+            Some(("bandcamp", ProviderTrackRef::Url(url.to_string())))
+        );
+    }
+
+    #[test]
+    fn unrecognized_urls_parse_to_none() {
+        assert_eq!(
+            parse_provider_url("https://soundcloud.com/artist/track"),
+            None
+        );
+        assert_eq!(parse_provider_url("https://example.com/track/123456"), None);
+        assert_eq!(parse_provider_url("not a url"), None);
+        // A store track path with an empty id must not produce an empty id.
+        assert_eq!(parse_provider_url("https://www.beatport.com/track/"), None);
+        assert_eq!(
+            parse_provider_url("https://www.traxsource.com/track/"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn search_by_url_returns_none_for_unrecognized_url() {
+        let service = TaggerService::new().expect("tagger service builds");
+        let result = service
+            .search_by_url("https://soundcloud.com/artist/track")
+            .await
+            .expect("unrecognized URL is not an error");
+        assert!(result.is_none());
     }
 }

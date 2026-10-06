@@ -1,8 +1,16 @@
 import { writable, get } from 'svelte/store'
-import type { ProviderError, ScoredTagCandidate, TagCandidate, Track, TrackMetadataPatch } from '../types'
-import { extendTrackTag, searchRankedTrackTags, setTrackArtworkFromUrl } from '../api/tagger'
+import type {
+	ProviderError,
+	RankedSearchResult,
+	ScoredTagCandidate,
+	TagCandidate,
+	Track,
+	TrackMetadataPatch,
+} from '../types'
+import { extendTrackTag, searchRankedTrackTags, searchTrackByUrl, setTrackArtworkFromUrl } from '../api/tagger'
 import { updateTrackMetadata } from '../api/library'
 import { translate } from '../i18n'
+import { settingsStore } from './settings'
 import { toastStore } from './toast'
 
 // =============================================================================
@@ -19,10 +27,15 @@ export interface BatchRow {
 }
 
 /**
- * Harmony auto-applies at 0.9 while pre-selecting at 0.85; keeping them apart is
- * what makes the pre-selection meaningful.
+ * Auto-apply threshold (and pre-selection band) are configured in settings, not
+ * hardcoded: auto-apply fires at the configured threshold, pre-selection sits
+ * 0.1 below it, keeping the two meaningful apart.
  */
-export const AUTO_APPLY_MIN_SCORE = 0.9
+function getAutoApplyThreshold(): number {
+	const settings = get(settingsStore)
+	if (!settings.taggerAutoApplyEnabled) return Infinity
+	return settings.taggerAutoApplyThreshold
+}
 
 interface BatchProgress {
 	processed: number
@@ -243,10 +256,33 @@ function createTaggerStore() {
 			update((state) => ({ ...state, trackId: track.id, loading: true, error: null }))
 
 			try {
+				// Try WOAR URL shortcut first
+				if (track.url) {
+					try {
+						const urlResult = await searchTrackByUrl(track.url)
+						if (urlResult) {
+							update((state) => ({
+								...state,
+								candidates: [urlResult],
+								errors: [],
+								selected: urlResult,
+								extended: null,
+							}))
+							return
+						}
+					} catch {
+						// URL search failed, fall through to regular search
+					}
+				}
+
 				const result = await searchRankedTrackTags({
 					artist: track.artist ?? null,
 					title: track.title ?? '',
 					durationMs: track.duration_ms,
+					genre: track.genre ?? null,
+					label: track.label ?? null,
+					bpm: track.bpm ?? null,
+					key: track.key ?? null,
 				})
 				update((state) => ({
 					...state,
@@ -348,16 +384,24 @@ function createTaggerStore() {
 		 * Search every provider for each of `tracks`, sequentially, and expose one
 		 * row per track. A track whose search throws becomes a row with `error`
 		 * set instead of aborting the whole batch. Once the loop is done, the best
-		 * candidate is pre-selected for every row scoring >= 0.85; nothing else is
-		 * pre-selected, so "not decided" stays distinct from an explicit skip.
+		 * candidate is pre-selected for every row scoring >= max(0.85, threshold - 0.1);
+		 * nothing else is pre-selected, so "not decided" stays distinct from an
+		 * explicit skip.
 		 *
-		 * A row whose best candidate scores >= `AUTO_APPLY_MIN_SCORE` is a
-		 * near-perfect match: it is applied in the background and never reaches the
-		 * list the user chooses from, so the user can keep deciding the rest.
+		 * A row whose best candidate scores >= the configured auto-apply threshold is
+		 * a near-perfect match: it is applied in the background and never reaches the
+		 * list the user chooses from, so the user can keep deciding the rest. When
+		 * auto-apply is disabled in settings, no row is auto-applied (threshold
+		 * resolves to Infinity, which also disables pre-selection). The threshold is
+		 * read once at the start of the batch so every row is judged under the same
+		 * settings snapshot.
 		 */
 		async searchBatch(tracks: Track[]) {
 			// A new batch supersedes any pass still running for the previous one.
 			const generation = ++autoApplyGeneration
+			// Captured once: one batch, one consistent reading of the configured threshold.
+			const threshold = getAutoApplyThreshold()
+			const preSelectThreshold = Math.max(0.85, threshold - 0.1)
 			update((state) => ({
 				...state,
 				batchRows: [],
@@ -378,15 +422,34 @@ function createTaggerStore() {
 				}))
 
 				try {
-					const result = await searchRankedTrackTags({
-						artist: track.artist ?? null,
-						title: track.title ?? '',
-						durationMs: track.duration_ms,
-					})
+					// Try WOAR URL shortcut first
+					let result: RankedSearchResult | null = null
+					if (track.url) {
+						try {
+							const urlResult = await searchTrackByUrl(track.url)
+							if (urlResult) {
+								result = { candidates: [urlResult], errors: [] }
+							}
+						} catch {
+							// URL search failed, fall through
+						}
+					}
+
+					if (!result) {
+						result = await searchRankedTrackTags({
+							artist: track.artist ?? null,
+							title: track.title ?? '',
+							durationMs: track.duration_ms,
+							genre: track.genre ?? null,
+							label: track.label ?? null,
+							bpm: track.bpm ?? null,
+							key: track.key ?? null,
+						})
+					}
 					rows.push({ track, candidates: result.candidates, errors: result.errors, error: null })
 
 					const best = result.candidates[0]
-					if (best !== undefined && best.similarity_score >= 0.85) {
+					if (best !== undefined && best.similarity_score >= preSelectThreshold) {
 						selections.set(track.id, best)
 					}
 				} catch (error) {
@@ -413,7 +476,7 @@ function createTaggerStore() {
 			const manualRows: BatchRow[] = []
 			for (const row of rows) {
 				const best = row.candidates[0]
-				if (best !== undefined && best.similarity_score >= AUTO_APPLY_MIN_SCORE) {
+				if (best !== undefined && best.similarity_score >= threshold) {
 					autoRows.push(row)
 				} else {
 					manualRows.push(row)

@@ -4,8 +4,9 @@ use super::bandcamp::{
 use super::beatport::{enrich_beatport_candidate, parse_beatport_search};
 use super::recommendations::parse_beatport_recommendations;
 use super::scoring::{
-    duration_score, hybrid_text_similarity, levenshtein_similarity, normalize_string,
-    rank_candidates, ScoringWeights, UnifiedScorer, DEFAULT_WEIGHTS,
+    bpm_score, duration_score, genre_score, hybrid_text_similarity, key_score, label_score,
+    levenshtein_similarity, normalize_string, rank_candidates, ScoringWeights, UnifiedScorer,
+    DEFAULT_WEIGHTS,
 };
 #[cfg(feature = "desktop")]
 use super::traxsource::parse_traxsource_rows;
@@ -633,11 +634,83 @@ fn duration_score_is_total_for_extreme_durations() {
 }
 
 #[test]
+fn genre_score_matches_hybrid_text_similarity() {
+    assert_eq!(genre_score("Techno", "Techno"), 1.0);
+    assert_eq!(genre_score("", "Techno"), 0.0);
+    assert_eq!(genre_score("Techno", ""), 0.0);
+    // Hybrid similarity is asymmetric: extra candidate words do not penalize a
+    // shorter local genre, while a longer local genre keeps partial credit for
+    // its matching word.
+    assert_eq!(genre_score("Techno", "Peak Time Techno"), 1.0);
+    let partial = genre_score("Peak Time Techno", "Techno");
+    assert!(partial > 0.0 && partial < 1.0, "unexpected {partial}");
+}
+
+#[test]
+fn label_score_matches_hybrid_text_similarity() {
+    assert_eq!(label_score("Drumcode", "Drumcode"), 1.0);
+    assert_eq!(label_score("", "Drumcode"), 0.0);
+    assert_eq!(label_score("Drumcode", ""), 0.0);
+    let partial = label_score("Drumcode", "Drumkat");
+    assert!(partial > 0.0 && partial < 1.0, "unexpected {partial}");
+}
+
+#[test]
+fn bpm_score_is_neutral_when_unknown() {
+    assert_eq!(bpm_score(128.0, None), 0.7);
+    assert_eq!(bpm_score(128.0, Some(0.0)), 0.7);
+    assert_eq!(bpm_score(0.0, Some(128.0)), 0.7);
+}
+
+#[test]
+fn bpm_score_respects_thresholds() {
+    assert_eq!(bpm_score(128.0, Some(128.0)), 1.0);
+    assert_eq!(bpm_score(128.0, Some(129.0)), 1.0);
+    assert_eq!(bpm_score(128.0, Some(131.0)), 0.8);
+    assert_eq!(bpm_score(128.0, Some(133.0)), 0.5);
+    assert_eq!(bpm_score(128.0, Some(133.1)), 0.2);
+    // Below the local BPM counts too: 128 - 125 = 3 -> 0.8.
+    assert_eq!(bpm_score(128.0, Some(125.0)), 0.8);
+}
+
+#[test]
+fn key_score_is_neutral_when_unknown() {
+    assert_eq!(key_score("", "Gm"), 0.5);
+    assert_eq!(key_score("Gm", ""), 0.5);
+    assert_eq!(key_score("", ""), 0.5);
+}
+
+#[test]
+fn key_score_rewards_exact_match_only() {
+    assert_eq!(key_score("Gm", "Gm"), 1.0);
+    assert_eq!(key_score("Gm", "G"), 0.2);
+    assert_eq!(key_score("Gm", "Am"), 0.2);
+}
+
+#[test]
 fn unified_scorer_rejects_weights_that_do_not_sum_to_one() {
     let bad = ScoringWeights {
         title: 0.5,
         artist: 0.5,
         duration: 0.5,
+        genre: 0.0,
+        label: 0.0,
+        bpm: 0.0,
+        key: 0.0,
+    };
+    assert!(UnifiedScorer::new(bad).is_err());
+}
+
+#[test]
+fn unified_scorer_rejects_a_seven_field_sum_off_by_more_than_a_thousandth() {
+    let bad = ScoringWeights {
+        title: 0.40,
+        artist: 0.25,
+        duration: 0.10,
+        genre: 0.10,
+        label: 0.08,
+        bpm: 0.04,
+        key: 0.05, // total 1.02
     };
     assert!(UnifiedScorer::new(bad).is_err());
 }
@@ -654,9 +727,17 @@ fn unified_scorer_perfect_match_scores_one() {
         "Your Mind",
         "Adam Beyer",
         405_000,
+        "Techno",
+        "Drumcode",
+        128.0,
+        "Gm",
         "Your Mind",
         "Adam Beyer",
         Some(405_000),
+        Some("Techno"),
+        Some("Drumcode"),
+        Some(128.0),
+        Some("Gm"),
     );
     assert!((score - 1.0).abs() < 1e-9, "unexpected {score}");
 }
@@ -668,11 +749,62 @@ fn unified_scorer_wrong_candidate_scores_low() {
         "Your Mind",
         "Adam Beyer",
         405_000,
+        "",
+        "",
+        0.0,
+        "",
         "Completely Different",
         "Nobody",
         Some(120_000),
+        None,
+        None,
+        None,
+        None,
     );
     assert!(score < 0.5, "unexpected {score}");
+}
+
+#[test]
+fn unified_scorer_scores_new_signals_independently() {
+    // Same title/artist/duration everywhere; only the genre signal differs.
+    let scorer = UnifiedScorer::default_weights();
+    let base = ("", "", 0.0, "");
+    let matching = scorer.score(
+        "Your Mind",
+        "Adam Beyer",
+        405_000,
+        "Techno",
+        base.3,
+        base.2,
+        base.3,
+        "Your Mind",
+        "Adam Beyer",
+        Some(405_000),
+        Some("Techno"),
+        None,
+        None,
+        None,
+    );
+    let mismatched = scorer.score(
+        "Your Mind",
+        "Adam Beyer",
+        405_000,
+        "Techno",
+        "",
+        0.0,
+        "",
+        "Your Mind",
+        "Adam Beyer",
+        Some(405_000),
+        Some("House"),
+        None,
+        None,
+        None,
+    );
+    assert!(
+        (matching - mismatched - 0.10).abs() < 1e-9,
+        "genre weight gap should be exactly 0.10: {matching} vs {mismatched}"
+    );
 }
 
 fn scored(provider: &str, similarity_score: f64) -> ScoredTagCandidate {
@@ -698,6 +830,26 @@ fn candidate(
         artists: artists.iter().map(|artist| (*artist).to_string()).collect(),
         duration_ms,
         ..Default::default()
+    }
+}
+
+/// A [`candidate`] additionally carrying matching genre/label/bpm/key metadata.
+fn candidate_with_tags(
+    provider: &str,
+    title: &str,
+    artists: &[&str],
+    duration_ms: Option<i64>,
+    genre: &str,
+    label: &str,
+    bpm: f64,
+    key: &str,
+) -> TagCandidate {
+    TagCandidate {
+        genre: Some(genre.to_string()),
+        label: Some(label.to_string()),
+        bpm: Some(bpm),
+        key: Some(key.to_string()),
+        ..candidate(provider, title, artists, duration_ms)
     }
 }
 
@@ -832,18 +984,24 @@ fn rank_results_reports_failed_providers_and_keeps_the_others() {
         },
         ProviderSearchResult {
             provider: "bandcamp".to_string(),
-            candidates: vec![candidate(
+            candidates: vec![candidate_with_tags(
                 "bandcamp",
                 "Your Mind",
                 &["Adam Beyer"],
                 Some(405_000),
+                "Techno",
+                "Drumcode",
+                128.0,
+                "Gm",
             )],
             error: None,
         },
     ];
     let priority = vec!["beatport".to_string(), "bandcamp".to_string()];
 
-    let ranked = rank_results(results, &query, 405_000, &priority, 0.3, 5);
+    let ranked = rank_results(
+        results, &query, 405_000, "Techno", "Drumcode", 128.0, "Gm", &priority, 0.3, 5, None,
+    );
 
     assert_eq!(ranked.errors.len(), 1);
     assert_eq!(ranked.errors[0].provider, "beatport");
@@ -867,17 +1025,23 @@ fn rank_results_keeps_candidates_that_arrive_alongside_a_provider_error() {
     };
     let results = vec![ProviderSearchResult {
         provider: "traxsource".to_string(),
-        candidates: vec![candidate(
+        candidates: vec![candidate_with_tags(
             "traxsource",
             "Your Mind",
             &["Adam Beyer"],
             Some(405_000),
+            "Techno",
+            "Drumcode",
+            128.0,
+            "Gm",
         )],
         error: Some("partial: page 2 timed out".to_string()),
     }];
     let priority = vec!["traxsource".to_string()];
 
-    let ranked = rank_results(results, &query, 405_000, &priority, 0.3, 5);
+    let ranked = rank_results(
+        results, &query, 405_000, "Techno", "Drumcode", 128.0, "Gm", &priority, 0.3, 5, None,
+    );
 
     assert_eq!(ranked.errors.len(), 1);
     assert_eq!(ranked.errors[0].provider, "traxsource");
@@ -931,17 +1095,33 @@ fn rank_results_happy_path_orders_near_ties_by_provider_priority() {
         &query.title,
         "Adam Beyer",
         405_000,
+        "",
+        "",
+        0.0,
+        "",
         "Reminiscing About The Summer Days",
         "Adam Beyer",
         Some(405_000),
+        None,
+        None,
+        None,
+        None,
     );
     let typo = scorer.score(
         &query.title,
         "Adam Beyer",
         405_000,
+        "",
+        "",
+        0.0,
+        "",
         beatport_title,
         "Adam Beyer",
         Some(405_000),
+        None,
+        None,
+        None,
+        None,
     );
     assert!(
         (perfect - typo).abs() <= 0.01,
@@ -949,7 +1129,9 @@ fn rank_results_happy_path_orders_near_ties_by_provider_priority() {
         perfect - typo
     );
 
-    let ranked = rank_results(results, &query, 405_000, &priority, 0.3, 5);
+    let ranked = rank_results(
+        results, &query, 405_000, "", "", 0.0, "", &priority, 0.3, 5, None,
+    );
 
     assert!(ranked.errors.is_empty());
     let providers: Vec<&str> = ranked
@@ -972,29 +1154,136 @@ fn rank_results_happy_path_orders_near_ties_by_provider_priority() {
 }
 
 #[test]
-fn rank_results_without_local_artist_caps_the_score_at_seven_tenths() {
+fn rank_results_without_local_artist_caps_the_score_below_one() {
     let query = TagSearchQuery {
         artist: None,
         title: "Your Mind".to_string(),
     };
     let results = vec![ProviderSearchResult {
         provider: "bandcamp".to_string(),
-        candidates: vec![candidate(
+        candidates: vec![candidate_with_tags(
             "bandcamp",
+            "Your Mind",
+            &["Adam Beyer"],
+            Some(405_000),
+            "Techno",
+            "Drumcode",
+            128.0,
+            "Gm",
+        )],
+        error: None,
+    }];
+    let priority = vec!["bandcamp".to_string()];
+
+    // Every signal matches except the missing local artist, so the attainable
+    // maximum is 1.0 - artist_weight = 0.75 under the default weights.
+    let loose = rank_results(
+        results.clone(),
+        &query,
+        405_000,
+        "Techno",
+        "Drumcode",
+        128.0,
+        "Gm",
+        &priority,
+        0.3,
+        5,
+        None,
+    );
+    assert_eq!(loose.candidates.len(), 1);
+    assert!((loose.candidates[0].similarity_score - 0.75).abs() < 1e-9);
+
+    let strict = rank_results(
+        results, &query, 405_000, "Techno", "Drumcode", 128.0, "Gm", &priority, 0.8, 5, None,
+    );
+    assert!(strict.candidates.is_empty());
+}
+
+#[test]
+fn rank_results_uses_custom_weights_from_json() {
+    // Title-only weights: every other signal contributes exactly zero, so the
+    // score proves the JSON weights reached the scorer rather than the defaults.
+    let title_only =
+        r#"{"title":1.0,"artist":0.0,"duration":0.0,"genre":0.0,"label":0.0,"bpm":0.0,"key":0.0}"#;
+    let results = vec![ProviderSearchResult {
+        provider: "beatport".to_string(),
+        candidates: vec![candidate(
+            "beatport",
             "Your Mind",
             &["Adam Beyer"],
             Some(405_000),
         )],
         error: None,
     }];
-    let priority = vec!["bandcamp".to_string()];
+    let priority = vec!["beatport".to_string()];
 
-    let loose = rank_results(results.clone(), &query, 405_000, &priority, 0.3, 5);
-    assert_eq!(loose.candidates.len(), 1);
-    assert!((loose.candidates[0].similarity_score - 0.7).abs() < 1e-9);
+    let ranked = rank_results(
+        results,
+        &live_query(),
+        405_000,
+        "",
+        "",
+        0.0,
+        "",
+        &priority,
+        0.3,
+        5,
+        Some(title_only),
+    );
 
-    let strict = rank_results(results, &query, 405_000, &priority, 0.8, 5);
-    assert!(strict.candidates.is_empty());
+    assert_eq!(ranked.candidates.len(), 1);
+    assert!((ranked.candidates[0].similarity_score - 1.0).abs() < 1e-9);
+}
+
+#[test]
+fn rank_results_falls_back_to_default_weights_when_json_is_unusable() {
+    let results = vec![ProviderSearchResult {
+        provider: "beatport".to_string(),
+        candidates: vec![candidate(
+            "beatport",
+            "Your Mind",
+            &["Adam Beyer"],
+            Some(405_000),
+        )],
+        error: None,
+    }];
+    let priority = vec!["beatport".to_string()];
+
+    // Malformed JSON, a partial weight set, and a set that parses but fails the
+    // sum validation must all land on the default weights.
+    let unusable = [
+        Some("not json"),
+        Some(r#"{"title":0.9}"#),
+        Some(
+            r#"{"title":0.5,"artist":0.5,"duration":0.5,"genre":0.5,"label":0.0,"bpm":0.0,"key":0.0}"#,
+        ),
+        None,
+    ];
+    for weights_json in unusable {
+        let ranked = rank_results(
+            results.clone(),
+            &live_query(),
+            405_000,
+            "",
+            "",
+            0.0,
+            "",
+            &priority,
+            0.0,
+            5,
+            weights_json,
+        );
+
+        // Default weights on a perfect title/artist/duration match with empty
+        // local genre/label (empty==empty scores 1.0), neutral bpm/key:
+        // 0.40 + 0.25 + 0.10 + 0.10 + 0.08 + 0.028 + 0.015 = 0.973.
+        assert_eq!(ranked.candidates.len(), 1);
+        assert!(
+            (ranked.candidates[0].similarity_score - 0.973).abs() < 1e-9,
+            "weights_json {weights_json:?} should fall back to defaults, got {}",
+            ranked.candidates[0].similarity_score
+        );
+    }
 }
 
 #[test]

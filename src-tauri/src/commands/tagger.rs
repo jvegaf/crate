@@ -3,10 +3,12 @@ use tauri::State;
 use crate::error::Result;
 #[cfg(feature = "desktop")]
 use crate::models::Track;
-use crate::models::{ProviderSearchResult, RankedSearchResult, TagCandidate, TagSearchQuery};
+use crate::models::{
+    ProviderSearchResult, RankedSearchResult, ScoredTagCandidate, TagCandidate, TagSearchQuery,
+};
 #[cfg(feature = "desktop")]
 use crate::services::LibraryService;
-use crate::services::TaggerService;
+use crate::services::{SettingsService, TaggerService};
 
 /// Search every metadata provider (Beatport, TraxSource, Bandcamp) for candidate
 /// tracks matching `artist` + `title`. Per-provider failures are reported inside
@@ -30,28 +32,47 @@ pub async fn search_track_tags(
 ///
 /// The result is a rank, not a score sort: `similarity_score` is not guaranteed
 /// to be non-increasing, because a near-tie group is ordered by provider
-/// priority. A local track with no artist tag caps every candidate at `0.7`, so
-/// a `min_score` above that returns no candidates.
+/// priority. Scoring combines title, artist, duration, genre, label, bpm and
+/// key with the weights stored in `AppSettings::tagger_weights` (defaults when
+/// absent or invalid). A signal the local track does not provide cannot earn
+/// its full weight, so an aggressive `min_score` can return no candidates.
+// The IPC surface mirrors the frontend's flat parameter object; Tauri maps
+// camelCase TS fields onto these snake_case arguments.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn search_ranked_track_tags(
     artist: Option<String>,
     title: String,
     duration_ms: Option<i64>,
+    genre: Option<String>,
+    label: Option<String>,
+    bpm: Option<f64>,
+    key: Option<String>,
     limit: Option<usize>,
     max_candidates: Option<usize>,
     min_score: Option<f64>,
     tagger: State<'_, TaggerService>,
+    settings: State<'_, SettingsService>,
 ) -> Result<RankedSearchResult> {
     let limit = limit.unwrap_or(10).clamp(1, 25);
     let max_candidates = max_candidates.unwrap_or(5).clamp(1, 20);
     let min_score = min_score.unwrap_or(0.3).clamp(0.0, 1.0);
+
+    // `get_settings` locks internally and drops the guard on return, so no DB
+    // mutex is held across the `.await` below.
+    let app_settings = settings.get_settings()?;
     tagger
         .search_and_rank(
             &TagSearchQuery { artist, title },
             duration_ms,
+            genre,
+            label,
+            bpm,
+            key,
             limit,
             min_score,
             max_candidates,
+            app_settings.tagger_weights.as_deref(),
         )
         .await
 }
@@ -70,6 +91,19 @@ pub async fn extend_track_tag(
     tagger.extend_candidate(&candidate).await.inspect_err(|e| {
         log::warn!("extend_track_tag failed for candidate {provider} {candidate_id:?}: {e}")
     })
+}
+
+/// Skip the search and fetch metadata directly from a store URL (Beatport,
+/// TraxSource, Bandcamp), returning a single candidate at similarity `1.0`.
+///
+/// Returns `null` if the URL is not a recognized store URL, or if the provider
+/// is unavailable in this build (e.g. TraxSource on mobile).
+#[tauri::command]
+pub async fn search_track_by_url(
+    url: String,
+    tagger: State<'_, TaggerService>,
+) -> Result<Option<ScoredTagCandidate>> {
+    tagger.search_by_url(&url).await
 }
 
 /// Download a candidate's artwork and set it as the track's artwork, reusing the
