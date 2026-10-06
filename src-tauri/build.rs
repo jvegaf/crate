@@ -32,7 +32,6 @@ fn bake_cloud_sync_config() {
         ("appcheck_debug_token", "GCLOUD_APPCHECK_DEBUG_TOKEN"),
     ];
 
-    println!("cargo:rerun-if-changed=cloud_sync.config.json");
     for &(_, var) in FIELDS {
         println!("cargo:rerun-if-env-changed={var}");
     }
@@ -43,6 +42,9 @@ fn bake_cloud_sync_config() {
     if target_os != "ios" && target_os != "android" {
         return;
     }
+
+    // Only watch the config file for mobile builds — a missing file makes desktop always recompile.
+    println!("cargo:rerun-if-changed=cloud_sync.config.json");
 
     let config: Option<serde_json::Value> = std::fs::read_to_string("cloud_sync.config.json")
         .ok()
