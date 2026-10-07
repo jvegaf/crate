@@ -27,6 +27,7 @@ const columnIds: TracklistColumnId[] = [
 	'bitrate',
 	'year',
 	'date_added',
+	'provider',
 	'tags',
 	'rating',
 ]
@@ -165,7 +166,7 @@ describe('normalizeTracklistColumns', () => {
 
 describe('tracklistGridTemplate', () => {
 	it('preserves the existing tracklist layout for defaults', () => {
-		expect(tracklistGridTemplate(defaultTracklistColumns())).toBe('24px 40px 1fr 1fr 80px 60px 80px 1fr 72px')
+		expect(tracklistGridTemplate(defaultTracklistColumns())).toBe('24px 40px 1fr 1fr 80px 60px 80px 100px 1fr 72px')
 	})
 
 	it('always retains a fluid track for representative hide and show combinations', () => {
@@ -334,7 +335,7 @@ describe('moveTracklistColumn', () => {
 		const definitionById = new Map(TRACKLIST_COLUMN_DEFINITIONS.map(({ id, width }) => [id, width]))
 		const expectedTemplate = expectedVisibleIds.map((id) => definitionById.get(id)).join(' ')
 
-		expect(prefs).toHaveLength(16)
+		expect(prefs).toHaveLength(17)
 		expect(tracklistGridTemplate(moved)).toBe(expectedTemplate)
 	})
 
