@@ -5,6 +5,7 @@
 	import { get } from 'svelte/store'
 	import { buildFolderMenuItems } from '$shared/stores/playlists'
 	import { joinMenuGroups } from '$shared/utils'
+	import type { AutoOrderPriority } from '$shared/utils'
 	import { SvelteSet } from 'svelte/reactivity'
 
 	type Props = {
@@ -25,6 +26,7 @@
 		onBulkMove?: (playlists: Playlist[], folderId: string | null) => void
 		onMove: (playlist: Playlist, folderId: string | null) => void
 		onExport: (playlist: Playlist) => void
+		onAutoOrder?: (playlist: Playlist, priority: AutoOrderPriority) => void
 	}
 
 	let {
@@ -45,6 +47,7 @@
 		onBulkMove,
 		onMove,
 		onExport,
+		onAutoOrder,
 	}: Props = $props()
 
 	const isBulk = $derived(targetPlaylists.length > 1)
@@ -135,6 +138,20 @@
 				label: get(translate)('playlists.editSmartPlaylist'),
 				icon: 'bolt',
 				action: () => onEditSmartPlaylist(playlist),
+			})
+		}
+		if (onAutoOrder && !playlist.is_folder && !playlist.is_smart && playlist.context !== 'discovery') {
+			manage.push({
+				id: 'auto-order-harmony',
+				label: get(translate)('playlists.autoOrderHarmony'),
+				icon: 'music-note',
+				action: () => onAutoOrder(playlist, 'harmony'),
+			})
+			manage.push({
+				id: 'auto-order-energy',
+				label: get(translate)('playlists.autoOrderEnergy'),
+				icon: 'bolt',
+				action: () => onAutoOrder(playlist, 'energy'),
 			})
 		}
 		if (!playlist.is_folder) {

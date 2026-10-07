@@ -34,6 +34,7 @@
 
 <script lang="ts">
 	import type { ContextMenuItem, DiscoveryTrack } from '$shared/types'
+	import type { AutoOrderPriority } from '$shared/utils'
 	import TrackContextMenu from '$lib/components/library/TrackContextMenu.svelte'
 	import PlaylistContextMenu from '$lib/components/playlists/PlaylistContextMenu.svelte'
 	import TagContextMenu from '$lib/components/tags/TagContextMenu.svelte'
@@ -546,6 +547,11 @@
 		onPlaylistRename(playlist)
 	}
 
+	function handlePlaylistAutoOrder(playlist: Playlist, priority: AutoOrderPriority) {
+		closeAll()
+		$pageActions?.playlistController.handlePlaylistAutoOrder(playlist, priority)
+	}
+
 	function handlePlaylistDelete(playlist: Playlist) {
 		closeAll()
 		onPlaylistDelete(playlist)
@@ -913,6 +919,7 @@
 		onBulkMove={handlePlaylistBulkMove}
 		onMove={handlePlaylistMove}
 		onExport={handlePlaylistExport}
+		onAutoOrder={handlePlaylistAutoOrder}
 	/>
 {/if}
 
