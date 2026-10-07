@@ -616,7 +616,7 @@ export type Language =
 	| 'pl'
 	| 'tr'
 
-export type KeyNotationFormat = 'standard' | 'camelot'
+export type KeyNotationFormat = 'standard' | 'camelot' | 'openkey'
 
 export type DateFormat = 'locale' | 'iso' | 'us' | 'eu' | 'dot'
 

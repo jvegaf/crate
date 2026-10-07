@@ -68,6 +68,14 @@ describe('keySortValue', () => {
 		expect(keySortValue('G major')).toBe(keySortValue('9B'))
 	})
 
+	it('resolves legacy harmony m/d storage values to the same value as their Camelot code', () => {
+		// Stored 11d is harmony-Camelot 11B, 1m is 1A (NOT true OpenKey).
+		expect(keySortValue('11d')).toBe(keySortValue('11B'))
+		expect(keySortValue('11d')).toBe(111)
+		expect(keySortValue('1m')).toBe(keySortValue('1A'))
+		expect(keySortValue('1m')).toBe(10)
+	})
+
 	it('sorts keys it cannot resolve to the end instead of guessing a position', () => {
 		expect(keySortValue(null)).toBe(999)
 		expect(keySortValue('')).toBe(999)
@@ -111,6 +119,18 @@ describe('autoOrderTracks', () => {
 			]
 
 			expect(ids(autoOrderTracks(tracks, 'harmony'))).toEqual(['d', 'a', 'c', 'b'])
+		})
+
+		it('sorts legacy harmony keys among resolvable keys instead of sinking to the end', () => {
+			const tracks = [
+				makeTrack('a', { key: '8A' }),
+				makeTrack('legacy', { key: '11d' }),
+				makeTrack('b', { key: '12B' }),
+				makeTrack('unknown', { key: 's-key' }),
+			]
+
+			// 11d sorts at 111 (with 11B), not at 999 like an unresolvable key.
+			expect(ids(autoOrderTracks(tracks, 'harmony'))).toEqual(['a', 'legacy', 'b', 'unknown'])
 		})
 
 		it('treats equivalent notations in different formats as the same key', () => {

@@ -1,5 +1,6 @@
 import { get } from 'svelte/store'
 import { translate } from '../i18n'
+import type { KeyNotationFormat } from '../types'
 
 /**
  * Format duration in milliseconds to MM:SS or HH:MM:SS
@@ -104,6 +105,27 @@ const KEY_MODE_WORDS: ReadonlyArray<readonly [RegExp, string]> = [
 const CAMELOT_PATTERN = /^([1-9]|1[0-2])([ab])$/i
 
 /**
+ * Legacy harmony `m`/`d` values already present in `tracks.key`: number kept, `m` → `A`,
+ * `d` → `B`, case-insensitively (`11d` = Camelot 11B, `1m` = Camelot 1A).
+ *
+ * Valid for **stored values only** — the database never holds OpenKey, so a bare `m`/`d`
+ * value can only be this legacy convention. Never use this branch to interpret OpenKey the
+ * user types as display input: true OpenKey would need a rotation, and rotating stored
+ * values is exactly the corruption this design avoids. Mirrors
+ * `resolve_stored_key_to_camelot` in `src-tauri/src/services/analysis.rs`.
+ */
+const LEGACY_HARMONY_PATTERN = /^([1-9]|1[0-2])([md])$/i
+
+/**
+ * Unicode accidentals external taggers write into the file tag (♯ U+266F, ♭ U+266D),
+ * which Crate copies verbatim into `tracks.key`.
+ */
+const UNICODE_ACCIDENTALS: ReadonlyArray<readonly [RegExp, string]> = [
+	[/♯/g, '#'],
+	[/♭/g, 'b'],
+]
+
+/**
  * Normalize a raw `tracks.key` value and resolve it to a Camelot code.
  *
  * `tracks.key` is free text and the database holds mixed notation: analysis
@@ -118,12 +140,26 @@ export function keyToCamelot(key: string | null | undefined): string | null {
 	const compact = key.trim().replace(/\s+/g, '')
 	if (!compact) return null
 
-	const camelot = compact.match(CAMELOT_PATTERN)
+	// Unicode accidentals first: external taggers write ♯/♭ into the file tag and Crate
+	// copies them verbatim, so "G♯ Minor" and "G♭" must resolve before mode-word stripping.
+	let normalized = compact
+	for (const [pattern, replacement] of UNICODE_ACCIDENTALS) {
+		normalized = normalized.replace(pattern, replacement)
+	}
+
+	const camelot = normalized.match(CAMELOT_PATTERN)
 	if (camelot) {
 		return `${camelot[1]}${camelot[2].toUpperCase()}`
 	}
 
-	let normalized = compact
+	// Legacy harmony m/d — stored values only (see LEGACY_HARMONY_PATTERN). This branch
+	// must run before the standard-notation map lookup: "11d" is Camelot 11B, not a key
+	// the map could guess.
+	const legacy = normalized.match(LEGACY_HARMONY_PATTERN)
+	if (legacy) {
+		return `${legacy[1]}${legacy[2].toLowerCase() === 'm' ? 'A' : 'B'}`
+	}
+
 	for (const [pattern, replacement] of KEY_MODE_WORDS) {
 		normalized = normalized.replace(pattern, replacement)
 	}
@@ -138,9 +174,25 @@ export function keyToCamelot(key: string | null | undefined): string | null {
  * Converts bidirectionally: detects whether the stored key is in
  * Standard or Camelot and translates to the requested display format.
  * Unknown keys pass through unchanged (safe fallback).
+ *
+ * `openkey` is display-only: the stored value is resolved to Camelot first
+ * (legacy harmony `11d` → Camelot `11B`), then rotated to true OpenKey with
+ * `openKeyNumber = ((camelotNumber + 4) % 12) + 1` and `A`→`m`, `B`→`d`.
+ * Storage never holds OpenKey — see {@link keyToCamelot}.
  */
-export function formatKey(key: string | null, format: 'standard' | 'camelot' = 'camelot'): string {
+export function formatKey(key: string | null, format: KeyNotationFormat = 'camelot'): string {
 	if (!key) return '-'
+
+	if (format === 'openkey') {
+		const camelot = keyToCamelot(key)
+		if (!camelot) return key
+
+		const match = camelot.match(CAMELOT_PATTERN)
+		if (!match) return key
+
+		const openKeyNumber = ((Number(match[1]) + 4) % 12) + 1
+		return `${openKeyNumber}${match[2] === 'A' ? 'm' : 'd'}`
+	}
 
 	if (format === 'camelot') {
 		return STANDARD_TO_CAMELOT[key] ?? key

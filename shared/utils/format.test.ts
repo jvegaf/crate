@@ -27,7 +27,26 @@ describe('keyToCamelot', () => {
 		expect(keyToCamelot('Gmaj')).toBe('9B')
 	})
 
+	it('resolves legacy harmony m/d values to Camelot, case-insensitively', () => {
+		// Stored values only: 11d = Camelot 11B, 1m = Camelot 1A (harmony convention,
+		// NOT true OpenKey — no rotation applies).
+		expect(keyToCamelot('11d')).toBe('11B')
+		expect(keyToCamelot('1m')).toBe('1A')
+		expect(keyToCamelot('11D')).toBe('11B')
+		expect(keyToCamelot('1M')).toBe('1A')
+		// Negative anchor: 4d is harmony-Camelot 4B, NOT true-OpenKey 11B.
+		expect(keyToCamelot('4d')).toBe('4B')
+	})
+
+	it('resolves unicode accidentals written by external taggers', () => {
+		expect(keyToCamelot('G♯ Minor')).toBe('1A')
+		expect(keyToCamelot('G♭')).toBe('2B')
+		expect(keyToCamelot('G♭ major')).toBe('2B')
+	})
+
 	it('returns null for anything it cannot resolve instead of guessing', () => {
+		expect(keyToCamelot('Am')).toBe('8A')
+		expect(keyToCamelot('8A')).toBe('8A')
 		expect(keyToCamelot(null)).toBeNull()
 		expect(keyToCamelot('')).toBeNull()
 		expect(keyToCamelot('   ')).toBeNull()
@@ -49,10 +68,88 @@ describe('formatKey', () => {
 		expect(formatKey('8B', 'standard')).toBe('C')
 	})
 
+	it('converts Camelot to true OpenKey for display', () => {
+		expect(formatKey('8A', 'openkey')).toBe('1m')
+		expect(formatKey('11B', 'openkey')).toBe('4d')
+		expect(formatKey('1A', 'openkey')).toBe('6m')
+		expect(formatKey('12B', 'openkey')).toBe('5d')
+		expect(formatKey('8B', 'openkey')).toBe('1d')
+	})
+
+	it('resolves legacy harmony storage values before rotating to OpenKey', () => {
+		// Stored 11d is Camelot 11B first; only then does it rotate to OpenKey 4d.
+		expect(formatKey('11d', 'openkey')).toBe('4d')
+	})
+
+	/**
+	 * All 24 rows of the published OpenKey/Camelot chart, transcribed verbatim as data.
+	 * Expected OpenKey codes must come from this table, never be derived from the
+	 * rotation formula — the table is the independent ground truth.
+	 */
+	const PUBLISHED_OPENKEY_TABLE: ReadonlyArray<readonly [camelot: string, openkey: string]> = [
+		['1A', '6m'],
+		['1B', '6d'],
+		['2A', '7m'],
+		['2B', '7d'],
+		['3A', '8m'],
+		['3B', '8d'],
+		['4A', '9m'],
+		['4B', '9d'],
+		['5A', '10m'],
+		['5B', '10d'],
+		['6A', '11m'],
+		['6B', '11d'],
+		['7A', '12m'],
+		['7B', '12d'],
+		['8A', '1m'],
+		['8B', '1d'],
+		['9A', '2m'],
+		['9B', '2d'],
+		['10A', '3m'],
+		['10B', '3d'],
+		['11A', '4m'],
+		['11B', '4d'],
+		['12A', '5m'],
+		['12B', '5d'],
+	]
+
+	it('matches the published OpenKey table for all 24 keys and the rotation is bijective', () => {
+		for (const [camelot, openkey] of PUBLISHED_OPENKEY_TABLE) {
+			expect(formatKey(camelot, 'openkey'), `${camelot} should display as ${openkey}`).toBe(openkey)
+
+			// Invert openKeyNumber = ((camelotNumber + 4) % 12) + 1: camelotNumber = ((openKeyNumber + 6) % 12) + 1.
+			const openKeyNumber = Number(openkey.slice(0, -1))
+			const restored = `${((openKeyNumber + 6) % 12) + 1}${openkey.endsWith('m') ? 'A' : 'B'}`
+			expect(restored, `${openkey} should restore to ${camelot}`).toBe(camelot)
+		}
+	})
+
+	it('legacy-read shift: OpenKey display values read as stored m/d land on a different Camelot key', () => {
+		// Executable form of the reason storage must never hold OpenKey: keyToCamelot
+		// resolves m/d as the legacy harmony convention (no rotation), so an OpenKey
+		// display value read back as stored data lands on a DIFFERENT Camelot key
+		// (e.g. 8A → '1m' → '1A', not '8A'; 11B → '4d' → '4B', not '11B'). Storing
+		// OpenKey would make data ambiguous and the bulk migration non-idempotent.
+		const shifted: string[] = []
+		for (const [camelot] of PUBLISHED_OPENKEY_TABLE) {
+			const camelotNumber = Number(camelot.slice(0, -1))
+			const expectedShift = `${((camelotNumber + 4) % 12) + 1}${camelot.endsWith('A') ? 'A' : 'B'}`
+			const readBack = keyToCamelot(formatKey(camelot, 'openkey')) ?? ''
+			expect(readBack, `${camelot} read as legacy harmony should shift to ${expectedShift}`).toBe(expectedShift)
+			expect(readBack, `${camelot} must not read back as itself`).not.toBe(camelot)
+			shifted.push(readBack)
+		}
+
+		// A permutation, not a collision: all 24 shifted keys are distinct.
+		expect(new Set(shifted).size).toBe(24)
+	})
+
 	it('passes unknown values through untouched and renders null as a dash', () => {
 		expect(formatKey(null)).toBe('-')
+		expect(formatKey(null, 'openkey')).toBe('-')
 		expect(formatKey('s-key')).toBe('s-key')
 		expect(formatKey('s-key', 'standard')).toBe('s-key')
+		expect(formatKey('s-key', 'openkey')).toBe('s-key')
 	})
 })
 

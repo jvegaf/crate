@@ -71,6 +71,14 @@ describe('keyColor', () => {
 		expect(keyColor(' 12a ')).toBe('#01C0C2')
 	})
 
+	it('resolves legacy harmony m/d storage values to the same colour as their Camelot code', () => {
+		// Stored 11d is harmony-Camelot 11B, 1m is 1A (NOT true OpenKey).
+		expect(keyColor('11d')).toBe(keyColor('11B'))
+		expect(keyColor('11d')).toBe('#FDA078')
+		expect(keyColor('1m')).toBe(keyColor('1A'))
+		expect(keyColor('1m')).toBe('#CF6793')
+	})
+
 	it('returns null for anything it cannot resolve instead of inventing a colour', () => {
 		expect(keyColor(null)).toBeNull()
 		expect(keyColor(undefined)).toBeNull()
