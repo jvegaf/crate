@@ -73,19 +73,74 @@ static CAMELOT_TO_STANDARD: std::sync::LazyLock<HashMap<&'static str, &'static s
         pairs.into_iter().collect()
     });
 
+/// True when `stem` is one of the Camelot wheel numbers (1–12).
+fn is_camelot_number(stem: &str) -> bool {
+    matches!(
+        stem,
+        "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "11" | "12"
+    )
+}
+
+/// Resolve whatever is currently stored in `tracks.key` to its Camelot wheel code.
+///
+/// Three storage shapes resolve to Camelot:
+/// - Camelot codes themselves (`8A`, `12B`), with the letter normalized to uppercase.
+/// - Standard notation spellings (`Am`, `F#m`), via [`STANDARD_TO_CAMELOT`].
+/// - Legacy harmony `m`/`d` values (`11d` = Camelot 11B, `1m` = Camelot 1A): the number
+///   is kept and `m` → `A`, `d` → `B`, case-insensitively. This is the *harmony
+///   convention*, NOT true OpenKey — no rotation applies.
+///
+/// Anything else resolves to `None`: never invent a key.
+fn resolve_stored_key_to_camelot(key: &str) -> Option<String> {
+    let bytes = key.as_bytes();
+    let camelot_or_legacy = bytes.split_last().and_then(|(last, stem)| {
+        let stem = std::str::from_utf8(stem).ok()?;
+        if !is_camelot_number(stem) {
+            return None;
+        }
+        // A/B is Camelot; m/d is the legacy harmony convention. Both store as Camelot.
+        let letter = match last {
+            b'A' | b'a' | b'm' | b'M' => 'A',
+            b'B' | b'b' | b'd' | b'D' => 'B',
+            _ => return None,
+        };
+        Some(format!("{stem}{letter}"))
+    });
+    camelot_or_legacy.or_else(|| {
+        STANDARD_TO_CAMELOT
+            .get(key)
+            .map(|converted| (*converted).to_string())
+    })
+}
+
 /// Convert a stored or freshly detected key to the requested notation format.
 ///
 /// `format` is the raw setting string. Unrecognized keys and unknown format strings are
 /// returned unchanged; an unknown format is logged as a warning.
+///
+/// **OpenKey is display-only: its storage form is Camelot.** Camelot (`A`/`B`) and
+/// standard notation (note names) are self-describing, but OpenKey's `m`/`d` alphabet is
+/// shared with the legacy harmony convention already present in `tracks.key`. Storing
+/// OpenKey would make that data ambiguous and any bulk migration non-idempotent and
+/// silently corrupting, so the OpenKey target intentionally resolves to Camelot codes and
+/// must NOT be "fixed" into a rotation. True OpenKey rendering is a frontend display
+/// concern, never a storage one.
+///
+/// The Standard arm resolves the stored value to Camelot first, then renders the note
+/// name via [`CAMELOT_TO_STANDARD`]: legacy harmony values migrate, Camelot codes
+/// canonicalize to the reverse map's canonical spellings (e.g. `D#m` → `Ebm`), and
+/// spellings the resolver or reverse map does not hold pass through unchanged.
 fn apply_key_conversion(key: &str, format: &str) -> String {
     match format.parse::<KeyNotationFormat>() {
-        Ok(KeyNotationFormat::Camelot) => STANDARD_TO_CAMELOT
-            .get(key)
-            .map(|converted| (*converted).to_string())
-            .unwrap_or_else(|| key.to_string()),
-        Ok(KeyNotationFormat::Standard) => CAMELOT_TO_STANDARD
-            .get(key)
-            .map(|converted| (*converted).to_string())
+        Ok(KeyNotationFormat::Camelot) | Ok(KeyNotationFormat::OpenKey) => {
+            resolve_stored_key_to_camelot(key).unwrap_or_else(|| key.to_string())
+        }
+        Ok(KeyNotationFormat::Standard) => resolve_stored_key_to_camelot(key)
+            .and_then(|camelot| {
+                CAMELOT_TO_STANDARD
+                    .get(camelot.as_str())
+                    .map(|converted| (*converted).to_string())
+            })
             .unwrap_or_else(|| key.to_string()),
         Err(_) => {
             log::warn!("Unknown key notation format: {format}, keeping key as-is");
@@ -1132,5 +1187,266 @@ mod tests {
 
         let read = AnalysisService::get_track_static(&conn, &track.id).unwrap();
         test_utils::assert_track_eq(&read, &track);
+    }
+
+    // --- Key conversion: legacy harmony resolution + storage-form contracts ---
+
+    /// Legacy harmony values (`11d` = Camelot 11B, `1m` = Camelot 1A) must resolve to
+    /// Camelot on the storage path, case-insensitively. These are NOT true OpenKey.
+    #[test]
+    fn legacy_harmony_keys_resolve_to_camelot() {
+        assert_eq!(apply_key_conversion("11d", "camelot"), "11B");
+        assert_eq!(apply_key_conversion("1m", "camelot"), "1A");
+        assert_eq!(apply_key_conversion("11D", "camelot"), "11B");
+        assert_eq!(apply_key_conversion("12m", "camelot"), "12A");
+        assert_eq!(apply_key_conversion("1M", "camelot"), "1A");
+    }
+
+    /// OpenKey is display-only: its storage form IS Camelot. A rotation here would be a
+    /// bug (a rotation would turn `8A` into `1d`) and would make bulk migration
+    /// non-idempotent, because `m`/`d` is shared with the legacy harmony convention.
+    #[test]
+    fn openkey_target_stores_camelot_not_rotated_openkey() {
+        assert_eq!(apply_key_conversion("11d", "openkey"), "11B");
+        assert_eq!(apply_key_conversion("8A", "openkey"), "8A");
+        assert_eq!(apply_key_conversion("1m", "openkey"), "1A");
+    }
+
+    /// Values the resolver cannot map, and already-canonical values, pass through
+    /// untouched — never invent a key.
+    #[test]
+    fn unresolvable_and_canonical_inputs_pass_through_untouched() {
+        assert_eq!(apply_key_conversion("8A", "camelot"), "8A");
+        assert_eq!(apply_key_conversion("Am", "standard"), "Am");
+        assert_eq!(apply_key_conversion("13d", "camelot"), "13d");
+        assert_eq!(apply_key_conversion("0d", "camelot"), "0d");
+        assert_eq!(apply_key_conversion("s-key", "camelot"), "s-key");
+        assert_eq!(apply_key_conversion("", "camelot"), "");
+    }
+
+    /// Behaviour that existed before this slice must not change.
+    #[test]
+    fn existing_conversion_behaviour_is_preserved() {
+        assert_eq!(apply_key_conversion("Am", "camelot"), "8A");
+        assert_eq!(apply_key_conversion("8A", "standard"), "Am");
+        // Unknown format strings pass through unchanged (a warning is logged internally).
+        assert_eq!(apply_key_conversion("11d", "bogus"), "11d");
+        assert_eq!(apply_key_conversion("8A", "bogus"), "8A");
+    }
+
+    /// The Camelot/OpenKey storage target must be idempotent: applying it twice returns
+    /// the same value, so re-running the bulk converter is always safe.
+    #[test]
+    fn camelot_target_is_idempotent() {
+        for key in ["11d", "1m", "11D", "8A", "Am", "13d", "s-key", ""] {
+            let once = apply_key_conversion(key, "camelot");
+            let twice = apply_key_conversion(&once, "camelot");
+            assert_eq!(
+                once, twice,
+                "re-applying the Camelot target changed {key:?}"
+            );
+        }
+    }
+
+    /// The bulk converter must actually migrate legacy rows: before this slice it was a
+    /// silent no-op on them (`WHERE key != ?1` wrote nothing).
+    #[test]
+    fn recalculate_all_keys_migrates_legacy_harmony_rows() {
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        conn.lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE tracks (id TEXT PRIMARY KEY, bpm REAL, key TEXT);
+                 INSERT INTO tracks (id, bpm, key) VALUES ('legacy', NULL, '11d');
+                 INSERT INTO tracks (id, bpm, key) VALUES ('camelot', NULL, '8A');
+                 INSERT INTO tracks (id, bpm, key) VALUES ('null-key', NULL, NULL);",
+            )
+            .unwrap();
+        let service = AnalysisService::new(conn.clone(), FileTagsService::new());
+
+        let updated = service.recalculate_all_keys("camelot".to_string()).unwrap();
+
+        assert_eq!(updated, 1, "only the legacy row should change");
+        {
+            let conn = conn.lock().unwrap();
+            let stored: String = conn
+                .query_row("SELECT key FROM tracks WHERE id = 'legacy'", [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(stored, "11B");
+        }
+        // Idempotence at the converter level: a second run finds nothing to change.
+        assert_eq!(
+            service.recalculate_all_keys("camelot".to_string()).unwrap(),
+            0
+        );
+    }
+
+    // --- Standard target: resolve-then-render + canonicalization contract ---
+
+    /// The Standard arm resolves the stored value to Camelot first, then renders the
+    /// note name: legacy harmony values migrate, canonical spellings round-trip, and
+    /// unrecognizable values pass through untouched.
+    #[test]
+    fn standard_target_resolves_legacy_and_preserves_existing_behaviour() {
+        // Newly fixed: legacy harmony resolves to note names (11d = 11B, 1m = 1A).
+        // 1A renders as the Rust map's canonical spelling, G#m (sharp family).
+        assert_eq!(apply_key_conversion("11d", "standard"), "A");
+        assert_eq!(apply_key_conversion("1m", "standard"), "G#m");
+        // Preserved behaviour.
+        assert_eq!(apply_key_conversion("Am", "standard"), "Am");
+        assert_eq!(apply_key_conversion("8A", "standard"), "Am");
+        assert_eq!(apply_key_conversion("s-key", "standard"), "s-key");
+        assert_eq!(apply_key_conversion("G Minor", "standard"), "G Minor");
+    }
+
+    /// The Standard target renders only the canonical spellings held by
+    /// `CAMELOT_TO_STANDARD` — the Rust map's sharp family (`Ebm` for the single 2A
+    /// collision). This is a render contract, not a full normalization promise:
+    /// enharmonic spellings the forward map does not hold pass through unchanged
+    /// (see [`standard_target_leaves_absent_enharmonic_spellings_unchanged`]).
+    #[test]
+    fn standard_target_renders_reverse_map_canonical_spellings() {
+        let cases: &[(&str, &str)] = &[
+            // Deliberate canonicalization: the 2A collision resolves to Ebm.
+            ("D#m", "Ebm"),
+            // The Rust reverse map holds the sharp family: G#m for 1A, A#m for 3A.
+            ("G#m", "G#m"),
+            ("A#m", "A#m"),
+            // Not in the forward map — render unchanged (known limitation).
+            ("Gbm", "Gbm"),
+            ("Db", "Db"),
+            ("G#", "G#"),
+        ];
+        let mismatches: Vec<String> = cases
+            .iter()
+            .filter_map(|(input, expected)| {
+                let actual = apply_key_conversion(input, "standard");
+                (actual != *expected).then(|| format!("{input}: expected {expected}, got {actual}"))
+            })
+            .collect();
+        assert!(
+            mismatches.is_empty(),
+            "standard-target render mismatches:\n{}",
+            mismatches.join("\n")
+        );
+    }
+
+    /// Known limitation, deliberate policy: enharmonic standard spellings the Rust
+    /// forward map does not hold pass through unchanged under the Standard target.
+    /// `STANDARD_TO_CAMELOT` documents that enharmonic variants (e.g. `Gb`, `Db`) are
+    /// intentionally absent — the DSP emits a specific spelling that is converted
+    /// verbatim, and widening the map would change what the `camelot` target writes
+    /// for these inputs as well. The frontend's `format.ts` map is enharmonic-aware;
+    /// aligning the two layers is a separate decision, not this slice's.
+    #[test]
+    fn standard_target_leaves_absent_enharmonic_spellings_unchanged() {
+        assert_eq!(apply_key_conversion("Gbm", "standard"), "Gbm");
+        assert_eq!(apply_key_conversion("Db", "standard"), "Db");
+        assert_eq!(apply_key_conversion("G#", "standard"), "G#");
+    }
+
+    /// The Standard target must be idempotent too: applying it twice is stable, so
+    /// re-running the bulk converter for a standard-notation user is always safe.
+    #[test]
+    fn standard_target_is_idempotent() {
+        for key in ["11d", "1m", "8A", "Am", "D#m", "s-key", ""] {
+            let once = apply_key_conversion(key, "standard");
+            let twice = apply_key_conversion(&once, "standard");
+            assert_eq!(
+                once, twice,
+                "re-applying the Standard target changed {key:?}"
+            );
+        }
+    }
+
+    /// A user whose notation setting is standard must get a real migration, not the
+    /// previous silent no-op on legacy rows. Under the standard target both the legacy
+    /// row and the Camelot row migrate to note names.
+    #[test]
+    fn recalculate_all_keys_migrates_legacy_rows_under_standard_target() {
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        conn.lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE tracks (id TEXT PRIMARY KEY, bpm REAL, key TEXT);
+                 INSERT INTO tracks (id, bpm, key) VALUES ('legacy', NULL, '11d');
+                 INSERT INTO tracks (id, bpm, key) VALUES ('camelot', NULL, '8A');
+                 INSERT INTO tracks (id, bpm, key) VALUES ('null-key', NULL, NULL);",
+            )
+            .unwrap();
+        let service = AnalysisService::new(conn.clone(), FileTagsService::new());
+
+        let updated = service
+            .recalculate_all_keys("standard".to_string())
+            .unwrap();
+
+        // Legacy 11d → "A" (11B) and Camelot 8A → "Am": both rows change.
+        assert_eq!(
+            updated, 2,
+            "both the legacy and the Camelot row should migrate"
+        );
+        {
+            let conn = conn.lock().unwrap();
+            let stored = |id: &str| -> String {
+                conn.query_row("SELECT key FROM tracks WHERE id = ?1", [id], |row| {
+                    row.get(0)
+                })
+                .unwrap()
+            };
+            assert_eq!(stored("legacy"), "A");
+            assert_eq!(stored("camelot"), "Am");
+        }
+        // Idempotence at the converter level: a second run finds nothing to change.
+        assert_eq!(
+            service
+                .recalculate_all_keys("standard".to_string())
+                .unwrap(),
+            0
+        );
+    }
+
+    /// The resolver maps every storage shape to Camelot, or `None` when it cannot —
+    /// never inventing a key.
+    #[test]
+    fn stored_key_resolver_maps_storage_shapes_to_camelot() {
+        // Camelot codes: returned as themselves, letter normalized to uppercase.
+        assert_eq!(resolve_stored_key_to_camelot("8A").as_deref(), Some("8A"));
+        assert_eq!(resolve_stored_key_to_camelot("12B").as_deref(), Some("12B"));
+        assert_eq!(resolve_stored_key_to_camelot("8a").as_deref(), Some("8A"));
+        // Standard spellings via the existing map.
+        assert_eq!(resolve_stored_key_to_camelot("Am").as_deref(), Some("8A"));
+        assert_eq!(resolve_stored_key_to_camelot("F#m").as_deref(), Some("11A"));
+        // Legacy harmony m/d: number kept, letter mapped, case-insensitive.
+        assert_eq!(resolve_stored_key_to_camelot("11d").as_deref(), Some("11B"));
+        assert_eq!(resolve_stored_key_to_camelot("1m").as_deref(), Some("1A"));
+        assert_eq!(resolve_stored_key_to_camelot("11D").as_deref(), Some("11B"));
+        assert_eq!(resolve_stored_key_to_camelot("12m").as_deref(), Some("12A"));
+        assert_eq!(resolve_stored_key_to_camelot("1M").as_deref(), Some("1A"));
+        // Anything else: None.
+        assert!(resolve_stored_key_to_camelot("13d").is_none());
+        assert!(resolve_stored_key_to_camelot("0d").is_none());
+        assert!(resolve_stored_key_to_camelot("s-key").is_none());
+        assert!(resolve_stored_key_to_camelot("").is_none());
+    }
+
+    /// KeyNotationFormat: Display/FromStr round-trip for every variant, and the default
+    /// is OpenKey (display default; storage stays Camelot).
+    #[test]
+    fn key_notation_format_round_trips_and_defaults_to_openkey() {
+        for format in [
+            KeyNotationFormat::Standard,
+            KeyNotationFormat::Camelot,
+            KeyNotationFormat::OpenKey,
+        ] {
+            let rendered = format.to_string();
+            assert_eq!(rendered.parse::<KeyNotationFormat>().unwrap(), format);
+        }
+        assert_eq!(
+            "openkey".parse::<KeyNotationFormat>().unwrap(),
+            KeyNotationFormat::OpenKey
+        );
+        assert_eq!(KeyNotationFormat::default(), KeyNotationFormat::OpenKey);
     }
 }

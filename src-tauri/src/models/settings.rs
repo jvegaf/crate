@@ -218,8 +218,11 @@ impl std::str::FromStr for Font {
 #[serde(rename_all = "lowercase")]
 pub enum KeyNotationFormat {
     Standard,
-    #[default]
     Camelot,
+    /// OpenKey is a *display* notation only: its storage form is Camelot. See the
+    /// self-description rationale on `apply_key_conversion` in `services/analysis.rs`.
+    #[default]
+    OpenKey,
 }
 
 impl std::fmt::Display for KeyNotationFormat {
@@ -227,6 +230,7 @@ impl std::fmt::Display for KeyNotationFormat {
         match self {
             KeyNotationFormat::Standard => write!(f, "standard"),
             KeyNotationFormat::Camelot => write!(f, "camelot"),
+            KeyNotationFormat::OpenKey => write!(f, "openkey"),
         }
     }
 }
@@ -238,6 +242,7 @@ impl std::str::FromStr for KeyNotationFormat {
         match s.to_lowercase().as_str() {
             "standard" => Ok(KeyNotationFormat::Standard),
             "camelot" => Ok(KeyNotationFormat::Camelot),
+            "openkey" => Ok(KeyNotationFormat::OpenKey),
             _ => Err(format!("Unknown key notation format: {s}")),
         }
     }
