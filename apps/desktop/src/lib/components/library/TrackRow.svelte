@@ -9,6 +9,7 @@
 		formatDate,
 		getTrackDisplayName,
 		getTrackDisplayArtist,
+		keyColor,
 		nextRatingSelection,
 	} from '$shared/utils'
 	import { getTrackOriginFolder, visibleTracklistColumns, tracklistGridTemplate } from '$shared/utils/tracklistColumns'
@@ -119,6 +120,7 @@
 	const columns = $derived(visibleTracklistColumns($tracklistColumns))
 	const gridTemplate = $derived(tracklistGridTemplate($tracklistColumns))
 	const folder = $derived(getTrackOriginFolder(track.file_path))
+	const keyHex = $derived(keyColor(track.key))
 	const ratingStars = [1, 2, 3, 4, 5]
 </script>
 
@@ -237,7 +239,16 @@
 		{:else if column.id === 'key'}
 			<!-- Key -->
 			<div class="flex items-center text-text-secondary">
-				{formatKey(track.key, $keyNotationFormat)}
+				{#if keyHex}
+					<span
+						class="rounded px-1.5 py-0.5 text-xs font-medium"
+						style="background-color: {keyHex}20; color: {keyHex}; border: 1px solid {keyHex}40"
+					>
+						{formatKey(track.key, $keyNotationFormat)}
+					</span>
+				{:else}
+					{formatKey(track.key, $keyNotationFormat)}
+				{/if}
 			</div>
 		{:else if column.id === 'duration_ms'}
 			<!-- Duration -->
