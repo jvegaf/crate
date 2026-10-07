@@ -480,6 +480,9 @@ export type TrackSortField =
 	| 'origin'
 	| 'year'
 	| 'provider'
+	// Not a column: the natural order the backend already returns for a playlist's
+	// members (junction positions, or smart-rule order). Selecting it disables sorting.
+	| 'playlist_order'
 
 export type TracklistColumnId =
 	| 'color'

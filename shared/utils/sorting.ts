@@ -16,6 +16,13 @@ import { getStoreName } from './storeUrl'
  */
 export function sortTracks(tracks: Track[], config: SortConfig): Track[] {
 	const { field, direction } = config
+
+	// `playlist_order` is the natural order the backend already returns for a playlist's
+	// members (junction positions, or smart-rule order). Sorting here would mask the stored
+	// order, so the field is an explicit no-op instead of relying on an unknown field
+	// happening to compare equal through the empty-value path.
+	if (field === 'playlist_order') return [...tracks]
+
 	const multiplier = direction === 'asc' ? 1 : -1
 
 	return [...tracks].sort((a, b) => {
@@ -26,8 +33,7 @@ export function sortTracks(tracks: Track[], config: SortConfig): Track[] {
 			v === null || v === undefined || (typeof v === 'string' && v === '')
 
 		// For rating, 0 means "no rating" and should group with empties
-		const isEmptyOrZero = (v: string | number | null): boolean =>
-			isEmpty(v) || (field === 'rating' && v === 0)
+		const isEmptyOrZero = (v: string | number | null): boolean => isEmpty(v) || (field === 'rating' && v === 0)
 
 		const aEmpty = isEmptyOrZero(valueA)
 		const bEmpty = isEmptyOrZero(valueB)
