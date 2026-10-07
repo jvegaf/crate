@@ -1,4 +1,5 @@
 export * from './artwork'
+export * from './autoOrder'
 export * from './bulkEdit'
 export * from './contextMenu'
 export * from './discoveryExport'

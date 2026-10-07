@@ -8,7 +8,8 @@ import type { discoveryStore as DiscoveryStoreType } from '$shared/stores/discov
 import type { libraryStore as LibraryStoreType } from '$lib/stores/library'
 import type { uiStore as UIStoreType } from '$shared/stores/ui'
 import type { toastStore as ToastStoreType } from '$shared/stores/toast'
-import { findConflictingItem, getPlaylistById, hasChildren } from '$shared/utils'
+import { autoOrderTracks, findConflictingItem, getPlaylistById, hasChildren } from '$shared/utils'
+import type { AutoOrderPriority } from '$shared/utils'
 
 // =============================================================================
 // Types
@@ -52,6 +53,7 @@ export interface PlaylistController {
 	handlePlaylistDragMove: (playlistId: string, targetFolderId: string | null) => Promise<void>
 	handleBulkPlaylistMove: (playlistIds: string[], targetFolderId: string | null) => Promise<void>
 	handlePlaylistViewImport: (playlist: Playlist) => Promise<void>
+	handlePlaylistAutoOrder: (playlist: Playlist, priority: AutoOrderPriority) => Promise<void>
 }
 
 // =============================================================================
@@ -286,6 +288,43 @@ export function createPlaylistController(
 		}
 	}
 
+	/**
+	 * Auto-order a playlist's tracks by harmony or energy and persist the order.
+	 *
+	 * Smart playlists compute their members from rules per fetch and discovery
+	 * playlists keep members in a different table, so neither holds junction
+	 * positions: the action is a silent no-op for both.
+	 */
+	async function handlePlaylistAutoOrder(playlist: Playlist, priority: AutoOrderPriority): Promise<void> {
+		if (playlist.is_smart || playlist.context === 'discovery') return
+
+		const tracks = get(libraryStore).playlistTracks
+		if (tracks.length < 2) return
+
+		const ordered = autoOrderTracks(tracks, priority)
+
+		// The backend writes `position = index` without validating completeness,
+		// so always pass the complete member list.
+		await playlistsStore.reorderTracks(
+			playlist.id,
+			ordered.map((t) => t.id)
+		)
+		await libraryStore.loadPlaylistTracks(playlist.id)
+		libraryStore.setSort({ field: 'playlist_order', direction: 'asc' })
+
+		// `reorderTracks` swallows backend failures into store error state and nothing renders that
+		// error, so confirm the reloaded members actually carry the requested order before claiming
+		// success. A failed write leaves the previous order in place, which this comparison catches.
+		const persistedIds = get(libraryStore).playlistTracks.map((t) => t.id)
+		const applied = persistedIds.length === ordered.length && persistedIds.every((id, i) => id === ordered[i].id)
+
+		if (applied) {
+			toastStore.success(get(translate)('toast.autoOrdered', { values: { name: playlist.name } }))
+		} else {
+			toastStore.error(get(translate)('toast.autoOrderFailed', { values: { name: playlist.name } }))
+		}
+	}
+
 	return {
 		handleLibraryClick,
 		handlePlaylistSelect,
@@ -299,5 +338,6 @@ export function createPlaylistController(
 		handlePlaylistDragMove,
 		handleBulkPlaylistMove,
 		handlePlaylistViewImport,
+		handlePlaylistAutoOrder,
 	}
 }

@@ -48,6 +48,7 @@
 	import { activeDeviceId } from '$lib/stores/export'
 	import { syncingDeviceIds } from '$lib/stores/sync'
 	import { isAnalyzing } from '$lib/stores/analysis'
+	import { pageActions } from '$lib/stores/pageActions'
 
 	// =========================================================================
 	// Props - Callback handlers passed from parent
@@ -621,6 +622,22 @@
 		}
 	}
 
+	function handlePlaylistAutoOrderHarmony() {
+		if (visibleMenu?.type === 'playlistView') {
+			const playlist = visibleMenu.playlist
+			closeAll()
+			$pageActions?.playlistController.handlePlaylistAutoOrder(playlist, 'harmony')
+		}
+	}
+
+	function handlePlaylistAutoOrderEnergy() {
+		if (visibleMenu?.type === 'playlistView') {
+			const playlist = visibleMenu.playlist
+			closeAll()
+			$pageActions?.playlistController.handlePlaylistAutoOrder(playlist, 'energy')
+		}
+	}
+
 	// Tag handlers
 	function handleTagAddTag(categoryId: string) {
 		closeAll()
@@ -983,6 +1000,20 @@
 				label: get(translate)('library.importTracks'),
 				icon: 'upload',
 				action: handlePlaylistViewImport,
+			},
+			{
+				id: 'auto-order-harmony',
+				label: get(translate)('playlists.autoOrderHarmony'),
+				icon: 'music-note',
+				disabled: visibleMenu.playlist.is_smart || visibleMenu.playlist.context === 'discovery',
+				action: handlePlaylistAutoOrderHarmony,
+			},
+			{
+				id: 'auto-order-energy',
+				label: get(translate)('playlists.autoOrderEnergy'),
+				icon: 'bolt',
+				disabled: visibleMenu.playlist.is_smart || visibleMenu.playlist.context === 'discovery',
+				action: handlePlaylistAutoOrderEnergy,
 			},
 		]}
 		onClose={closeAll}

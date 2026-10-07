@@ -642,6 +642,8 @@
 		"detailEmptyHint": "Mantén presionado un lanzamiento en Descubrimientos para añadirlo a una lista de reproducción",
 		"exportToDevice": "Exportar a dispositivo",
 		"playlistOrder": "Orden de la lista de reproducción",
+		"autoOrderHarmony": "Auto-ordenar por armonía",
+		"autoOrderEnergy": "Auto-ordenar por energía",
 		"sort": {
 			"dateCreated": "Fecha de creación",
 			"dateModified": "Fecha de modificación"
@@ -867,7 +869,9 @@
 		"exportCleanUpFailed": "Error al limpiar la exportación",
 		"deviceNotFound": "Dispositivo no encontrado",
 		"deviceReformatted": "Dispositivo formateado como \"{name}\"",
-		"deviceReformatFailed": "Error al formatear: {error}"
+		"deviceReformatFailed": "Error al formatear: {error}",
+		"autoOrdered": "{name} ordenada automáticamente",
+		"autoOrderFailed": "No se pudo reordenar {name}"
 	},
 	"tagger": {
 		"title": "Buscar etiquetas de la pista",

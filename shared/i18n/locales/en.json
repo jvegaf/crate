@@ -661,6 +661,8 @@
 		"detailEmptyHint": "Long-press a release in Discovery to add it to a playlist",
 		"exportToDevice": "Export to Device",
 		"playlistOrder": "Playlist Order",
+		"autoOrderHarmony": "Auto-order by harmony",
+		"autoOrderEnergy": "Auto-order by energy",
 		"sort": {
 			"dateCreated": "Date Created",
 			"dateModified": "Date Modified"
@@ -942,7 +944,9 @@
 		"exportCleanUpFailed": "Failed to clean up export",
 		"deviceNotFound": "Device not found",
 		"deviceReformatted": "Device reformatted as \"{name}\"",
-		"deviceReformatFailed": "Failed to reformat: {error}"
+		"deviceReformatFailed": "Failed to reformat: {error}",
+		"autoOrdered": "{name} ordered automatically",
+		"autoOrderFailed": "Could not reorder {name}"
 	},
 	"errors": {
 		"cannotDropIntoSelf": "Cannot drop a folder into itself",

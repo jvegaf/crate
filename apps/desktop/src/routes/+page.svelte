@@ -71,7 +71,7 @@
 	// State
 	// =============================================================================
 
-	let sortConfig = $state<SortConfig>({ field: 'date_added', direction: 'desc' })
+	const sortConfig = $derived($libraryStore.sort)
 	let discoverySortConfig = $state<DiscoverySortConfig>({ field: 'date_added', direction: 'desc' })
 	let playlists = $state<Playlist[]>([])
 	let tagCategories = $state<TagCategory[]>([])
@@ -235,7 +235,6 @@
 	// =============================================================================
 
 	function handleSortChange(config: SortConfig) {
-		sortConfig = config
 		libraryStore.setSort(config)
 	}
 
@@ -342,8 +341,7 @@
 		// Reset sort configs on context switch
 		const currentView = get(activeView)
 		if (currentView !== view) {
-			sortConfig = { field: 'date_added', direction: 'desc' }
-			libraryStore.setSort(sortConfig)
+			libraryStore.setSort({ field: 'date_added', direction: 'desc' })
 			discoverySortConfig = { field: 'date_added', direction: 'desc' }
 			discoveryStore.setSort(discoverySortConfig)
 		}
