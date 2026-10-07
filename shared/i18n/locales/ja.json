@@ -122,6 +122,7 @@
 			"analysis": "解析",
 			"keyNotation": "キー表記",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "スタンダード",
 			"keyNotationDescription": "音楽キーの表示方法を選択します。",
 			"autoAnalyzeOnImport": "インポート時に自動解析",

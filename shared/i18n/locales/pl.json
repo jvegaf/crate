@@ -122,6 +122,7 @@
 			"analysis": "Analiza",
 			"keyNotation": "Notacja klucza",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Standard",
 			"keyNotationDescription": "Wybierz sposób wyświetlania tonów muzycznych.",
 			"autoAnalyzeOnImport": "Automatyczna analiza przy imporcie",

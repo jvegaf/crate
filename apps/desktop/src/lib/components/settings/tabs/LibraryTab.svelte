@@ -233,6 +233,17 @@
 			<button
 				type="button"
 				class="flex flex-1 flex-col items-center gap-2 rounded-lg border-2 p-4
+				transition-colors {$keyNotationFormat === 'openkey'
+					? 'border-brand-primary bg-brand-muted'
+					: 'border-stroke hover:cursor-pointer hover:border-text-tertiary'}"
+				onclick={() => handleKeyNotationFormatChange('openkey')}
+			>
+				<Text variant="body-2" as="span">{$translate('settings.library.keyNotationOpenKey')}</Text>
+				<Text variant="caption" color="secondary">1m, 1d, 4d</Text>
+			</button>
+			<button
+				type="button"
+				class="flex flex-1 flex-col items-center gap-2 rounded-lg border-2 p-4
 				transition-colors {$keyNotationFormat === 'camelot'
 					? 'border-brand-primary bg-brand-muted'
 					: 'border-stroke hover:cursor-pointer hover:border-text-tertiary'}"

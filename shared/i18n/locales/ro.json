@@ -122,6 +122,7 @@
 			"analysis": "Analiză",
 			"keyNotation": "Notație Ton",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Standard",
 			"keyNotationDescription": "Alegeți cum sunt afișate tonurile muzicale.",
 			"autoAnalyzeOnImport": "Analizare automată la importare",

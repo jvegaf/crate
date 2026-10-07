@@ -122,6 +122,7 @@
 			"analysis": "Análisis",
 			"keyNotation": "Notación de tonalidad",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Estándar",
 			"keyNotationDescription": "Elige cómo se muestran las tonalidades musicales.",
 			"recalcKeysTitle": "Recalcular tonalidades",

@@ -127,6 +127,7 @@
 			"analysis": "Analysis",
 			"keyNotation": "Key Notation",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Standard",
 			"keyNotationDescription": "Choose how musical keys are displayed.",
 			"autoAnalyzeOnImport": "Auto-Analyze on Import",

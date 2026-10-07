@@ -122,6 +122,7 @@
 			"analysis": "分析",
 			"keyNotation": "调式标记",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "标准",
 			"keyNotationDescription": "选择音乐调式的显示方式。",
 			"autoAnalyzeOnImport": "导入时自动分析",

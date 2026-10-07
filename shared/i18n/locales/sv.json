@@ -122,6 +122,7 @@
 			"analysis": "Analys",
 			"keyNotation": "Tonartsbeteckning",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Standard",
 			"keyNotationDescription": "Välj hur tonarter visas.",
 			"autoAnalyzeOnImport": "Analysera automatiskt vid import",

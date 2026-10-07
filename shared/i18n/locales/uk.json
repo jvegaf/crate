@@ -122,6 +122,7 @@
 			"analysis": "Аналіз",
 			"keyNotation": "Позначення тональності",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Стандарт",
 			"keyNotationDescription": "Виберіть, як відображаються музичні тональності.",
 			"autoAnalyzeOnImport": "Автоаналіз при імпорті",

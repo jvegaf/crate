@@ -80,7 +80,7 @@ const initialState: SettingsState = {
 	audioDevice: null,
 	audioDevices: [],
 	language: 'en',
-	keyNotationFormat: 'camelot',
+	keyNotationFormat: 'openkey',
 	dateFormat: 'locale',
 	exportFormat: 'pdb',
 	autoAnalyzeOnImport: true,

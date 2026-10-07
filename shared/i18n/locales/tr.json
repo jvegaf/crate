@@ -122,6 +122,7 @@
 			"analysis": "Analiz",
 			"keyNotation": "Anahtar Gösterimi",
 			"keyNotationCamelot": "Camelot",
+			"keyNotationOpenKey": "OpenKey",
 			"keyNotationStandard": "Standart",
 			"keyNotationDescription": "Müzik anahtarlarının nasıl gösterileceğini seçin.",
 			"autoAnalyzeOnImport": "İçe aktarmada otomatik analiz",
