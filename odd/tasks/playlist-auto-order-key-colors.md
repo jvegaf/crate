@@ -135,6 +135,7 @@ quedó cubierto dentro de T5.
 - [x] T6 Helper de color de key + render en `TrackRow` (paleta aprobada: MIK reindexada) — commit `5f72377`
 - [x] T7 i18n (`en.json`, `es.json`) — cubierto dentro de T5
 - [x] T8 Gates de verificación — los 5 en verde, ver "Gates finales"
+- [ ] T9 Acción de auto-orden en el menú de la playlist del sidebar
 
 ## T5 — diseño acordado
 
@@ -213,6 +214,66 @@ que `B` (mayor).
 Render: chip con fondo tenue siguiendo el patrón de color dinámico de
 `apps/desktop/src/lib/components/tags/TagChip.svelte:60-71` (hex + sufijo alfa inline). Key
 irresoluble mantiene el texto plano actual y nunca recibe un color inventado.
+
+## T9 — acción de auto-orden en el menú del sidebar
+
+Segundo punto de entrada: `PlaylistContextMenu.svelte`, que se abre desde el árbol de playlists y
+**también aparece para carpetas** (`playlist.is_folder`) y para multi-selección (`isBulk`).
+
+### Corrección de un defecto latente que este menú expone
+
+`handlePlaylistAutoOrder` leía `get(libraryStore).playlistTracks` **sin verificar que correspondan a la
+playlist objetivo**. Desde el menú del espacio vacío eso era inocuo (siempre es la playlist en
+pantalla), pero desde el sidebar se puede clickear una playlist que **no es la seleccionada**: se
+habrían computado los tracks de una playlist y se habrían escrito las `position` de **otra**. El
+verificador independiente ya había marcado este riesgo como latente.
+
+Corrección: leer los miembros del objetivo desde el backend (`getPlaylistTracks`) en vez de confiar en
+el store. Precedente de controllers importando `$shared/api/*`: `deviceController.ts:8`,
+`exportController.ts:8`.
+
+Además, la recarga de la vista y el cambio a `playlist_order` ahora son **condicionales**: solo si el
+objetivo es la playlist en pantalla. Si no, no corresponde navegar al usuario ni tocar el sort.
+
+La guarda usa `getSelectedPlaylistId()` — el `$state` de `+page.svelte:79`, que es lo que decide qué
+vista se renderiza en `+page.svelte:603` — y **no** `libraryStore.selectedPlaylistId`. Los dos valores
+divergen cuando hay un filtro de tags activo (`loadTracks({ playlist_id, tag_ids })` no escribe
+`libraryStore.selectedPlaylistId`), así que el store puede quedar apuntando a otra playlist y hacer que
+la guarda dispare sobre una vista que no es la del objetivo. El verificador independiente detectó esa
+divergencia y ésta es la corrección mínima que propuso.
+
+### Dos hallazgos del verificador sobre el caso con filtro de tags
+
+1. **La recarga del handler viejo era invisible con filtro activo.** El worker afirmó que el handler
+   viejo "refrescaba la vista completa y limpiaba el filtro"; el verificador lo **refutó**:
+   `loadPlaylistTracks` nunca limpia `filter`, y `displayedTracks` renderiza `$library.tracks` (no
+   `playlistTracks`) cuando `filter.tag_ids` no está vacío. Por eso el comportamiento nuevo en ese caso
+   (persistir y dejar la vista filtrada en paz) **no es una regresión**: el orden queda guardado y se ve
+   al limpiar el filtro.
+2. **Limitación conocida, no corregible desde el frontend.** La verificación consiste en un re-fetch del
+   objetivo; si ese re-fetch falla de forma transitoria *después* de una escritura exitosa, el usuario ve
+   el toast de error aunque el orden sí se persistió. Reintentar es inocuo (re-ordenar un orden ya
+   correcto es idempotente). La solución real sería que `reorder_tracks` devolviera el error en vez de
+   que el store se lo trague, y eso es un cambio en Rust, fuera de alcance.
+
+### Regla de disponibilidad (una sola, compartida con el menú del espacio vacío)
+
+```text
+!playlist.is_folder && !playlist.is_smart && playlist.context !== 'discovery'
+```
+
+- Sidebar: se **omite** el ítem — es la convención del archivo (no usa `disabled:` en ningún lado y ya
+  omite condicionalmente `export` y `move`).
+- Menú del espacio vacío: se **deshabilita** (ya implementado en T5). Contextos distintos justifican
+  la diferencia: ahí la playlist es siempre la que se está mirando.
+- Multi-selección (`isBulk`): sin ítem. Cada playlist requeriría su propio fetch de miembros; la rama
+  bulk ya omite rename y export.
+
+### Verificación
+
+La verificación del resultado pasa a apoyarse en un **re-fetch** del objetivo, no en `libraryStore`,
+justamente porque el objetivo puede no estar cargado en la vista. Sigue comparando la lista completa
+de ids contra el orden pedido, que es lo único que delata que `reorderTracks` se tragó un error.
 
 ## Evidence log
 
