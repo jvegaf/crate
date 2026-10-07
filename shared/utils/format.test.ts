@@ -1,5 +1,60 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatDurationCompact, formatBpm, formatBitrate } from './format'
+import { formatDuration, formatDurationCompact, formatBpm, formatBitrate, formatKey, keyToCamelot } from './format'
+
+describe('keyToCamelot', () => {
+	it('resolves standard notation to Camelot', () => {
+		expect(keyToCamelot('Am')).toBe('8A')
+		expect(keyToCamelot('C')).toBe('8B')
+		expect(keyToCamelot('F#m')).toBe('11A')
+		expect(keyToCamelot('Ebm')).toBe('2A')
+		expect(keyToCamelot('Gbm')).toBe('11A')
+		expect(keyToCamelot('Ab')).toBe('4B')
+	})
+
+	it('accepts Camelot input as-is and normalizes the mode letter to uppercase', () => {
+		expect(keyToCamelot('8A')).toBe('8A')
+		expect(keyToCamelot('8a')).toBe('8A')
+		expect(keyToCamelot('12b')).toBe('12B')
+	})
+
+	it('resolves tagger free-text forms that the plain lookup map misses', () => {
+		expect(keyToCamelot('G Minor')).toBe('6A')
+		expect(keyToCamelot('G minor')).toBe('6A')
+		expect(keyToCamelot('G min')).toBe('6A')
+		expect(keyToCamelot('A minor')).toBe('8A')
+		expect(keyToCamelot('F# min')).toBe('11A')
+		expect(keyToCamelot('G major')).toBe('9B')
+		expect(keyToCamelot('Gmaj')).toBe('9B')
+	})
+
+	it('returns null for anything it cannot resolve instead of guessing', () => {
+		expect(keyToCamelot(null)).toBeNull()
+		expect(keyToCamelot('')).toBeNull()
+		expect(keyToCamelot('   ')).toBeNull()
+		expect(keyToCamelot('s-key')).toBeNull()
+		expect(keyToCamelot('H')).toBeNull()
+		expect(keyToCamelot('13A')).toBeNull()
+		expect(keyToCamelot('0A')).toBeNull()
+	})
+})
+
+describe('formatKey', () => {
+	it('converts standard notation to Camelot by default', () => {
+		expect(formatKey('Am')).toBe('8A')
+		expect(formatKey('C')).toBe('8B')
+	})
+
+	it('converts Camelot back to canonical standard notation', () => {
+		expect(formatKey('8A', 'standard')).toBe('Am')
+		expect(formatKey('8B', 'standard')).toBe('C')
+	})
+
+	it('passes unknown values through untouched and renders null as a dash', () => {
+		expect(formatKey(null)).toBe('-')
+		expect(formatKey('s-key')).toBe('s-key')
+		expect(formatKey('s-key', 'standard')).toBe('s-key')
+	})
+})
 
 describe('formatDuration', () => {
 	it('formats 0ms as 0:00', () => {

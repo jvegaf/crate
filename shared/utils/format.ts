@@ -89,6 +89,51 @@ const CAMELOT_TO_STANDARD: Record<string, string> = Object.fromEntries(
 )
 
 /**
+ * Mode words written by external taggers, e.g. the Beatport tagger stores
+ * "G Minor". Longest-first so "minor"/"major" are consumed before "min"/"maj".
+ * Non-global on purpose: only the first occurrence is meaningful and a
+ * non-global regex carries no `lastIndex` state between calls.
+ */
+const KEY_MODE_WORDS: ReadonlyArray<readonly [RegExp, string]> = [
+	[/minor/i, 'm'],
+	[/min/i, 'm'],
+	[/major/i, ''],
+	[/maj/i, ''],
+]
+
+const CAMELOT_PATTERN = /^([1-9]|1[0-2])([ab])$/i
+
+/**
+ * Normalize a raw `tracks.key` value and resolve it to a Camelot code.
+ *
+ * `tracks.key` is free text and the database holds mixed notation: analysis
+ * stores standard ("Am"), the KeyNotationFormat setting and the bulk converter
+ * store Camelot ("8A"), and external taggers store mode words ("G Minor").
+ * Unlike {@link formatKey}, this returns `null` for anything it cannot resolve
+ * so callers can place the value deliberately instead of guessing.
+ */
+export function keyToCamelot(key: string | null | undefined): string | null {
+	if (!key) return null
+
+	const compact = key.trim().replace(/\s+/g, '')
+	if (!compact) return null
+
+	const camelot = compact.match(CAMELOT_PATTERN)
+	if (camelot) {
+		return `${camelot[1]}${camelot[2].toUpperCase()}`
+	}
+
+	let normalized = compact
+	for (const [pattern, replacement] of KEY_MODE_WORDS) {
+		normalized = normalized.replace(pattern, replacement)
+	}
+
+	normalized = normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase()
+
+	return STANDARD_TO_CAMELOT[normalized] ?? null
+}
+
+/**
  * Format key for display based on notation format preference.
  * Converts bidirectionally: detects whether the stored key is in
  * Standard or Camelot and translates to the requested display format.
