@@ -61,10 +61,19 @@ impl TaggerService {
         })
     }
 
-    /// Search every available provider in fixed order.
+    /// Provider ids in service order — what the command layer turns into the
+    /// enabled list handed back to the filtering search methods.
+    pub fn provider_ids(&self) -> Vec<&str> {
+        self.providers.iter().map(|p| p.id()).collect()
+    }
+
+    /// Search every enabled provider in fixed order.
     ///
     /// Desktop order is `beatport`, `traxsource`, `bandcamp`; on mobile the
     /// desktop-only TraxSource provider is absent, leaving `beatport`, `bandcamp`.
+    /// Providers whose id is not in `enabled_providers` are skipped entirely —
+    /// they contribute no result row, error, or network traffic. An empty list
+    /// therefore yields no results at all.
     ///
     /// A provider returning `Err` is reported in that provider's
     /// [`ProviderSearchResult::error`] with empty candidates; the remaining
@@ -73,9 +82,13 @@ impl TaggerService {
         &self,
         query: &TagSearchQuery,
         limit: usize,
+        enabled_providers: &[String],
     ) -> Result<Vec<ProviderSearchResult>> {
         let mut results = Vec::with_capacity(self.providers.len());
         for provider in &self.providers {
+            if !enabled_providers.iter().any(|id| id == provider.id()) {
+                continue;
+            }
             let result = match provider.search(&self.client, query, limit).await {
                 Ok(candidates) => ProviderSearchResult {
                     provider: provider.id().to_string(),
@@ -99,8 +112,13 @@ impl TaggerService {
         self.providers.iter().map(|p| p.id().to_string()).collect()
     }
 
-    /// Search every provider, score each candidate against the local track, and
-    /// return the best `max_candidates` ordered by similarity.
+    /// Search the enabled providers, score each candidate against the local
+    /// track, and return the best `max_candidates` ordered by similarity.
+    ///
+    /// `enabled_providers` filters the search exactly as in [`Self::search_all`];
+    /// a disabled provider contributes neither candidates nor errors. Its id may
+    /// still appear in the tie-break priority, which is harmless: the priority
+    /// only orders candidates that exist.
     ///
     /// `max_candidates` is used as-is, so callers must pass at least `1`; the
     /// Tauri command applies the clamp.
@@ -128,8 +146,11 @@ impl TaggerService {
         min_score: f64,
         max_candidates: usize,
         weights_json: Option<&str>,
+        enabled_providers: &[String],
     ) -> Result<RankedSearchResult> {
-        let results = self.search_all(query, search_limit).await?;
+        let results = self
+            .search_all(query, search_limit, enabled_providers)
+            .await?;
 
         Ok(rank_results(
             results,
@@ -169,12 +190,24 @@ impl TaggerService {
     /// `url`, enriching through that provider's `extend` and returning a single
     /// candidate at `1.0` similarity.
     ///
-    /// Returns `Ok(None)` when the URL is not a recognized store URL, or when
-    /// its provider is unavailable in this build (e.g. TraxSource on mobile).
-    pub async fn search_by_url(&self, url: &str) -> Result<Option<ScoredTagCandidate>> {
+    /// Returns `Ok(None)` when the URL is not a recognized store URL, when its
+    /// provider is unavailable in this build (e.g. TraxSource on mobile), or
+    /// when its provider is absent from `enabled_providers` (user-disabled) —
+    /// the three cases share one contract: no candidate, no error.
+    pub async fn search_by_url(
+        &self,
+        url: &str,
+        enabled_providers: &[String],
+    ) -> Result<Option<ScoredTagCandidate>> {
         let Some((provider_id, track_ref)) = parse_provider_url(url) else {
             return Ok(None);
         };
+
+        if !enabled_providers.iter().any(|id| id == provider_id) {
+            // Provider disabled by the user's settings; same contract as
+            // "not available in this build".
+            return Ok(None);
+        }
 
         let Some(provider) = self
             .providers
@@ -518,8 +551,9 @@ mod store_url_tests {
     #[tokio::test]
     async fn search_by_url_returns_none_for_unrecognized_url() {
         let service = TaggerService::new().expect("tagger service builds");
+        // The enabled list is irrelevant here: the URL itself is unrecognized.
         let result = service
-            .search_by_url("https://soundcloud.com/artist/track")
+            .search_by_url("https://soundcloud.com/artist/track", &[])
             .await
             .expect("unrecognized URL is not an error");
         assert!(result.is_none());

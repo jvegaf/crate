@@ -5,6 +5,7 @@
 		settingsStore,
 		taggerAutoApplyEnabled,
 		taggerAutoApplyThreshold,
+		taggerProvidersEnabled,
 		taggerWeights,
 	} from '$shared/stores/settings'
 	import { translate } from '$shared/i18n'
@@ -126,7 +127,7 @@
 						step="1"
 						value={thresholdPercent}
 						oninput={handleThresholdChange}
-						class="w-full max-w-md accent-brand-primary"
+						class="accent-brand-primary w-full max-w-md"
 					/>
 					<Text variant="caption" as="p">
 						{$translate('settings.tagger.autoApplyThresholdDescription')}
@@ -136,13 +137,28 @@
 		</div>
 	</section>
 
+	<!-- Providers Section -->
+	<section>
+		<Text variant="header-3" class="mb-2">{$translate('settings.tagger.providersEnabled')}</Text>
+
+		<div class="space-x-4">
+			{#each ['beatport', 'traxsource', 'bandcamp'] as const as provider (provider)}
+				<Checkbox
+					checked={$taggerProvidersEnabled[provider] ?? true}
+					onchange={(checked) => settingsStore.setTaggerProvidersEnabled(provider, checked)}
+					label={$translate(`settings.tagger.providers.${provider}`)}
+				/>
+			{/each}
+		</div>
+	</section>
+
 	<!-- Scoring Weights Section -->
 	<section>
 		<Text variant="header-3" class="mb-2">{$translate('settings.tagger.weights')}</Text>
 		<Text variant="caption" as="p" class="mb-4">{$translate('settings.tagger.weightsDescription')}</Text>
 
 		<div class="space-y-3">
-			{#each (['title', 'artist', 'duration', 'genre', 'label', 'bpm', 'key'] as const) as field (field)}
+			{#each ['title', 'artist', 'duration', 'genre', 'label', 'bpm', 'key'] as const as field (field)}
 				<div class="flex items-center gap-4">
 					<Text variant="body-1" class="w-20 shrink-0">
 						{$translate(`settings.tagger.weight${field.charAt(0).toUpperCase()}${field.slice(1)}`)}
@@ -154,7 +170,7 @@
 						step="1"
 						value={Math.round(weights[field] * 100)}
 						oninput={(e) => handleWeightChange(field, String(Number((e.target as HTMLInputElement).value) / 100))}
-						class="flex-1 accent-brand-primary"
+						class="accent-brand-primary flex-1"
 					/>
 					<Text variant="body-1" class="w-12 text-right font-mono text-text-secondary">
 						{Math.round(weights[field] * 100)}%

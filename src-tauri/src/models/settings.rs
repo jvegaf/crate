@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -439,6 +441,10 @@ pub struct AppSettings {
     pub tagger_auto_apply_threshold: f64,
     /// Whether auto-apply is enabled.
     pub tagger_auto_apply_enabled: bool,
+    /// Device-local per-provider tagger enable map. A missing key or missing
+    /// entry means the provider is enabled, so a fresh setting and any new
+    /// provider id both default to on.
+    pub tagger_providers_enabled: HashMap<String, bool>,
 }
 
 impl Default for AppSettings {
@@ -476,6 +482,7 @@ impl Default for AppSettings {
             tagger_weights: None,
             tagger_auto_apply_threshold: 0.95,
             tagger_auto_apply_enabled: true,
+            tagger_providers_enabled: HashMap::new(),
         }
     }
 }

@@ -204,6 +204,15 @@ impl SettingsService {
             .map(|v| v != "false")
             .unwrap_or(true);
 
+        // Per-provider tagger toggles as a JSON object
+        // (`{"beatport":true,"traxsource":false}`). A missing key or malformed
+        // value falls back to an empty map, which the command layer reads as
+        // "every provider enabled".
+        let tagger_providers_enabled = self
+            .get_setting_value(&conn, "tagger_providers_enabled")?
+            .and_then(|v| serde_json::from_str(&v).ok())
+            .unwrap_or_default();
+
         Ok(AppSettings {
             theme,
             accent_color,
@@ -237,6 +246,7 @@ impl SettingsService {
             tagger_weights,
             tagger_auto_apply_threshold,
             tagger_auto_apply_enabled,
+            tagger_providers_enabled,
         })
     }
 

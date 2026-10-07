@@ -95,6 +95,15 @@
 				"backupContents": "Denna säkerhetskopia innehåller {tracks, plural, =0 {inga spår} =1 {1 spår} other {{tracks} spår}}, {playlists, plural, =0 {inga spellistor} =1 {1 spellista} other {{playlists} spellistor}}, {tags, plural, =0 {inga taggar} =1 {1 tagg} other {{tags} taggar}} och {discoveryReleases, plural, =0 {inga upptäcktutgåvor} =1 {1 upptäcktutgåva} other {{discoveryReleases} upptäcktutgåvor}}. Skapad den {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Aktiva leverantörer",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Det gick inte att spara leverantörsinställningen"
+		},
 		"library": {
 			"musicFolder": "Musikmapp",
 			"musicFolderDescription": "Crate genomsöker den här mappen och importerar de ljudfiler som finns. Varje enhet har sin egen mapp.",

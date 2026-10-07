@@ -114,7 +114,14 @@
 			"weightBpm": "BPM",
 			"weightKey": "Key",
 			"weightsSumError": "Weights must sum to 100% (currently {current}%)",
-			"resetWeights": "Reset to Defaults"
+			"resetWeights": "Reset to Defaults",
+			"providersEnabled": "Enabled Providers",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Failed to save provider setting"
 		},
 		"library": {
 			"analysis": "Analysis",

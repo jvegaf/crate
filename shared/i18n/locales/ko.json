@@ -95,6 +95,15 @@
 				"backupContents": "이 백업에는 {tracks, plural, =0 {트랙 없음} =1 {1개 트랙} other {{tracks}개 트랙}}, {playlists, plural, =0 {재생목록 없음} =1 {1개 재생목록} other {{playlists}개 재생목록}}, {tags, plural, =0 {태그 없음} =1 {1개 태그} other {{tags}개 태그}}, 그리고 {discoveryReleases, plural, =0 {디스커버리 릴리스 없음} =1 {1개 디스커버리 릴리스} other {{discoveryReleases}개 디스커버리 릴리스}}가 포함되어 있습니다. {date}에 생성됨."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "활성 프로바이더",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "프로바이더 설정을 저장하지 못했습니다"
+		},
 		"library": {
 			"musicFolder": "음악 폴더",
 			"musicFolderDescription": "Crate는 이 폴더를 검사하여 찾은 오디오 파일을 가져옵니다. 각 기기는 자체 폴더를 유지합니다.",

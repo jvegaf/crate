@@ -675,6 +675,8 @@ export interface AppSettings {
 	taggerAutoApplyThreshold: number
 	/** Whether auto-apply is enabled. */
 	taggerAutoApplyEnabled: boolean
+	/** Device-local per-provider tagger toggles; a missing entry means enabled. */
+	taggerProvidersEnabled: Record<string, boolean>
 }
 
 export interface AudioDevice {

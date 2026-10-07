@@ -95,6 +95,15 @@
 				"backupContents": "Цей резервний коп захищає {tracks, plural, =0 {жодних доріжок} =1 {1 доріжку} other {{tracks} доріжок}}, {playlists, plural, =0 {жодних списків відтворення} =1 {1 список відтворення} other {{playlists} списків відтворення}}, {tags, plural, =0 {жодних тегів} =1 {1 тег} other {{tags} тегів}} та {discoveryReleases, plural, =0 {жодних релізів відкриття} =1 {1 реліз відкриття} other {{discoveryReleases} релізів відкриття}}. Створено {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Активні провайдери",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Не вдалося зберегти налаштування провайдера"
+		},
 		"library": {
 			"musicFolder": "Папка музики",
 			"musicFolderDescription": "Crate сканує цю папку та імпортує знайдені аудіофайли. Кожен пристрій зберігає власну папку.",

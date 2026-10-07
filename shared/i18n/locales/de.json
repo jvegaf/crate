@@ -95,6 +95,15 @@
 				"backupContents": "Diese Sicherung enthält {tracks, plural, =0 {keine Tracks} =1 {1 Track} other {{tracks} Tracks}}, {playlists, plural, =0 {keine Playlists} =1 {1 Playlist} other {{playlists} Playlists}}, {tags, plural, =0 {keine Tags} =1 {1 Tag} other {{tags} Tags}} und {discoveryReleases, plural, =0 {keine Discovery-Releases} =1 {1 Discovery-Release} other {{discoveryReleases} Discovery-Releases}}. Erstellt am {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Aktive Anbieter",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Anbieter-Einstellung konnte nicht gespeichert werden"
+		},
 		"library": {
 			"musicFolder": "Musikordner",
 			"musicFolderDescription": "Crate durchsucht diesen Ordner und importiert die gefundenen Audiodateien. Jedes Gerät behält seinen eigenen Ordner.",

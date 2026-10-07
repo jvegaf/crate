@@ -435,11 +435,73 @@ fn live_query() -> TagSearchQuery {
     }
 }
 
+/// "All providers enabled" fixture for the `enabled_providers` filters.
+fn all_enabled_providers() -> Vec<String> {
+    vec![
+        "beatport".to_string(),
+        "traxsource".to_string(),
+        "bandcamp".to_string(),
+    ]
+}
+
+#[tokio::test]
+async fn search_all_skips_every_provider_when_none_are_enabled() {
+    let service = TaggerService::new().unwrap();
+    let results = service.search_all(&live_query(), 5, &[]).await.unwrap();
+    assert!(
+        results.is_empty(),
+        "no provider should run when none are enabled: {results:?}"
+    );
+}
+
+#[tokio::test]
+async fn search_all_skips_providers_missing_from_the_enabled_list() {
+    // Only an id no provider owns is enabled: every real provider must be
+    // skipped, so the call completes without touching the network.
+    let service = TaggerService::new().unwrap();
+    let enabled = vec!["nonexistent".to_string()];
+    let results = service
+        .search_all(&live_query(), 5, &enabled)
+        .await
+        .unwrap();
+    assert!(results.is_empty());
+}
+
+#[tokio::test]
+async fn search_by_url_returns_none_for_a_disabled_provider() {
+    let service = TaggerService::new().unwrap();
+    // A valid Beatport URL, but beatport is absent from the enabled list: the
+    // guard must return `None` before any network call.
+    let result = service
+        .search_by_url("https://www.beatport.com/track/your-mind/123456", &[])
+        .await
+        .unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn provider_ids_lists_every_service_provider_in_order() {
+    let service = TaggerService::new().unwrap();
+    let ids = service.provider_ids();
+
+    assert!(ids.contains(&"beatport"));
+    assert!(ids.contains(&"bandcamp"));
+    #[cfg(feature = "desktop")]
+    assert!(ids.contains(&"traxsource"));
+
+    let beatport = ids.iter().position(|id| *id == "beatport").unwrap();
+    let bandcamp = ids.iter().position(|id| *id == "bandcamp").unwrap();
+    assert!(beatport < bandcamp, "service order must be preserved");
+}
+
 #[ignore = "live network"]
 #[tokio::test]
 async fn live_beatport_search() {
     let service = TaggerService::new().unwrap();
-    let results = service.search_all(&live_query(), 5).await.unwrap();
+    let results = service
+        .search_all(&live_query(), 5, &all_enabled_providers())
+        .await
+        .unwrap();
     let outcome = results
         .iter()
         .find(|r| r.provider == "beatport")
@@ -463,7 +525,10 @@ async fn live_beatport_search() {
 #[tokio::test]
 async fn live_traxsource_search() {
     let service = TaggerService::new().unwrap();
-    let results = service.search_all(&live_query(), 5).await.unwrap();
+    let results = service
+        .search_all(&live_query(), 5, &all_enabled_providers())
+        .await
+        .unwrap();
     let outcome = results
         .iter()
         .find(|r| r.provider == "traxsource")
@@ -503,7 +568,10 @@ async fn live_beatport_recommendations() {
 #[tokio::test]
 async fn live_bandcamp_search() {
     let service = TaggerService::new().unwrap();
-    let results = service.search_all(&live_query(), 5).await.unwrap();
+    let results = service
+        .search_all(&live_query(), 5, &all_enabled_providers())
+        .await
+        .unwrap();
     let outcome = results
         .iter()
         .find(|r| r.provider == "bandcamp")
@@ -527,7 +595,10 @@ async fn live_bandcamp_search() {
 #[tokio::test]
 async fn live_search_all() {
     let service = TaggerService::new().unwrap();
-    let results = service.search_all(&live_query(), 5).await.unwrap();
+    let results = service
+        .search_all(&live_query(), 5, &all_enabled_providers())
+        .await
+        .unwrap();
     assert_eq!(results.len(), 3);
     for result in &results {
         assert!(

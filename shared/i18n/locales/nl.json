@@ -95,6 +95,15 @@
 				"backupContents": "Deze backup bevat {tracks, plural, =0 {geen nummers} =1 {1 nummer} other {{tracks} nummers}}, {playlists, plural, =0 {geen afspeellijsten} =1 {1 afspeellijst} other {{playlists} afspeellijsten}}, {tags, plural, =0 {geen tags} =1 {1 tag} other {{tags} tags}} en {discoveryReleases, plural, =0 {geen ontdekkingsreleases} =1 {1 ontdekkingsrelease} other {{discoveryReleases} ontdekkingsreleases}}. Gemaakt op {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Actieve providers",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Instelling voor provider opslaan mislukt"
+		},
 		"library": {
 			"musicFolder": "Muziekmap",
 			"musicFolderDescription": "Crate scant deze map en importeert de audiobestanden die erin staan. Elk apparaat houdt zijn eigen map.",

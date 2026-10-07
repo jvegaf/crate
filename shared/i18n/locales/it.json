@@ -95,6 +95,15 @@
 				"backupContents": "Questo backup contiene {tracks, plural, =0 {nessuna traccia} =1 {1 traccia} other {{tracks} tracce}}, {playlists, plural, =0 {nessuna playlist} =1 {1 playlist} other {{playlists} playlist}}, {tags, plural, =0 {nessun tag} =1 {1 tag} other {{tags} tag}} e {discoveryReleases, plural, =0 {nessun rilascio di scoperta} =1 {1 rilascio di scoperta} other {{discoveryReleases} rilasci di scoperta}}. Creato il {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Provider abilitati",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Impossibile salvare l'impostazione del provider"
+		},
 		"library": {
 			"musicFolder": "Cartella musicale",
 			"musicFolderDescription": "Crate analizza questa cartella e importa i file audio che trova. Ogni dispositivo mantiene la propria cartella.",

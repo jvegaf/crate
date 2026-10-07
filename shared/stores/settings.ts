@@ -18,6 +18,7 @@ import * as settingsApi from '../api/settings'
 import { defaultTracklistColumns, normalizeTracklistColumns } from '../utils/tracklistColumns'
 import { rebuildMenu, type MenuTranslations } from '../api/app'
 import { setLanguage as setI18nLanguage, translate } from '../i18n'
+import { toastStore } from './toast'
 
 // =============================================================================
 // State
@@ -63,6 +64,8 @@ interface SettingsState {
 	taggerAutoApplyThreshold: number
 	/** Whether auto-apply is enabled; when false no candidate is auto-applied. */
 	taggerAutoApplyEnabled: boolean
+	/** Device-local per-provider tagger toggles; a missing entry means enabled. */
+	taggerProvidersEnabled: Record<string, boolean>
 	/** Tagger scoring weights as JSON string. */
 	taggerWeights: string | null
 	loading: boolean
@@ -104,6 +107,7 @@ const initialState: SettingsState = {
 	uiZoom: 1,
 	taggerAutoApplyThreshold: 0.95,
 	taggerAutoApplyEnabled: true,
+	taggerProvidersEnabled: {},
 	taggerWeights: null,
 	loading: false,
 	error: null,
@@ -121,6 +125,11 @@ function getSystemTheme(): 'light' | 'dark' {
 // =============================================================================
 // Store
 // =============================================================================
+
+/** Rust `CrateError` rejections surface as plain strings; mirror the collection-store unwrap. */
+function errMsg(error: unknown, fallback: string): string {
+	return typeof error === 'string' ? error : error instanceof Error ? error.message : fallback
+}
 
 function createSettingsStore() {
 	const { subscribe, set, update } = writable<SettingsState>(initialState)
@@ -358,6 +367,7 @@ function createSettingsStore() {
 					uiZoom: settings.uiZoom ?? 1,
 					taggerAutoApplyThreshold: settings.taggerAutoApplyThreshold ?? 0.95,
 					taggerAutoApplyEnabled: settings.taggerAutoApplyEnabled ?? true,
+					taggerProvidersEnabled: settings.taggerProvidersEnabled ?? {},
 					taggerWeights: settings.taggerWeights ?? null,
 					resolvedTheme,
 					loading: false,
@@ -807,6 +817,24 @@ function createSettingsStore() {
 		},
 
 		/**
+		 * Enable or disable one tagger provider. The map is device-local and
+		 * absence-tolerant: a missing entry means the provider is enabled, so the
+		 * persisted JSON only needs the user's explicit choices.
+		 */
+		async setTaggerProvidersEnabled(provider: string, enabled: boolean) {
+			const previous = get({ subscribe }).taggerProvidersEnabled
+			const updated = { ...previous, [provider]: enabled }
+			update((s) => ({ ...s, taggerProvidersEnabled: updated }))
+
+			try {
+				await settingsApi.setSetting('tagger_providers_enabled', JSON.stringify(updated))
+			} catch (error) {
+				update((s) => ({ ...s, taggerProvidersEnabled: previous }))
+				toastStore.error(errMsg(error, get(translate)('settings.tagger.providersSaveFailed')))
+			}
+		},
+
+		/**
 		 * Set tagger auto-apply threshold (0.0 - 1.0)
 		 */
 		async setTaggerAutoApplyThreshold(threshold: number) {
@@ -914,5 +942,7 @@ export const settingsLoading = derived(settingsStore, ($s) => $s.loading)
 export const taggerAutoApplyThreshold = derived(settingsStore, ($s) => $s.taggerAutoApplyThreshold)
 
 export const taggerAutoApplyEnabled = derived(settingsStore, ($s) => $s.taggerAutoApplyEnabled)
+
+export const taggerProvidersEnabled = derived(settingsStore, ($s) => $s.taggerProvidersEnabled)
 
 export const taggerWeights = derived(settingsStore, ($s) => $s.taggerWeights)

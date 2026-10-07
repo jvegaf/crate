@@ -4,25 +4,51 @@ use crate::error::Result;
 #[cfg(feature = "desktop")]
 use crate::models::Track;
 use crate::models::{
-    ProviderSearchResult, RankedSearchResult, ScoredTagCandidate, TagCandidate, TagSearchQuery,
+    AppSettings, ProviderSearchResult, RankedSearchResult, ScoredTagCandidate, TagCandidate,
+    TagSearchQuery,
 };
 #[cfg(feature = "desktop")]
 use crate::services::LibraryService;
 use crate::services::{SettingsService, TaggerService};
 
-/// Search every metadata provider (Beatport, TraxSource, Bandcamp) for candidate
-/// tracks matching `artist` + `title`. Per-provider failures are reported inside
-/// the returned [`ProviderSearchResult`]s rather than failing the whole call.
+/// Resolve which providers a call may use: every provider id the service knows,
+/// filtered by the device-local `AppSettings::tagger_providers_enabled` map.
+/// A missing entry means enabled, so a fresh setting and any new provider id
+/// both default to on.
+fn enabled_provider_ids(tagger: &TaggerService, app_settings: &AppSettings) -> Vec<String> {
+    tagger
+        .provider_ids()
+        .into_iter()
+        .filter(|id| {
+            app_settings
+                .tagger_providers_enabled
+                .get(*id)
+                .copied()
+                .unwrap_or(true)
+        })
+        .map(String::from)
+        .collect()
+}
+
+/// Search the enabled metadata providers (Beatport, TraxSource, Bandcamp — see
+/// `AppSettings::tagger_providers_enabled`) for candidate tracks matching
+/// `artist` + `title`. Per-provider failures are reported inside the returned
+/// [`ProviderSearchResult`]s rather than failing the whole call.
 #[tauri::command]
 pub async fn search_track_tags(
     artist: Option<String>,
     title: String,
     limit: Option<usize>,
     tagger: State<'_, TaggerService>,
+    settings: State<'_, SettingsService>,
 ) -> Result<Vec<ProviderSearchResult>> {
     let limit = limit.unwrap_or(5).clamp(1, 25);
+    // `get_settings` locks internally and drops the guard on return, so no DB
+    // mutex is held across the `.await` below.
+    let app_settings = settings.get_settings()?;
+    let enabled_ids = enabled_provider_ids(&tagger, &app_settings);
     tagger
-        .search_all(&TagSearchQuery { artist, title }, limit)
+        .search_all(&TagSearchQuery { artist, title }, limit, &enabled_ids)
         .await
 }
 
@@ -61,6 +87,7 @@ pub async fn search_ranked_track_tags(
     // `get_settings` locks internally and drops the guard on return, so no DB
     // mutex is held across the `.await` below.
     let app_settings = settings.get_settings()?;
+    let enabled_ids = enabled_provider_ids(&tagger, &app_settings);
     tagger
         .search_and_rank(
             &TagSearchQuery { artist, title },
@@ -73,6 +100,7 @@ pub async fn search_ranked_track_tags(
             min_score,
             max_candidates,
             app_settings.tagger_weights.as_deref(),
+            &enabled_ids,
         )
         .await
 }
@@ -96,14 +124,18 @@ pub async fn extend_track_tag(
 /// Skip the search and fetch metadata directly from a store URL (Beatport,
 /// TraxSource, Bandcamp), returning a single candidate at similarity `1.0`.
 ///
-/// Returns `null` if the URL is not a recognized store URL, or if the provider
-/// is unavailable in this build (e.g. TraxSource on mobile).
+/// Returns `null` if the URL is not a recognized store URL, if the provider is
+/// unavailable in this build (e.g. TraxSource on mobile), or if the provider is
+/// disabled in `AppSettings::tagger_providers_enabled`.
 #[tauri::command]
 pub async fn search_track_by_url(
     url: String,
     tagger: State<'_, TaggerService>,
+    settings: State<'_, SettingsService>,
 ) -> Result<Option<ScoredTagCandidate>> {
-    tagger.search_by_url(&url).await
+    let app_settings = settings.get_settings()?;
+    let enabled_ids = enabled_provider_ids(&tagger, &app_settings);
+    tagger.search_by_url(&url, &enabled_ids).await
 }
 
 /// Download a candidate's artwork and set it as the track's artwork, reusing the

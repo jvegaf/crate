@@ -95,6 +95,15 @@
 				"backupContents": "Această copie de rezervă conține {tracks, plural, =0 {nicio cântec} =1 {1 cântec} other {{tracks} cântece}}, {playlists, plural, =0 {nicio listă de redare} =1 {1 listă de redare} other {{playlists} liste de redare}}, {tags, plural, =0 {niciun tag} =1 {1 tag} other {{tags} taguri}} și {discoveryReleases, plural, =0 {niciun lan discovery} =1 {1 lan discovery} other {{discoveryReleases} lansări discovery}}. Creat pe {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Furnizori activi",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "Salvarea setării furnizorului a eșuat"
+		},
 		"library": {
 			"musicFolder": "Folder de muzică",
 			"musicFolderDescription": "Crate scanează acest folder și importă fișierele audio găsite. Fiecare dispozitiv își păstrează propriul folder.",

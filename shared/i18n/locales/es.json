@@ -95,6 +95,15 @@
 				"backupContents": "Esta copia de seguridad contiene {tracks, plural, =0 {ninguna pista} =1 {1 pista} other {{tracks} pistas}}, {playlists, plural, =0 {ninguna lista de reproducción} =1 {1 lista de reproducción} other {{playlists} listas de reproducción}}, {tags, plural, =0 {ninguna etiqueta} =1 {1 etiqueta} other {{tags} etiquetas}} y {discoveryReleases, plural, =0 {ningún lanzamiento de descubrimiento} =1 {1 lanzamiento de descubrimiento} other {{discoveryReleases} lanzamientos de descubrimiento}}. Creado el {date}."
 			}
 		},
+		"tagger": {
+			"providersEnabled": "Proveedores habilitados",
+			"providers": {
+				"beatport": "Beatport",
+				"traxsource": "Traxsource",
+				"bandcamp": "Bandcamp"
+			},
+			"providersSaveFailed": "No se pudo guardar la configuración del proveedor"
+		},
 		"library": {
 			"musicFolder": "Carpeta de música",
 			"musicFolderDescription": "Crate analiza esta carpeta e importa los archivos de audio que encuentra. Cada dispositivo conserva su propia carpeta.",
