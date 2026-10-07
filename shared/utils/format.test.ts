@@ -144,6 +144,76 @@ describe('formatKey', () => {
 		expect(new Set(shifted).size).toBe(24)
 	})
 
+	it('renders a stored value in the requested notation instead of passing it through raw', () => {
+		// The camelot and standard arms used to do an exact map lookup, so anything the
+		// tolerant resolver understood but the map did not (legacy 11d, tagger "G Minor",
+		// unicode accidentals) was displayed verbatim while keyColor coloured it correctly.
+		expect(formatKey('11d', 'camelot')).toBe('11B')
+		expect(formatKey('11d', 'standard')).toBe('A')
+		expect(formatKey('G Minor', 'camelot')).toBe('6A')
+		expect(formatKey('G Minor', 'standard')).toBe('Gm')
+		expect(formatKey('8a', 'camelot')).toBe('8A')
+		expect(formatKey('G♯ Minor', 'camelot')).toBe('1A')
+	})
+
+	it('resolves the label through the same resolver as the colour and the sort', () => {
+		// Guard against the inconsistency coming back: keyToCamelot is what keyColor and
+		// keySortValue use, so the label may not disagree with them.
+		const stored = ['8A', '8a', '11d', '1m', '4d', 'Am', 'C', 'F#m', 'Ebm', 'G Minor', 'G♯ Minor', 's-key']
+		for (const value of stored) {
+			expect(formatKey(value, 'camelot'), `${value} label vs resolver`).toBe(keyToCamelot(value) ?? value)
+		}
+
+		expect(formatKey('', 'camelot')).toBe('-')
+		expect(formatKey(null, 'camelot')).toBe('-')
+	})
+
+	/**
+	 * The canonical standard spelling of each Camelot code, declared as data.
+	 *
+	 * This must stay in step with the Rust `CAMELOT_TO_STANDARD` in
+	 * `src-tauri/src/services/analysis.rs`. It replaced an `Object.fromEntries` derivation
+	 * whose result depended on insertion order in the forward map, which made the spelling
+	 * disagree between the layers: storage wrote `G#m` for 1A while the label rendered
+	 * `Abm`, for the same key.
+	 */
+	const CANONICAL_STANDARD_BY_CAMELOT: Record<string, string> = {
+		'1A': 'G#m',
+		'1B': 'B',
+		'2A': 'Ebm',
+		'2B': 'F#',
+		'3A': 'A#m',
+		'3B': 'C#',
+		'4A': 'Fm',
+		'4B': 'Ab',
+		'5A': 'Cm',
+		'5B': 'Eb',
+		'6A': 'Gm',
+		'6B': 'Bb',
+		'7A': 'Dm',
+		'7B': 'F',
+		'8A': 'Am',
+		'8B': 'C',
+		'9A': 'Em',
+		'9B': 'G',
+		'10A': 'Bm',
+		'10B': 'D',
+		'11A': 'F#m',
+		'11B': 'A',
+		'12A': 'C#m',
+		'12B': 'E',
+	}
+
+	it('renders the declared canonical standard spelling for all 24 Camelot codes', () => {
+		expect(Object.keys(CANONICAL_STANDARD_BY_CAMELOT)).toHaveLength(24)
+
+		for (const [camelot, expected] of Object.entries(CANONICAL_STANDARD_BY_CAMELOT)) {
+			expect(formatKey(camelot, 'standard'), `${camelot} should render as ${expected}`).toBe(expected)
+			// The canonical spelling resolves back to its own code, so the pair is stable.
+			expect(keyToCamelot(expected), `${expected} should resolve to ${camelot}`).toBe(camelot)
+		}
+	})
+
 	it('passes unknown values through untouched and renders null as a dash', () => {
 		expect(formatKey(null)).toBe('-')
 		expect(formatKey(null, 'openkey')).toBe('-')

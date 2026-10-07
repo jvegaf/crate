@@ -39,7 +39,7 @@ export function formatBpm(bpm: number | null): string {
  * Mapping from Standard notation to Camelot wheel notation.
  * Includes enharmonic equivalents (e.g. F#/Gb, C#/Db) — all resolve to
  * the same Camelot code. When converting *back* to Standard, the canonical
- * spelling (sharps, except Ab) is returned.
+ * spelling is declared explicitly in {@link CAMELOT_TO_STANDARD} below.
  */
 const STANDARD_TO_CAMELOT: Record<string, string> = {
 	// Major keys
@@ -81,13 +81,42 @@ const STANDARD_TO_CAMELOT: Record<string, string> = {
 }
 
 /**
- * Reverse map: Camelot → Standard (derived automatically).
- * Enharmonic pairs resolve to the canonical Standard spelling
- * (sharps; flats only where Ab has no sharp counterpart).
+ * Reverse map: Camelot → Standard, declared explicitly rather than derived.
+ *
+ * It used to be derived from {@link STANDARD_TO_CAMELOT} through `Object.fromEntries`, so
+ * for each enharmonic pair whichever entry was inserted last won. That made the canonical
+ * spelling an accident of insertion order and, worse, made it disagree with the Rust
+ * reverse map in `src-tauri/src/services/analysis.rs`: storage wrote `G#m` for 1A while
+ * this display layer rendered `Abm`, for the same key.
+ *
+ * These 24 rows are the shared contract with the Rust side and `format.test.ts` pins them.
  */
-const CAMELOT_TO_STANDARD: Record<string, string> = Object.fromEntries(
-	Object.entries(STANDARD_TO_CAMELOT).map(([k, v]) => [v, k])
-)
+const CAMELOT_TO_STANDARD: Record<string, string> = {
+	'1A': 'G#m',
+	'1B': 'B',
+	'2A': 'Ebm',
+	'2B': 'F#',
+	'3A': 'A#m',
+	'3B': 'C#',
+	'4A': 'Fm',
+	'4B': 'Ab',
+	'5A': 'Cm',
+	'5B': 'Eb',
+	'6A': 'Gm',
+	'6B': 'Bb',
+	'7A': 'Dm',
+	'7B': 'F',
+	'8A': 'Am',
+	'8B': 'C',
+	'9A': 'Em',
+	'9B': 'G',
+	'10A': 'Bm',
+	'10B': 'D',
+	'11A': 'F#m',
+	'11B': 'A',
+	'12A': 'C#m',
+	'12B': 'E',
+}
 
 /**
  * Mode words written by external taggers, e.g. the Beatport tagger stores
@@ -195,11 +224,14 @@ export function formatKey(key: string | null, format: KeyNotationFormat = 'camel
 	}
 
 	if (format === 'camelot') {
-		return STANDARD_TO_CAMELOT[key] ?? key
+		// Resolve through the shared resolver rather than the exact map, so a stored legacy
+		// value or a tagger spelling is rendered in the chosen notation instead of verbatim.
+		return keyToCamelot(key) ?? key
 	}
 
-	// Convert Camelot → Standard when user selects standard format
-	return CAMELOT_TO_STANDARD[key] ?? key
+	// Standard: resolve to Camelot first, then render the declared canonical spelling.
+	const camelot = keyToCamelot(key)
+	return camelot ? (CAMELOT_TO_STANDARD[camelot] ?? key) : key
 }
 
 /**
