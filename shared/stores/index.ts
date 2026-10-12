@@ -25,6 +25,7 @@ export {
 	collectDescendantIds,
 } from './playlists'
 export type { PlaylistTreeNode } from './playlists'
+export { cuesStore, cuesForTrack } from './cues'
 export {
 	uiStore,
 	activeView,
