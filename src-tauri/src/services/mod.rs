@@ -9,6 +9,7 @@ pub mod audio;
 pub mod backup;
 pub mod cloud_sync;
 pub mod collection;
+pub mod cue;
 #[cfg(feature = "desktop")]
 pub mod device;
 #[cfg(feature = "desktop")]
@@ -43,6 +44,7 @@ pub use artwork::ArtworkService;
 pub use audio::AudioService;
 pub use backup::BackupService;
 pub use collection::CollectionService;
+pub use cue::CueService;
 #[cfg(feature = "desktop")]
 pub use device::DeviceService;
 #[cfg(feature = "desktop")]
