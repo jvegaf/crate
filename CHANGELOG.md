@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-12
+
 ### Added
 
 - Added interface zoom on desktop: scale the whole UI from 75% to 150% via Settings → Appearance or View → Zoom In / Zoom Out / Actual Size (⌘= / ⌘- / ⌘0); the level is remembered per device and never cloud-synced
+
+### Fixed
+
+- Fixed album artwork never appearing on Linux: WebKitGTK rejects the `asset://` cover request when it is made as a plain image, so every track showed the vinyl placeholder even though its artwork had been extracted and stored correctly; covers are now requested in CORS mode
 
 ## [0.3.0] - 2026-09-24
 
@@ -221,7 +227,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Waveform display with cue point management
 - Search and filter across entire collection
 
-[Unreleased]: https://github.com/blackboxaudio/crate/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/blackboxaudio/crate/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/blackboxaudio/crate/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/blackboxaudio/crate/compare/v0.2.9...v0.3.0
 [0.2.9]: https://github.com/blackboxaudio/crate/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/blackboxaudio/crate/compare/v0.2.7...v0.2.8
