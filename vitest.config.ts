@@ -4,6 +4,11 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 export default defineConfig({
 	plugins: [svelte(), tsconfigPaths()],
+	// Component tests need Svelte's *client* entry: without this condition Vitest resolves the
+	// server build and every `mount(...)` throws lifecycle_function_unavailable.
+	resolve: {
+		conditions: ['browser'],
+	},
 	test: {
 		globals: true,
 		environment: 'jsdom',

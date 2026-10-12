@@ -34,6 +34,18 @@
 	let localError = $state(false)
 	let externalError = $state(false)
 
+	/**
+	 * True while the local cover is the one being rendered.
+	 *
+	 * The local cover is served over Tauri's `asset://` scheme. On Linux/WebKitGTK that custom
+	 * scheme is cross-origin to the page, so a plain (no-CORS) `<img>` is rejected before the
+	 * request is even made — the Rust handler never sees it and the vinyl placeholder shows for
+	 * every track. Asking for the asset in CORS mode fixes it: the handler already answers with
+	 * `Access-Control-Allow-Origin`. Remote covers keep the default no-CORS load, which must not
+	 * require CORS headers from a third-party host.
+	 */
+	let usingAssetProtocol = $derived(Boolean(localUrl) && !localError)
+
 	let displayUrl = $derived.by(() => {
 		if (localUrl && !localError) return localUrl
 		if (artworkUrl && !externalError) return artworkUrl
@@ -82,6 +94,7 @@
 			src={displayUrl}
 			alt={$translate('modals.albumArt')}
 			class="h-full w-full object-cover"
+			crossorigin={usingAssetProtocol ? 'anonymous' : undefined}
 			onerror={handleError}
 		/>
 	{:else}
