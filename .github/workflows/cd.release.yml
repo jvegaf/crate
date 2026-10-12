@@ -179,9 +179,6 @@ jobs:
           GCLOUD_STORAGE_BUCKET: ${{ secrets.GCLOUD_STORAGE_BUCKET }}
           GCLOUD_OAUTH_CLIENT_ID: ${{ secrets.GCLOUD_OAUTH_CLIENT_ID }}
           GCLOUD_OAUTH_CLIENT_SECRET: ${{ secrets.GCLOUD_OAUTH_CLIENT_SECRET }}
-          # Tauri updater signing
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Apple code signing
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -190,26 +187,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-      # The staging and production overlays differ only in identity and updater endpoint, so
-      # prove the binary polls its own channel's manifest before it can be published.
-      - name: Verify updater endpoint (macOS)
-        if: matrix.os == 'macos-latest'
-        env:
-          CHANNEL: ${{ needs.validate.outputs.channel }}
-        run: |
-          BIN=$(ls src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app/Contents/MacOS/crate-app)
-          EXPECTED="crate-releases/${CHANNEL}/latest.json"
-          if [[ "$CHANNEL" == "staging" ]]; then OTHER="crate-releases/production/latest.json"; else OTHER="crate-releases/staging/latest.json"; fi
-          if ! strings "$BIN" | grep -q "$EXPECTED"; then
-            echo "Error: built app does not embed the $CHANNEL updater endpoint ($EXPECTED)"
-            exit 1
-          fi
-          if strings "$BIN" | grep -q "$OTHER"; then
-            echo "Error: built app embeds the other channel's updater endpoint ($OTHER)"
-            exit 1
-          fi
-          echo "Updater endpoint verified: $EXPECTED"
 
       - name: Build Tauri app (Windows)
         if: matrix.os == 'windows-latest'
@@ -222,8 +199,6 @@ jobs:
           GCLOUD_STORAGE_BUCKET: ${{ secrets.GCLOUD_STORAGE_BUCKET }}
           GCLOUD_OAUTH_CLIENT_ID: ${{ secrets.GCLOUD_OAUTH_CLIENT_ID }}
           GCLOUD_OAUTH_CLIENT_SECRET: ${{ secrets.GCLOUD_OAUTH_CLIENT_SECRET }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload macOS artifacts
         if: matrix.os == 'macos-latest'
@@ -591,6 +566,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # The `secrets` context is not available in step-level `if:` expressions, so the GCS
+    # availability check is hoisted here and read as `env.HAS_GCS_KEY` by the cloud steps. The
+    # release job therefore still creates its draft GitHub Release when no GCS key is configured.
+    env:
+      HAS_GCS_KEY: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY != '' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -626,14 +606,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Authenticate to Google Cloud
+        if: env.HAS_GCS_KEY == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCS_SERVICE_ACCOUNT_KEY }}
 
       - name: Set up Cloud SDK
+        if: env.HAS_GCS_KEY == 'true'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Upload artifacts to GCS and generate latest.json
+        if: env.HAS_GCS_KEY == 'true'
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           CHANNEL: ${{ needs.validate.outputs.channel }}
@@ -743,6 +726,7 @@ jobs:
           cat downloads.json
 
       - name: Deploy landing page
+        if: env.HAS_GCS_KEY == 'true'
         run: |
           BUCKET="crate-web"
           gcloud storage cp web/index.html "gs://${BUCKET}/index.html" \

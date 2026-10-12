@@ -33,7 +33,6 @@ import {
 	displayedReleases,
 	expandedReleaseIds,
 	discoveryStore,
-	updaterStore,
 	previewInfo,
 	startScanProgressListening,
 } from '$lib/stores'
@@ -692,9 +691,6 @@ export function createAppSetup(config: AppSetupConfig): AppSetupResult {
 			await discoveryStore.loadReleases()
 		}
 
-		updaterStore.check(true)
-		const updateInterval = setInterval(() => updaterStore.check(true), 60 * 60 * 1000)
-
 		// Cloud sync: load initial status + poll for updates so the indicator stays current,
 		// and listen for override-conflict toasts.
 		await cloudSyncStore.load()
@@ -719,7 +715,6 @@ export function createAppSetup(config: AppSetupConfig): AppSetupResult {
 			exportStore.stopListening()
 			cloudSyncStore.stopPolling()
 			cloudSyncStore.stopOverrideListener()
-			clearInterval(updateInterval)
 		}
 	}
 

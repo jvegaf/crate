@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Disabled the auto-updater and the cloud release publishing in this build: they were still pointed at the upstream project's update feed and signing key, so a newer upstream release would have been offered as an update and installed over this one. Auto-updates return once this fork has its own signing key and update endpoint.
+
 ## [0.4.0] - 2026-10-12
 
 ### Added

@@ -47,12 +47,8 @@
 		<Text variant="header-3" class="mb-4">{$translate('settings.about.updates')}</Text>
 		<div class="flex items-center justify-between">
 			<Text size="sm" color="secondary" as="span">{statusLabel}</Text>
-			<Button
-				size="sm"
-				variant="secondary"
-				disabled={$updaterStore.status === 'checking'}
-				onclick={() => updaterStore.check(false)}
-			>
+			<!-- Updater disabled in this fork: no cloud release channel is configured yet. -->
+			<Button size="sm" variant="secondary" disabled>
 				{$translate('settings.about.checkForUpdates')}
 			</Button>
 		</div>

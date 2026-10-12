@@ -34,7 +34,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": "v1Compatible",
     "icon": [
       "icons/prod/32x32.png",
       "icons/prod/128x128.png",
@@ -49,8 +48,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVFMzJFNEM1OTQ3MEI5N0QKUldSOXVYQ1V4ZVF5WGh2NXpGc04rTmRWQW1RcVliM2MxazJzUzczOHpCcGZsNlE2TEpyN0dzZ1YK",
-      "dialog": false
+      "pubkey": "updater-disabled-in-this-fork"
     }
   }
 }
