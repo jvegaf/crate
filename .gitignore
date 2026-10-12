@@ -30,3 +30,6 @@ conf/
 
 # Vitest cache
 .vitest/
+
+# Local Traktor fixture files (an exported NML embeds absolute user paths)
+/data/
