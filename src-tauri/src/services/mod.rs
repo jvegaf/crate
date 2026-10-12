@@ -34,6 +34,8 @@ pub mod settings;
 pub mod smart_rules;
 pub mod tag;
 pub mod tagger;
+// Pure Rust NML import (S3): no desktop-only dependency, so it is not feature-gated.
+pub mod traktor;
 pub mod ui_zoom;
 pub mod watch_gate;
 
