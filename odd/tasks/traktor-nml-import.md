@@ -224,17 +224,54 @@ Prerequisito de todo: `cues` es hoy una tabla huérfana.
 `cargo fmt --check`, `yarn check:svelte`, `yarn check:svelte:mobile`, `yarn vitest run`,
 `yarn format:check`, `yarn lint:check`.
 
-### S2 — Modelo de beat grid (después del fixture)
+### S2 — Modelo de beat grid (va antes de S4)
 
-Migración append-only con `effects` exacto (`Effect::Table/Column/Index`), lectura desde
-`stratum-dsp` (`services/analysis.rs`), y decisión explícita sobre precisión sub-ms. Requiere haber
-visto el `<GRID BPM>` real: es la decisión que más caro sale si se equivoca.
+**El hecho que define el diseño:** una grilla no es un BPM, es un par **(BPM, ancla)**. Traktor guarda el BPM
+en `TEMPO BPM` y el ancla en el `START` del cue `TYPE="4"`; sin el ancla, la grilla no dice dónde cae el
+primer pulso.
 
-### S3 — Parser NML read-only + dry-run
+**Crate hoy no persiste el ancla en ningún lado.** `services/export/anlz/mod.rs:163` construye el
+`BeatGridTag` sintetizándolo desde el BPM, y `services/export/anlz/tags/pqtz.rs:55-70` genera las entradas con
+`time_ms` empezando en `0.0`: la grilla que se exporta a un pendrive **asume que el primer pulso está en 0 ms**.
+`BeatGridEntry` ya tiene los campos necesarios (`beat`, `tempo`, `time_ms`), pero el origen nunca viaja desde
+la DB. Es el mismo supuesto que obliga a `dj-data-converter` a aplicar una **corrección de offset de 26 ms** en
+mp3: una grilla real casi nunca arranca en 0.
 
-`services/traktor/nml/` (o equivalente): parser con `quick-xml`, normalización de paths `/:` +
-`VOLUME`, mappers de track/cue/key/playlist, y un **reporte dry-run** que diga qué entraría y qué no
-matchea. Sin escrituras a la DB.
+**Modelo decidido: tres columnas nuevas en `tracks`, agregadas al final.**
+
+| Columna | Tipo | Contenido |
+| --- | --- | --- |
+| `grid_bpm` | `REAL` nullable | BPM de la grilla |
+| `grid_anchor_ms` | `INTEGER` nullable | posición del primer pulso |
+| `grid_source` | `TEXT` nullable | `'traktor'`, `'crate'`, … |
+
+Razones:
+
+1. **Se mantienen separadas de `tracks.bpm`.** Un BPM y un ancla de orígenes distintos producen una grilla
+   incoherente. `tracks.bpm` ya es la medida de Crate (`analysis.rs:733`, con `analysis_source = 'crate'`):
+   el trío preserva la medida propia y la grilla importada por separado.
+2. **Se agregan al final, no en el medio.** El repo lee `Track` con listas de columnas posicionales
+   (`row.get(N)`); insertar una columna en el medio desplaza todos los índices. Agregar al final de la tabla y
+   al final de cada `SELECT` deja los índices existentes intactos. Ver `odd/tasks/sql-positional-regression-tests.md`.
+3. **Se descartó una tabla aparte `track_beatgrids`.** Aislaría el riesgo posicional, pero obligaría a registrar
+   un bucket nuevo en cloud-sync y backup, y `tracks` ya participa de los dos: el total de partes móviles es
+   mayor, no menor.
+4. **`grid_anchor_ms` es `INTEGER`**, consistente con `cues.position_ms`. El redondeo a milisegundos enteros ya
+   quedó medido: no pierde datos.
+
+**Decisión que S2 no toma y S4 sí:** si el import de Traktor además escribe `tracks.bpm`. El schema funciona
+igual en los dos casos, así que no bloquea este slice.
+
+**S2 no toca el writer ANLZ.** Alimentar `BeatGridTag` con un ancla real es una mejora aparte, con su propio
+riesgo: cambia lo que se exporta a un pendrive. Queda registrado como oportunidad, no se hace acá.
+
+Migración append-only con `effects` exacto (`Effect::Column` por cada columna).
+
+### S3 — Parser NML read-only + dry-run (implementado)
+
+Aterrizó en `services/traktor/` con `quick-xml`: `model.rs`, `parser.rs`, `path.rs`, `key.rs`, `mapper.rs`,
+`tests/mod.rs` y `fixtures/collection_small.nml` (anonimizado). Módulo **sin** gating desktop, sin DB, sin
+comandos y sin `async`. 36 tests + 1 `#[ignore]`d contra el corpus real.
 
 ### S4 — Import real
 
@@ -244,14 +281,16 @@ no-matcheados.
 
 ## Tasks
 
-- [ ] T1 Servicio `services/cue.rs` (CRUD + validación + dedup + `_hlc` + tests unitarios)
-- [ ] T2 Comandos `commands/cue.rs` + registro en `generate_handler!`
-- [ ] T3 TS: tipo `Cue` snake_case + `shared/api/cues.ts` + barrel
-- [ ] T4 Store `shared/stores/cues.ts` + barrel
-- [ ] T5 Gates completos (cargo test/clippy/fmt, svelte, mobile, vitest, format, lint)
-- [ ] S2 Modelo de beat grid (bloqueado por fixture)
-- [ ] S3 Parser NML read-only + dry-run (bloqueado por fixture)
+- [x] T1 Servicio `services/cue.rs` (CRUD + validación + dedup + `_hlc` + tests unitarios) — `a2cd6a0`
+- [x] T2 Comandos `commands/cue.rs` + registro en `generate_handler!` — `a2cd6a0`
+- [x] T3 TS: tipo `Cue` snake_case + `shared/api/cues.ts` + barrel — `1cda13e`
+- [x] T4 Store `shared/stores/cues.ts` + barrel — `1cda13e`
+- [x] T5 Gates completos (cargo test/clippy/fmt, svelte, mobile, vitest, format, lint)
+- [x] S3 Parser NML read-only + dry-run — `df66775`
+- [ ] S2 Modelo de beat grid (va **antes** de S4)
 - [ ] S4 Import real con merge por path/hash + playlists con jerarquía
+- [ ] Follow-up: `<NODE/>` self-closing en el parser
+- [ ] Follow-up: variante `TraktorError::Invalid` sin construir
 
 ## Constraints
 
@@ -269,6 +308,10 @@ no-matcheados.
 - El fixture `data/collection.nml` **no está en `.gitignore`** y contiene rutas absolutas del usuario: no debe
   commitearse tal cual.
 - La capa de cloud-sync ya conoce `cues` (`_hlc`): no romperla ni escribir `_hlc` a mano.
+- **Las columnas nuevas de `tracks` van al final de la tabla y al final de cada `SELECT`.** El repo lee `Track`
+  con índices posicionales (`row.get(N)`): agregar en el medio desplaza todo y es un bug silencioso.
+- **La grilla es el trío `(grid_bpm, grid_anchor_ms, grid_source)`.** No pisar `tracks.bpm` sin decidirlo
+  explícitamente en S4.
 - `odd/` no entra en una rama de feature pura para upstream (AGENTS.md §1.2).
 - Review workload: el diff debe quedar bien por debajo de ~400 líneas por PR.
 
@@ -280,6 +323,7 @@ no-matcheados.
 | --- | --- |
 | `a2cd6a0` | `feat(cues): add the cue points service and IPC commands` |
 | `1cda13e` | `feat(cues): expose cue points through the api and store layer` |
+| `df66775` | `feat(traktor): parse Traktor NML collections read-only` |
 
 El orden es deliberado: Rust primero, así cada commit deja el árbol consistente (el servicio y los comandos
 compilan y pasan sus tests sin depender de la capa TS).
@@ -310,6 +354,38 @@ Desvío detectado y corregido por el orquestador: `shared/stores/cues.ts` maneja
 
 No verificado: compile Rust de mobile (no hay toolchain iOS en este host), el round-trip de cloud-sync de un
 tombstone de cue, y los bordes de `hot_cue_index` contra Traktor (queda cubierto por el mapeo `+1` de S3).
+
+### Gates de S3 (verificados por un verificador independiente)
+
+| Gate | Resultado |
+| --- | --- |
+| `cargo test --features desktop` | 575 passed, 0 failed, 11 ignored (+35 sobre S1) |
+| `cargo clippy --features desktop -- -D warnings` | limpio |
+| `cargo fmt --check` | exit 0 |
+| `cargo test --features desktop -- --ignored real_collection` | pasa: 264 tracks, 246 grids, 3 smartlists contra el archivo real |
+
+Confirmado adversarialmente: la aritmética de Open Key es correcta en las 12 rotaciones y la tabla
+`MUSICAL_KEY` en sus 24 entradas; el camino legacy `m`/`d` de `services/analysis.rs` quedó **intacto**
+(`git diff dev` vacío); el grid se lee por `TYPE="4"` y nunca entra a la lista de cues; `HOTCUE n → n+1`;
+cero fugas de la ruta real del usuario (`grep -rn josev` fuera de `data/` sin coincidencias); `Cargo.lock`
+solo suma una línea en la lista de deps; `quick-xml` no arrastra nada desktop-only.
+
+Dos hipótesis propias resultaron **refutadas** por la verificación, y se registran:
+
+1. El orquestador propuso `9m → 11A` como caso de prueba: **estaba mal**. `9m` (F menor) es `4A`. La
+   implementación y su test ya daban `4A`.
+2. El orquestador sospechó que redondear a milisegundos enteros podía **colapsar cues distintos** vía el dedup
+   de `(position_ms, type, hot_cue_index)` de S1. Medido sobre los 264 tracks por dos métodos independientes:
+   **0 colisiones con valor exacto, 0 con valor redondeado, 0 tracks que ganen una colisión por redondeo**. El
+   `INTEGER` no pierde datos en esta colección.
+
+### Hallazgos abiertos (no bloqueantes)
+
+| Hallazgo | Evidencia | Impacto |
+| --- | --- | --- |
+| Un `<NODE .../>` self-closing corrompería la pila del parser | `parser.rs:132-140,168-173` | 0 casos en el corpus real, pero otro exportador podría emitirlo |
+| `TraktorError::Invalid` nunca se construye | `mod.rs:32` | Lo enmascara el `#![allow(dead_code)]` del módulo; el `allow` es deliberado porque S4 consume la superficie |
+| El fixture tiene 7 tracks y no 10–20 | `fixtures/collection_small.nml` | Cubre los 13 casos pedidos; solo es menos volumen del sugerido |
 
 ### Hallazgos registrados
 
