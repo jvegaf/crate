@@ -36,6 +36,9 @@ pub mod tag;
 pub mod tagger;
 // Pure Rust NML import (S3): no desktop-only dependency, so it is not feature-gated.
 pub mod traktor;
+// DB-aware Traktor NML import (S4, slice A): needs the desktop library + hash services.
+#[cfg(feature = "desktop")]
+pub mod traktor_import;
 pub mod ui_zoom;
 pub mod watch_gate;
 
