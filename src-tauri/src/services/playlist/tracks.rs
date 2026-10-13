@@ -259,6 +259,86 @@ impl PlaylistService {
 
         Ok(())
     }
+
+    /// Replace a playlist's exact ordered membership with `track_ids`.
+    ///
+    /// Positions are **0-based**, matching `add_tracks` (whose first member lands at
+    /// `COALESCE(MAX(position), -1) + 1 == 0`, tracks.rs:147) and `reorder_tracks` (which writes
+    /// `i as i32`, tracks.rs:247). Duplicate ids are collapsed to their first occurrence so the
+    /// `(playlist_id, track_id)` junction key cannot collide; the return value is the number of
+    /// members actually written (the deduplicated length).
+    ///
+    /// Every member absent from `track_ids` is deleted and tombstoned; every requested member is
+    /// upserted at its index. An empty `track_ids` therefore clears the playlist. One HLC stamps
+    /// the entire mutation. The operation is idempotent: a second call with an unchanged list
+    /// deletes nothing, so it records no additional tombstones.
+    #[allow(dead_code)] // Wired to the Traktor NML importer in a follow-up task.
+    pub fn replace_tracks(&self, playlist_id: &str, track_ids: Vec<String>) -> Result<usize> {
+        let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        let tx = conn.unchecked_transaction()?;
+
+        // Deduplicate preserving first occurrence.
+        let mut seen = std::collections::HashSet::new();
+        let ordered: Vec<String> = track_ids
+            .into_iter()
+            .filter(|id| seen.insert(id.clone()))
+            .collect();
+        let requested: std::collections::HashSet<&str> =
+            ordered.iter().map(String::as_str).collect();
+
+        let hlc = dirty::next_hlc(&tx)?;
+
+        // Delete members no longer requested, tombstoning each exactly like `remove_tracks`
+        // (tracks.rs:197).
+        let existing: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT track_id FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position",
+            )?;
+            let rows = stmt
+                .query_map([playlist_id], |row| row.get(0))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            rows
+        };
+        for track_id in existing {
+            if !requested.contains(track_id.as_str()) {
+                tx.execute(
+                    "DELETE FROM playlist_tracks WHERE playlist_id = ?1 AND track_id = ?2",
+                    rusqlite::params![playlist_id, track_id],
+                )?;
+                dirty::record_tombstone(
+                    &tx,
+                    buckets::PLAYLIST_TRACKS,
+                    &dirty::junction_entity_id(playlist_id, &track_id),
+                    &hlc,
+                )?;
+            }
+        }
+
+        // Upsert every requested member at its index; an existing row keeps its `date_added`.
+        let now = chrono::Utc::now().to_rfc3339();
+        for (position, track_id) in ordered.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO playlist_tracks (playlist_id, track_id, position, date_added, _hlc) \
+                 VALUES (?1, ?2, ?3, ?4, ?5) \
+                 ON CONFLICT(playlist_id, track_id) \
+                 DO UPDATE SET position = excluded.position, _hlc = excluded._hlc",
+                rusqlite::params![playlist_id, track_id, position as i32, now, hlc],
+            )?;
+        }
+
+        // Mirror the dirty set used by `add_tracks` (tracks.rs:173-174) and `remove_tracks`
+        // (tracks.rs:230-231).
+        tx.execute(
+            "UPDATE playlists SET date_modified = ?1, _hlc = ?2 WHERE id = ?3",
+            rusqlite::params![now, hlc, playlist_id],
+        )?;
+        dirty::mark_dirty(&tx, buckets::PLAYLIST_TRACKS)?;
+        dirty::mark_dirty(&tx, buckets::PLAYLISTS)?;
+
+        tx.commit()?;
+
+        Ok(ordered.len())
+    }
 }
 
 #[cfg(test)]
@@ -287,5 +367,183 @@ mod tests {
         let tracks = service.get_playlist_tracks(&playlist.id).unwrap();
         assert_eq!(tracks.len(), 1);
         test_utils::assert_track_eq(&tracks[0], &track);
+    }
+
+    fn seeded_service() -> (Arc<Mutex<Connection>>, PlaylistService) {
+        let conn = test_utils::make_memory_db();
+        for track in test_utils::fixture_tracks() {
+            test_utils::insert_sentinel_track(&conn, &track);
+        }
+        let shared = Arc::new(Mutex::new(conn));
+        (shared.clone(), PlaylistService::new(shared))
+    }
+
+    /// `(track_id, position)` pairs ordered by position.
+    fn membership(shared: &Arc<Mutex<Connection>>, playlist_id: &str) -> Vec<(String, i32)> {
+        let conn = shared.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT track_id, position FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position",
+            )
+            .unwrap();
+        stmt.query_map([playlist_id], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    fn has_tombstone(shared: &Arc<Mutex<Connection>>, playlist_id: &str, track_id: &str) -> bool {
+        let entity_id = dirty::junction_entity_id(playlist_id, track_id);
+        let conn = shared.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_tombstones WHERE entity_type = ?1 AND entity_id = ?2",
+                rusqlite::params![buckets::PLAYLIST_TRACKS, entity_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        count > 0
+    }
+
+    fn tombstone_count(shared: &Arc<Mutex<Connection>>, playlist_id: &str) -> i64 {
+        let conn = shared.lock().unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM sync_tombstones WHERE entity_type = ?1 AND entity_id LIKE ?2",
+            rusqlite::params![buckets::PLAYLIST_TRACKS, format!("{playlist_id}|%")],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn replace_tracks_writes_exact_ordered_membership() {
+        let (shared, service) = seeded_service();
+        let playlist = service
+            .create_playlist("Ordered".to_string(), None, "library".to_string())
+            .unwrap();
+
+        let written = service
+            .replace_tracks(
+                &playlist.id,
+                vec![
+                    "track-3".to_string(),
+                    "track-1".to_string(),
+                    "track-2".to_string(),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(written, 3);
+        assert_eq!(
+            membership(&shared, &playlist.id),
+            vec![
+                ("track-3".to_string(), 0),
+                ("track-1".to_string(), 1),
+                ("track-2".to_string(), 2),
+            ]
+        );
+    }
+
+    #[test]
+    fn replace_tracks_removes_stale_members_and_records_tombstones() {
+        let (shared, service) = seeded_service();
+        let playlist = service
+            .create_playlist("Stale".to_string(), None, "library".to_string())
+            .unwrap();
+        service
+            .replace_tracks(
+                &playlist.id,
+                vec![
+                    "track-1".to_string(),
+                    "track-2".to_string(),
+                    "track-3".to_string(),
+                ],
+            )
+            .unwrap();
+
+        service
+            .replace_tracks(
+                &playlist.id,
+                vec!["track-1".to_string(), "track-3".to_string()],
+            )
+            .unwrap();
+
+        assert_eq!(
+            membership(&shared, &playlist.id),
+            vec![("track-1".to_string(), 0), ("track-3".to_string(), 1)]
+        );
+        assert!(
+            has_tombstone(&shared, &playlist.id, "track-2"),
+            "the removed member must be tombstoned"
+        );
+        assert!(!has_tombstone(&shared, &playlist.id, "track-1"));
+    }
+
+    #[test]
+    fn replace_tracks_is_idempotent() {
+        let (shared, service) = seeded_service();
+        let playlist = service
+            .create_playlist("Idempotent".to_string(), None, "library".to_string())
+            .unwrap();
+        let list = vec!["track-1".to_string(), "track-2".to_string()];
+
+        service.replace_tracks(&playlist.id, list.clone()).unwrap();
+        let first_positions = membership(&shared, &playlist.id);
+
+        service.replace_tracks(&playlist.id, list).unwrap();
+
+        assert_eq!(membership(&shared, &playlist.id), first_positions);
+        assert_eq!(
+            tombstone_count(&shared, &playlist.id),
+            0,
+            "a second identical call must not record tombstones"
+        );
+    }
+
+    #[test]
+    fn replace_tracks_deduplicates_repeated_ids() {
+        let (shared, service) = seeded_service();
+        let playlist = service
+            .create_playlist("Dedup".to_string(), None, "library".to_string())
+            .unwrap();
+
+        let written = service
+            .replace_tracks(
+                &playlist.id,
+                vec![
+                    "track-1".to_string(),
+                    "track-1".to_string(),
+                    "track-2".to_string(),
+                    "track-1".to_string(),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(written, 2);
+        assert_eq!(
+            membership(&shared, &playlist.id),
+            vec![("track-1".to_string(), 0), ("track-2".to_string(), 1)]
+        );
+    }
+
+    #[test]
+    fn replace_tracks_with_empty_list_clears_membership() {
+        let (shared, service) = seeded_service();
+        let playlist = service
+            .create_playlist("Clear".to_string(), None, "library".to_string())
+            .unwrap();
+        service
+            .replace_tracks(
+                &playlist.id,
+                vec!["track-1".to_string(), "track-2".to_string()],
+            )
+            .unwrap();
+
+        let written = service.replace_tracks(&playlist.id, vec![]).unwrap();
+
+        assert_eq!(written, 0);
+        assert!(membership(&shared, &playlist.id).is_empty());
+        assert!(has_tombstone(&shared, &playlist.id, "track-1"));
+        assert!(has_tombstone(&shared, &playlist.id, "track-2"));
     }
 }
