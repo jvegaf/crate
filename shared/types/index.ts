@@ -1503,4 +1503,12 @@ export interface TraktorImportOutcome {
 	keys_written: number
 	/** Entries that were reported and skipped without creating a row. */
 	unmatched: TraktorUnmatchedTrack[]
+	/** Playlists and folders created or reused by this run (folders included). */
+	playlists_imported: number
+	/** Members actually written across every imported playlist. */
+	playlist_tracks_written: number
+	/** Playlist entries whose audio file is not in Crate (skipped from membership). */
+	unresolved_playlist_entries: number
+	/** Traktor-internal playlist names skipped together with their whole subtree. */
+	skipped_internal_playlists: string[]
 }

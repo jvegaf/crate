@@ -272,7 +272,6 @@ impl PlaylistService {
     /// upserted at its index. An empty `track_ids` therefore clears the playlist. One HLC stamps
     /// the entire mutation. The operation is idempotent: a second call with an unchanged list
     /// deletes nothing, so it records no additional tombstones.
-    #[allow(dead_code)] // Wired to the Traktor NML importer in a follow-up task.
     pub fn replace_tracks(&self, playlist_id: &str, track_ids: Vec<String>) -> Result<usize> {
         let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
         let tx = conn.unchecked_transaction()?;

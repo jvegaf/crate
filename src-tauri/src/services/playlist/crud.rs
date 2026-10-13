@@ -206,7 +206,6 @@ impl PlaylistService {
     /// If the existing row's `is_folder` differs from the requested `is_folder`, the existing row
     /// is still returned as-is: this method never renames an item nor creates a sibling under the
     /// same name. Callers that need the requested kind must reconcile the divergence themselves.
-    #[allow(dead_code)] // Wired to the Traktor NML importer in a follow-up task.
     pub fn ensure_playlist(
         &self,
         name: &str,

@@ -1,13 +1,13 @@
-//! Real (DB-aware) Traktor `collection.nml` import — S4, slice A.
+//! Real (DB-aware) Traktor `collection.nml` import.
 //!
 //! This is the write side of the feature: it consumes the hermetic parser + mapper
 //! (`services::traktor`, which stays ungated) and persists the plan — tracks, cues,
-//! beat grids and keys — into the `tracks`/`cues` tables. It performs **no** Tauri calls
-//! and no `async` work; every lock scope is synchronous.
+//! beat grids and keys into the `tracks`/`cues` tables, plus the playlist forest into
+//! `playlists`/`playlist_tracks`. It performs **no** Tauri calls and no `async` work;
+//! every lock scope is synchronous.
 //!
 //! The module is `desktop`-only because it reuses the desktop library import machinery
 //! (`LibraryService`, which reads tags/hashes a file) plus `compute_audio_hash`.
-#![allow(dead_code)] // Slice B wires the Tauri commands; until then only tests consume this surface.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -19,12 +19,18 @@ use crate::models::{Cue, CueType};
 use crate::services::cloud_sync::pipeline::{buckets, dirty};
 use crate::services::hash::compute_audio_hash;
 use crate::services::library::LibraryService;
-use crate::services::traktor::mapper::{self, ImportPlan, ImportReport, MappedCue, MappedTrack};
+use crate::services::traktor::mapper::{
+    self, ImportPlan, ImportReport, MappedCue, MappedPlaylistNode, MappedTrack,
+};
+use crate::services::traktor::model::NmlNodeKind;
 use crate::services::traktor::parser;
-use crate::services::CueService;
+use crate::services::{CueService, PlaylistService};
 
 /// Origin stamped on every beat grid this importer writes.
 const GRID_SOURCE_TRAKTOR: &str = "traktor";
+
+/// Crate playlist context every imported node lands in.
+const PLAYLIST_CONTEXT_LIBRARY: &str = "library";
 
 /// A Traktor entry that could not be imported, with the reason it was skipped.
 ///
@@ -54,6 +60,14 @@ pub struct TraktorImportOutcome {
     pub keys_written: usize,
     /// Entries that were reported and skipped without creating a row.
     pub unmatched: Vec<UnmatchedTraktorTrack>,
+    /// Playlists and folders created or reused by this run (folders included).
+    pub playlists_imported: usize,
+    /// Members actually written across every imported playlist.
+    pub playlist_tracks_written: usize,
+    /// Playlist entries whose audio file is not in Crate (skipped from membership).
+    pub unresolved_playlist_entries: usize,
+    /// Traktor-internal playlist names skipped together with their whole subtree.
+    pub skipped_internal_playlists: Vec<String>,
 }
 
 /// Persists a mapped Traktor plan into the library.
@@ -61,12 +75,14 @@ pub struct TraktorImportService {
     conn: Arc<Mutex<Connection>>,
     library: LibraryService,
     cues: CueService,
+    playlists: PlaylistService,
 }
 
 impl TraktorImportService {
     pub fn new(conn: Arc<Mutex<Connection>>, library: LibraryService) -> Self {
         Self {
             cues: CueService::new(conn.clone()),
+            playlists: PlaylistService::new(conn.clone()),
             conn,
             library,
         }
@@ -80,10 +96,16 @@ impl TraktorImportService {
     }
 
     /// Real import. Idempotent: a second run over the same NML matches every track by
-    /// content hash instead of inserting duplicates, and rewrites the same grid/cues.
+    /// file path (or content hash under a different path) instead of inserting duplicates,
+    /// rewrites the same grid/cues, and re-ensures the same playlist forest by
+    /// `(name, parent_id, context)` instead of duplicating it.
     pub fn import(&self, nml_path: &Path) -> Result<TraktorImportOutcome> {
         let plan = self.preview(nml_path)?;
-        let ImportPlan { tracks, report, .. } = plan;
+        let ImportPlan {
+            tracks,
+            playlists,
+            report,
+        } = plan;
 
         let mut outcome = TraktorImportOutcome {
             dry_run: report,
@@ -93,6 +115,10 @@ impl TraktorImportService {
             grids_written: 0,
             keys_written: 0,
             unmatched: Vec::new(),
+            playlists_imported: 0,
+            playlist_tracks_written: 0,
+            unresolved_playlist_entries: 0,
+            skipped_internal_playlists: Vec::new(),
         };
 
         for track in &tracks {
@@ -122,7 +148,69 @@ impl TraktorImportService {
             }
         }
 
+        self.import_playlists(&playlists, None, &mut outcome)?;
+
         Ok(outcome)
+    }
+
+    /// Import the mapped playlist forest depth-first, in document order, preserving the
+    /// NML nesting: `parent_id` is the Crate id of the enclosing node (`None` at the top
+    /// level), so a child always lands under its real folder rather than flattened to a
+    /// root playlist.
+    ///
+    /// A `Smartlist` is imported as an ordinary static playlist carrying its current
+    /// entries; `ensure_playlist` never creates a smart row, so `is_smart` stays `false`
+    /// and `smart_rules` stays `NULL`.
+    ///
+    /// A node with zero entries does not call `replace_tracks`: an empty NML playlist that
+    /// collides with an existing Crate playlist is not an assertion that the playlist is
+    /// empty, and clearing it would destroy membership a user may have added in Crate. A
+    /// non-empty entry list that resolves to nothing *does* replace membership with the
+    /// empty set, because the NML then explicitly asserts those entries — none of which
+    /// exist in Crate.
+    ///
+    /// Nothing here holds the connection lock: `ensure_playlist`, `find_track_by_file_path`
+    /// and `replace_tracks` each lock internally and return before the next call.
+    fn import_playlists(
+        &self,
+        nodes: &[MappedPlaylistNode],
+        parent_id: Option<&str>,
+        outcome: &mut TraktorImportOutcome,
+    ) -> Result<()> {
+        for node in nodes {
+            if is_internal_playlist(&node.name) {
+                outcome.skipped_internal_playlists.push(node.name.clone());
+                continue;
+            }
+
+            let is_folder = matches!(node.kind, NmlNodeKind::Folder);
+            let playlist = self.playlists.ensure_playlist(
+                &node.name,
+                parent_id,
+                is_folder,
+                PLAYLIST_CONTEXT_LIBRARY,
+            )?;
+            outcome.playlists_imported += 1;
+
+            if !is_folder && !node.entries.is_empty() {
+                let mut ids = Vec::with_capacity(node.entries.len());
+                for entry in &node.entries {
+                    // Resolve every entry against Crate regardless of the plan's
+                    // `resolved` flag: that flag only says the path is in the parsed
+                    // collection, not that the file was successfully ingested.
+                    match self.library.find_track_by_file_path(&entry.path)? {
+                        Some(track) => ids.push(track.id),
+                        None => outcome.unresolved_playlist_entries += 1,
+                    }
+                }
+                outcome.playlist_tracks_written +=
+                    self.playlists.replace_tracks(&playlist.id, ids)?;
+            }
+
+            self.import_playlists(&node.children, Some(&playlist.id), outcome)?;
+        }
+
+        Ok(())
     }
 
     /// Resolve the persisted row id for one mapped track, ingesting the file when it is
@@ -243,6 +331,12 @@ impl TraktorImportService {
 
         Ok((has_key, grid.is_some()))
     }
+}
+
+/// Traktor's own bookkeeping playlists (`_LOOPS`, `_RECORDINGS`) are not user playlists.
+/// They are skipped by exact name together with their entire subtree.
+fn is_internal_playlist(name: &str) -> bool {
+    matches!(name, "_LOOPS" | "_RECORDINGS")
 }
 
 /// The mapper's grid is a pair, and Crate stores it as a `(bpm, anchor, source)` triple.
@@ -398,6 +492,142 @@ mod tests {
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <NML VERSION="20"><COLLECTION ENTRIES="{}">{}</COLLECTION></NML>"#,
+            entries.len(),
+            entries.join("")
+        )
+    }
+
+    /// Encode `path` as a Traktor `PRIMARYKEY KEY`, the same `/:`-separated form
+    /// `path::resolve_primary_key` decodes. Mirrors `location_element`'s volume/dir split so a
+    /// playlist reference resolves to exactly the path its `LOCATION` produces.
+    fn primary_key(path: &Path) -> String {
+        let file = path.file_name().expect("file name").to_string_lossy();
+        let parent = path.parent().expect("parent");
+
+        #[allow(unused_mut)]
+        let mut volume = String::new();
+        #[cfg(windows)]
+        if let Some(std::path::Component::Prefix(prefix)) = parent.components().next() {
+            volume = prefix
+                .as_os_str()
+                .to_string_lossy()
+                .trim_end_matches('\\')
+                .to_string();
+        }
+
+        let segments: Vec<String> = parent
+            .components()
+            .filter_map(|component| match component {
+                std::path::Component::Normal(segment) => {
+                    Some(segment.to_string_lossy().to_string())
+                }
+                _ => None,
+            })
+            .collect();
+        let mut dir = String::new();
+        for segment in &segments {
+            dir.push_str("/:");
+            dir.push_str(segment);
+        }
+        dir.push_str("/:");
+        format!("{volume}{dir}{file}")
+    }
+
+    /// A test playlist-tree node rendered into Traktor's `PLAYLISTS` XML.
+    struct Pl {
+        kind: &'static str,
+        name: &'static str,
+        entries: Vec<String>,
+        query: Option<&'static str>,
+        children: Vec<Pl>,
+    }
+
+    fn folder(name: &'static str, children: Vec<Pl>) -> Pl {
+        Pl {
+            kind: "FOLDER",
+            name,
+            entries: Vec::new(),
+            query: None,
+            children,
+        }
+    }
+
+    fn playlist(name: &'static str, entries: Vec<String>) -> Pl {
+        Pl {
+            kind: "PLAYLIST",
+            name,
+            entries,
+            query: None,
+            children: Vec::new(),
+        }
+    }
+
+    /// A Traktor `SMARTLIST` node carrying a search expression and (as Traktor caches them) the
+    /// current result entries.
+    fn smartlist(name: &'static str, query: &'static str, entries: Vec<String>) -> Pl {
+        Pl {
+            kind: "SMARTLIST",
+            name,
+            entries,
+            query: Some(query),
+            children: Vec::new(),
+        }
+    }
+
+    fn render_node(node: &Pl, out: &mut String) {
+        out.push_str(&format!(
+            r#"<NODE TYPE="{}" NAME="{}">"#,
+            node.kind, node.name
+        ));
+        if node.kind == "SMARTLIST" {
+            out.push_str(r#"<SMARTLIST UUID="0000000000000000000000000000abcd">"#);
+            if let Some(query) = node.query {
+                out.push_str(&format!(
+                    r#"<SEARCH_EXPRESSION VERSION="1" QUERY="{query}"></SEARCH_EXPRESSION>"#
+                ));
+            }
+            out.push_str("</SMARTLIST>");
+        }
+        if node.kind != "FOLDER" {
+            out.push_str(&format!(
+                r#"<PLAYLIST ENTRIES="{}" TYPE="LIST">"#,
+                node.entries.len()
+            ));
+            for key in &node.entries {
+                out.push_str(&format!(
+                    r#"<ENTRY><PRIMARYKEY TYPE="TRACK" KEY="{key}"></PRIMARYKEY></ENTRY>"#
+                ));
+            }
+            out.push_str("</PLAYLIST>");
+        }
+        if !node.children.is_empty() {
+            out.push_str(&format!(r#"<SUBNODES COUNT="{}">"#, node.children.len()));
+            for child in &node.children {
+                render_node(child, out);
+            }
+            out.push_str("</SUBNODES>");
+        }
+        out.push_str("</NODE>");
+    }
+
+    /// Render a playlist forest under Traktor's virtual `$ROOT` folder.
+    fn render_playlists(nodes: &[Pl]) -> String {
+        let mut out = format!(
+            r#"<PLAYLISTS><NODE TYPE="FOLDER" NAME="$ROOT"><SUBNODES COUNT="{}">"#,
+            nodes.len()
+        );
+        for node in nodes {
+            render_node(node, &mut out);
+        }
+        out.push_str("</SUBNODES></NODE></PLAYLISTS>");
+        out
+    }
+
+    /// Wrap collection entries and a rendered playlist forest into a full NML document.
+    fn nml_with_playlists(entries: &[String], playlists: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<NML VERSION="20"><COLLECTION ENTRIES="{}">{}</COLLECTION>{playlists}</NML>"#,
             entries.len(),
             entries.join("")
         )
@@ -638,6 +868,324 @@ mod tests {
         assert_eq!(
             service.cues.get_cues_for_track("hash-match").unwrap().len(),
             3
+        );
+    }
+
+    /// The Crate id a file path resolves to after the import ingested it.
+    fn track_id(service: &TraktorImportService, path: &Path) -> String {
+        service
+            .library
+            .find_track_by_file_path(&path.to_string_lossy())
+            .unwrap()
+            .unwrap_or_else(|| panic!("no track row for {}", path.display()))
+            .id
+    }
+
+    #[test]
+    fn folder_child_playlist_keeps_its_real_parent() {
+        let (service, _conn, tmp) = test_service();
+        let wav = tmp.path().join("parented.wav");
+        write_wav(&wav, 11, 512);
+
+        let playlists = render_playlists(&[folder(
+            "Crates",
+            vec![playlist("Night", vec![primary_key(&wav)])],
+        )]);
+        let nml_path = write_nml(
+            &tmp,
+            &nml_with_playlists(&[entry(&wav, "Parented", "")], &playlists),
+        );
+
+        let outcome = service.import(&nml_path).unwrap();
+        assert_eq!(outcome.playlists_imported, 2, "folder + playlist");
+        assert_eq!(outcome.playlist_tracks_written, 1);
+        assert!(outcome.skipped_internal_playlists.is_empty());
+
+        let rows = service.playlists.get_playlists("library").unwrap();
+        let folder_row = rows
+            .iter()
+            .find(|p| p.name == "Crates")
+            .expect("folder row");
+        assert!(folder_row.is_folder);
+        assert_eq!(folder_row.parent_id, None, "the folder stays at the root");
+
+        let children = service.playlists.get_children(&folder_row.id).unwrap();
+        assert_eq!(children.len(), 1, "the playlist must not be flattened");
+        let night = &children[0];
+        assert_eq!(night.name, "Night");
+        assert_eq!(
+            night.parent_id.as_deref(),
+            Some(folder_row.id.as_str()),
+            "the child playlist keeps the real folder as its parent"
+        );
+        assert!(!night.is_smart);
+        assert_eq!(
+            service
+                .playlists
+                .get_playlist_tracks(&night.id)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn internal_playlists_are_skipped_with_their_subtree() {
+        let (service, conn, tmp) = test_service();
+        let playlists = render_playlists(&[
+            folder("_LOOPS", vec![playlist("Loops Child", Vec::new())]),
+            playlist("_RECORDINGS", Vec::new()),
+            playlist("Keep", Vec::new()),
+        ]);
+        let nml_path = write_nml(&tmp, &nml_with_playlists(&[], &playlists));
+
+        let outcome = service.import(&nml_path).unwrap();
+
+        assert_eq!(outcome.playlists_imported, 1, "only the non-internal node");
+        assert_eq!(
+            outcome.skipped_internal_playlists,
+            vec!["_LOOPS".to_string(), "_RECORDINGS".to_string()]
+        );
+
+        let skipped_rows: i64 = {
+            let guard = conn.lock().unwrap();
+            guard
+                .query_row(
+                    "SELECT COUNT(*) FROM playlists \
+                     WHERE name IN ('_LOOPS', '_RECORDINGS', 'Loops Child')",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            skipped_rows, 0,
+            "skipped nodes and their subtree create no row"
+        );
+
+        let rows = service.playlists.get_playlists("library").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].name, "Keep");
+    }
+
+    #[test]
+    fn smartlist_is_imported_as_a_static_playlist() {
+        let (service, _conn, tmp) = test_service();
+        let wav = tmp.path().join("smart.wav");
+        write_wav(&wav, 21, 512);
+
+        let playlists = render_playlists(&[smartlist(
+            "Top rated",
+            "$RATING == 5",
+            vec![primary_key(&wav)],
+        )]);
+        let nml_path = write_nml(
+            &tmp,
+            &nml_with_playlists(&[entry(&wav, "Smart", "")], &playlists),
+        );
+
+        let outcome = service.import(&nml_path).unwrap();
+        assert_eq!(outcome.playlists_imported, 1);
+        assert_eq!(outcome.playlist_tracks_written, 1);
+
+        let rows = service.playlists.get_playlists("library").unwrap();
+        let smart = rows
+            .iter()
+            .find(|p| p.name == "Top rated")
+            .expect("smartlist row");
+        assert!(
+            !smart.is_smart,
+            "a Traktor smartlist must be imported as an ordinary static playlist"
+        );
+        assert!(smart.smart_rules.is_none());
+        assert!(!smart.is_folder);
+        assert_eq!(
+            service
+                .playlists
+                .get_playlist_tracks(&smart.id)
+                .unwrap()
+                .len(),
+            1,
+            "the smartlist's current entries become static membership"
+        );
+    }
+
+    #[test]
+    fn playlist_membership_uses_the_right_ids_in_entry_order() {
+        let (service, conn, tmp) = test_service();
+        let a = tmp.path().join("a.wav");
+        let b = tmp.path().join("b.wav");
+        let c = tmp.path().join("c.wav");
+        write_wav(&a, 31, 512);
+        write_wav(&b, 32, 512);
+        write_wav(&c, 33, 512);
+
+        // Collection order is a, b, c; the playlist lists c, a, b.
+        let playlists = render_playlists(&[playlist(
+            "Ordered",
+            vec![primary_key(&c), primary_key(&a), primary_key(&b)],
+        )]);
+        let nml_path = write_nml(
+            &tmp,
+            &nml_with_playlists(
+                &[entry(&a, "A", ""), entry(&b, "B", ""), entry(&c, "C", "")],
+                &playlists,
+            ),
+        );
+
+        service.import(&nml_path).unwrap();
+
+        let (id_a, id_b, id_c) = (
+            track_id(&service, &a),
+            track_id(&service, &b),
+            track_id(&service, &c),
+        );
+        let rows = service.playlists.get_playlists("library").unwrap();
+        let ordered = rows.iter().find(|p| p.name == "Ordered").unwrap();
+        let members: Vec<(String, i32)> = {
+            let guard = conn.lock().unwrap();
+            let mut stmt = guard
+                .prepare(
+                    "SELECT track_id, position FROM playlist_tracks \
+                     WHERE playlist_id = ?1 ORDER BY position",
+                )
+                .unwrap();
+            stmt.query_map([&ordered.id], |row| Ok((row.get(0)?, row.get(1)?)))
+                .unwrap()
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            members,
+            vec![(id_c, 0), (id_a, 1), (id_b, 2)],
+            "membership follows the NML entry order, not the collection order"
+        );
+    }
+
+    #[test]
+    fn unresolved_playlist_entries_are_counted_and_omitted() {
+        let (service, _conn, tmp) = test_service();
+        let present = tmp.path().join("present.wav");
+        write_wav(&present, 41, 512);
+        let missing = tmp.path().join("absent.wav");
+
+        let playlists = render_playlists(&[playlist(
+            "Mixed",
+            vec![primary_key(&present), primary_key(&missing)],
+        )]);
+        let nml_path = write_nml(
+            &tmp,
+            &nml_with_playlists(&[entry(&present, "Present", "")], &playlists),
+        );
+
+        let outcome = service.import(&nml_path).unwrap();
+        assert_eq!(outcome.unresolved_playlist_entries, 1);
+        assert_eq!(outcome.playlist_tracks_written, 1);
+
+        let rows = service.playlists.get_playlists("library").unwrap();
+        let mixed = rows.iter().find(|p| p.name == "Mixed").unwrap();
+        let members = service.playlists.get_playlist_tracks(&mixed.id).unwrap();
+        assert_eq!(members.len(), 1, "the unresolved entry is omitted");
+        assert_eq!(members[0].file_path, present.to_string_lossy());
+    }
+
+    #[test]
+    fn reimporting_playlists_is_idempotent() {
+        let (service, conn, tmp) = test_service();
+        let one = tmp.path().join("one.wav");
+        let two = tmp.path().join("two.wav");
+        write_wav(&one, 51, 512);
+        write_wav(&two, 52, 512);
+        let entries = [entry(&one, "One", ""), entry(&two, "Two", "")];
+
+        let full = render_playlists(&[folder(
+            "Crates",
+            vec![playlist(
+                "Night",
+                vec![primary_key(&one), primary_key(&two)],
+            )],
+        )]);
+        let nml_path = write_nml(&tmp, &nml_with_playlists(&entries, &full));
+        let first = service.import(&nml_path).unwrap();
+        assert_eq!(first.playlists_imported, 2);
+        assert_eq!(first.playlist_tracks_written, 2);
+
+        // A second run with a shrunk member list must replace, never append.
+        let shrunk = render_playlists(&[folder(
+            "Crates",
+            vec![playlist("Night", vec![primary_key(&one)])],
+        )]);
+        let nml_path = write_nml(&tmp, &nml_with_playlists(&entries, &shrunk));
+        let second = service.import(&nml_path).unwrap();
+
+        assert_eq!(second.playlists_imported, first.playlists_imported);
+        assert_eq!(second.playlist_tracks_written, 1);
+
+        let rows = service.playlists.get_playlists("library").unwrap();
+        assert_eq!(rows.len(), 2, "no duplicate playlists");
+        let folder_row = rows.iter().find(|p| p.name == "Crates").unwrap();
+        let (by_name, by_name_parent): (i64, i64) = {
+            let guard = conn.lock().unwrap();
+            let by_name: i64 = guard
+                .query_row(
+                    "SELECT COUNT(*) FROM playlists WHERE name = 'Night' AND context = 'library'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            let by_name_parent: i64 = guard
+                .query_row(
+                    "SELECT COUNT(*) FROM playlists WHERE name = 'Night' AND parent_id = ?1",
+                    [&folder_row.id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            (by_name, by_name_parent)
+        };
+        assert_eq!(by_name, 1, "no duplicate playlist by name");
+        assert_eq!(by_name_parent, 1, "no duplicate playlist by name+parent");
+
+        let children = service.playlists.get_children(&folder_row.id).unwrap();
+        assert_eq!(children.len(), 1);
+        assert_eq!(
+            service
+                .playlists
+                .get_playlist_tracks(&children[0].id)
+                .unwrap()
+                .len(),
+            1,
+            "membership is replaced, not appended"
+        );
+    }
+
+    #[test]
+    fn a_playlist_with_zero_entries_does_not_clear_existing_membership() {
+        let (service, _conn, tmp) = test_service();
+        let wav = tmp.path().join("kept.wav");
+        write_wav(&wav, 61, 512);
+        let entries = [entry(&wav, "Kept", "")];
+
+        let seeded = render_playlists(&[playlist("Night", vec![primary_key(&wav)])]);
+        let nml_path = write_nml(&tmp, &nml_with_playlists(&entries, &seeded));
+        service.import(&nml_path).unwrap();
+
+        let rows = service.playlists.get_playlists("library").unwrap();
+        let night = rows.iter().find(|p| p.name == "Night").unwrap().id.clone();
+        assert_eq!(
+            service.playlists.get_playlist_tracks(&night).unwrap().len(),
+            1
+        );
+
+        // Same node name, zero entries: the existing membership must survive.
+        let empty = render_playlists(&[playlist("Night", Vec::new())]);
+        let nml_path = write_nml(&tmp, &nml_with_playlists(&entries, &empty));
+        let outcome = service.import(&nml_path).unwrap();
+
+        assert_eq!(outcome.playlist_tracks_written, 0);
+        assert_eq!(
+            service.playlists.get_playlist_tracks(&night).unwrap().len(),
+            1,
+            "an empty NML node is not an assertion that the playlist is empty"
         );
     }
 }
