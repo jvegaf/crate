@@ -303,12 +303,13 @@ Aterrizó en `services/traktor_import.rs` (gateado `desktop`, porque reusa `Libr
 - [x] S2 Modelo de beat grid (va **antes** de S4) — `dd73019`
 - [x] S4a Import real (match path/hash, ingest, cues, grilla, key) + IPC + TS — `23fff71`, `e560a06`, `7ffa409`
 - [x] S4b Playlists con jerarquía real (`parent_id`), internas omitidas — `5751792`, `f0b8e0b`
+- [x] S5 Panel de import en Settings (pestaña "Traktor": preview → confirmar → reporte) — `bd22d82`
 - [ ] Follow-up: `<NODE/>` self-closing en el parser
 - [ ] Follow-up: variante `TraktorError::Invalid` sin construir
 - [ ] Follow-up: `replace_tracks` bumpea `_hlc`/`date_modified` tambien en un replay sin cambios (push de sync inofensivo, pero ruidoso)
 - [ ] Follow-up: los hot loops de Traktor no persisten su slot (`Cue::new_loop` no lleva `hot_cue_index`)
 - [ ] Follow-up: el match por `file_path` es igualdad exacta de string (sin normalizar separadores ni case)
-- [ ] Follow-up: no hay UI para el import (solo IPC + wrapper TS)
+- [ ] Follow-up: los otros 14 locales no llevan las claves nuevas de la UI (caen a `en` por `fallbackLocale`)
 
 ## Constraints
 
@@ -348,6 +349,7 @@ Aterrizó en `services/traktor_import.rs` (gateado `desktop`, porque reusa `Libr
 | `7ffa409` | `feat(traktor): expose the NML import over IPC` (S4a, IPC + TS) |
 | `5751792` | `feat(playlist): add find-or-create and exact membership replacement` (S4b) |
 | `f0b8e0b` | `feat(traktor): import the playlist forest` (S4b) |
+| `bd22d82` | `feat(traktor): add an import panel to settings` (S5, UI) |
 
 El orden es deliberado: Rust primero, así cada commit deja el árbol consistente (el servicio y los comandos
 compilan y pasan sus tests sin depender de la capa TS).
@@ -429,6 +431,26 @@ quedó obsoleto al consumirse toda la superficie; se removió y clippy lo confir
 No verificado: compilación Rust de mobile (no hay toolchain iOS en este host; el módulo está `desktop`-gateado),
 las ramas `cfg(windows)` del volumen, y que `data/` **no** está en `.gitignore` en la rama de feature — el commit
 que lo ignora vive en `dev`, así que en la rama hay que evitar `git add data/`.
+
+### Gates de la UI (S5, verificados por un verificador independiente)
+
+| Gate | Resultado |
+| --- | --- |
+| `yarn check:svelte` / `yarn check:svelte:mobile` | 0 errores, 0 warnings |
+| `yarn lint:check` / `yarn format:check` | exit 0 |
+| `yarn vitest run` | 124 passed (9 archivos; no hay tests de la UI: el repo no testea stores) |
+| `yarn build:vite` | build real a `build/` exitoso |
+
+Confirmado adversarialmente: el label del tab resuelve por el mismo mecanismo dinámico que el resto
+(`settings.tabs.${page}`); **no** existe ningún `switch` exhaustivo sobre `SettingsPage` que la adición
+rompa (el menú nativo enumera en Rust una lista propia, sin acoplarse a la unión TS); el ícono `download`
+existe en `Icon.svelte`; las **45** claves `settings.traktor.*` + `settings.tabs.traktor` usadas existen en
+`en.json`, sin faltantes ni sobrantes; y todas las props de `Text`/`Button`/`Spinner`/`ConfirmModal` usadas
+son válidas. Se agregó un guard contra el doble click del modal de confirmación.
+
+**No verificado**: el flujo interactivo **no** se ejercitó en una app corriendo (no se abrió ventana Tauri):
+el diálogo nativo, el round-trip IPC, el toast y el render del reporte se evaluaron por lectura de código y
+type-check. Los otros 14 locales caen a `en` por `fallbackLocale` (no se ejecutó).
 
 ### Hallazgos abiertos (no bloqueantes)
 

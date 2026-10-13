@@ -42,7 +42,7 @@ A feature moves `pending` → `in progress` → `done` as it lands.
 | Track Metadata Modal | Done | [`tasks/track-metadata-modal.md`](tasks/track-metadata-modal.md) |
 | Tracklist column configuration | Done — UI confirmed by the user; native review unattested | [`tasks/tracklist-column-config.md`](tasks/tracklist-column-config.md) |
 | Migration effect reconciliation | In progress — implemented, gates green, verified against a copy of the wedged dev database; left uncommitted by request | [`tasks/migration-effect-reconciliation.md`](tasks/migration-effect-reconciliation.md) |
-| Traktor NML import | S1/S2/S3/S4 landed on `traktor-nml-import` (`dd73019`…`f0b8e0b`); no UI yet | [`tasks/traktor-nml-import.md`](tasks/traktor-nml-import.md) |
+| Traktor NML import | S1–S5 landed on `traktor-nml-import` (`dd73019`…`bd22d82`), including the Settings panel; interactive UI flow not yet exercised in a running app | [`tasks/traktor-nml-import.md`](tasks/traktor-nml-import.md) |
 
 Update this table whenever a feature is added or closes. It is the front door — if it is stale, the
 record may as well not exist.
