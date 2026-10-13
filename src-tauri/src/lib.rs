@@ -427,6 +427,11 @@ pub fn run() {
       // Applying remote artwork reuses the desktop-only LibraryService.
       #[cfg(feature = "desktop")]
       commands::tagger::set_track_artwork_from_url,
+      // Traktor NML import commands (desktop-only: reuses LibraryService + audio hashing).
+      #[cfg(feature = "desktop")]
+      commands::traktor::preview_traktor_import,
+      #[cfg(feature = "desktop")]
+      commands::traktor::import_traktor_collection,
       // Beatport recommendations (shared, not feature-gated: reqwest only).
       commands::recommendations::find_beatport_similar_tracks,
       commands::recommendations::register_beatport_sample_streams,
@@ -594,6 +599,11 @@ pub fn run() {
         app_data_dir.clone(),
         file_tags_service.clone(),
       );
+      #[cfg(feature = "desktop")]
+      let traktor_import_service = services::traktor_import::TraktorImportService::new(
+        conn.clone(),
+        library_service.clone(),
+      );
       let tag_service = TagService::new(conn.clone());
       let cue_service = CueService::new(conn.clone());
       let playlist_service = PlaylistService::new(conn.clone());
@@ -652,6 +662,8 @@ pub fn run() {
 
       #[cfg(feature = "desktop")]
       app.manage(library_service);
+      #[cfg(feature = "desktop")]
+      app.manage(traktor_import_service);
       app.manage(tag_service);
       app.manage(cue_service);
       app.manage(playlist_service);

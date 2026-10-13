@@ -1343,3 +1343,164 @@ export interface BeatportRelease {
 	/** `"2025-10-17T00:00:00"` — no timezone marker; read the leading YYYY-MM-DD. */
 	release_date: string | null
 }
+
+// =============================================================================
+// Traktor NML Import Types
+// =============================================================================
+
+/**
+ * Kind of a node in the Traktor playlist forest. Mirrors `NmlNodeKind` in
+ * `services/traktor/model.rs`; the wire representation is lowercase.
+ */
+export type TraktorNodeKind = 'folder' | 'playlist' | 'smartlist'
+
+/**
+ * A cue as it would be written to Crate's `cues` table.
+ *
+ * Mirrors `MappedCue` in `services/traktor/mapper.rs` in snake_case. Optional
+ * fields are `T | null` because serde emits `null` for `None`.
+ */
+export interface TraktorMappedCue {
+	position_ms: number
+	cue_type: CueType
+	loop_end_ms: number | null
+	/** 1-based slot (`1..=8`), never Traktor's raw 0-based value. */
+	hot_cue_index: number | null
+	name: string | null
+}
+
+/** A track as it would be imported. Mirrors `MappedTrack` in `mapper.rs`. */
+export interface TraktorMappedTrack {
+	file_path: string
+	title: string | null
+	artist: string | null
+	album: string | null
+	bpm: number | null
+	/** Canonical Camelot, e.g. `"6B"`. Never the raw `INFO KEY`. */
+	key: string | null
+	grid_bpm: number | null
+	grid_position_ms: number | null
+	cues: TraktorMappedCue[]
+}
+
+/** A playlist entry resolved against the parsed collection. */
+export interface TraktorMappedPlaylistEntry {
+	key: string
+	path: string
+	resolved: boolean
+}
+
+/** A node of the mapped playlist tree. */
+export interface TraktorMappedPlaylistNode {
+	name: string
+	kind: TraktorNodeKind
+	uuid: string | null
+	search_query: string | null
+	entries: TraktorMappedPlaylistEntry[]
+	children: TraktorMappedPlaylistNode[]
+}
+
+/** Aggregate counts of a dry run. Mirrors `ImportTotals` in `mapper.rs`. */
+export interface TraktorImportTotals {
+	tracks: number
+	cues: number
+	memory_cues: number
+	hot_cues: number
+	loops: number
+	grids: number
+}
+
+/** Playlist node counts by type (the virtual `$ROOT` is not counted). */
+export interface TraktorPlaylistTypeCounts {
+	folders: number
+	playlists: number
+	smartlists: number
+}
+
+/** A track-attributed warning. Mirrors `TrackWarning` in `mapper.rs`. */
+export interface TraktorTrackWarning {
+	file_path: string
+	title: string | null
+}
+
+/** An `INFO KEY` value that no notation could resolve. */
+export interface TraktorUnresolvedKeyWarning {
+	file_path: string
+	title: string | null
+	raw_key: string
+}
+
+/** A cue whose Traktor `TYPE` has no Crate equivalent and was kept as a memory cue. */
+export interface TraktorUnsupportedCueTypeWarning {
+	file_path: string
+	traktor_type: number
+	position_ms: number
+}
+
+/** A playlist `PRIMARYKEY` that does not resolve to a parsed track. */
+export interface TraktorUnresolvedPlaylistReferenceWarning {
+	playlist: string
+	key: string
+}
+
+/** Everything the dry run could not map cleanly. Mirrors `ImportWarnings`. */
+export interface TraktorImportWarnings {
+	tracks_without_grid: TraktorTrackWarning[]
+	tracks_without_tempo: TraktorTrackWarning[]
+	tracks_without_key: TraktorTrackWarning[]
+	unresolved_keys: TraktorUnresolvedKeyWarning[]
+	collapsed_cue_duplicates: number
+	unsupported_cue_types: TraktorUnsupportedCueTypeWarning[]
+	unresolved_playlist_references: TraktorUnresolvedPlaylistReferenceWarning[]
+}
+
+/**
+ * The dry-run report. Mirrors `ImportReport` in `services/traktor/mapper.rs`
+ * (named `TraktorImportReport` in TypeScript to avoid a generic global name).
+ */
+export interface TraktorImportReport {
+	nml_version: string | null
+	totals: TraktorImportTotals
+	playlists_by_type: TraktorPlaylistTypeCounts
+	warnings: TraktorImportWarnings
+}
+
+/**
+ * The full dry-run result: what would be imported and what would not.
+ * Mirrors `ImportPlan` in `mapper.rs`.
+ */
+export interface TraktorImportPlan {
+	tracks: TraktorMappedTrack[]
+	playlists: TraktorMappedPlaylistNode[]
+	report: TraktorImportReport
+}
+
+/**
+ * A Traktor entry that could not be imported, with the reason it was skipped.
+ * `reason` is one of `"file-not-found"`, `"hash-failed"` or `"metadata-failed"`.
+ */
+export interface TraktorUnmatchedTrack {
+	file_path: string
+	title: string | null
+	reason: string
+}
+
+/**
+ * The result of a real import: the dry-run report plus what actually happened.
+ * Mirrors `TraktorImportOutcome` in `services/traktor_import.rs`.
+ */
+export interface TraktorImportOutcome {
+	dry_run: TraktorImportReport
+	/** Traktor entries already in Crate (matched by file path, or content hash under another path). */
+	matched: number
+	/** Traktor entries whose audio file was ingested from disk in this run. */
+	ingested: number
+	/** Cues persisted across all touched tracks. */
+	cues_written: number
+	/** Beat grids written across all touched tracks. */
+	grids_written: number
+	/** Keys written across all touched tracks. */
+	keys_written: number
+	/** Entries that were reported and skipped without creating a row. */
+	unmatched: TraktorUnmatchedTrack[]
+}

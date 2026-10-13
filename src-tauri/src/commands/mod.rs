@@ -31,3 +31,6 @@ pub mod share;
 pub mod sync;
 pub mod tag;
 pub mod tagger;
+// Traktor NML import is desktop-only (it reuses the desktop library + hash services).
+#[cfg(feature = "desktop")]
+pub mod traktor;
