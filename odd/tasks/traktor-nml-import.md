@@ -167,11 +167,12 @@ Más `_hlc TEXT NOT NULL DEFAULT ''` + `idx_cues_hlc` (`schema.rs:333,348`) de l
    en S2 con el fixture a la vista.
 5. **No hay UNIQUE sobre la identidad de un cue.** La unicidad (`track_id, position_ms, type, hot_cue_index`)
    se garantiza en el servicio, no en el schema (implementado en S1).
-6. **Política de playlists internas**: `_LOOPS` y `_RECORDINGS` son de Traktor. ¿Se importan, se omiten por
-   nombre, o se omiten de otro modo? Se decide antes de S4.
-7. **Smartlists de Traktor**: 3 en el fixture con lenguaje propio (`$PLAYED == TRUE`, `$RATING == 5`,
-   `$IMPORTDATE > ...`). Traducirlo a `smart_rules` JSON está **fuera de alcance**: se importan como playlist
-   normal o se omiten, decisión de S4.
+6. **Política de playlists internas — RESUELTA (S4b).** `_LOOPS` y `_RECORDINGS` se **omiten por nombre exacto**,
+   incluyendo todo su subárbol, y se listan en `skipped_internal_playlists` del resultado.
+7. **Smartlists de Traktor — RESUELTA (S4b).** Se importan como **playlist estática normal** con sus entradas
+   actuales; no se traduce su lenguaje de query a `smart_rules` (fuera de alcance). ``is_smart`` queda en 0.
+   Además se resolvió que un track de Traktor cuyo archivo no está en Crate se **ingiere desde disco** reusando
+   el scan existente; si el archivo falta o no se puede leer, se **reporta como no-matcheado** y no se crea fila.
 8. **Qué es fuente de verdad por dirección** (para S5, export): se decide antes de escribir el writer.
 
 ## Non-goals de esta feature
@@ -273,11 +274,23 @@ Aterrizó en `services/traktor/` con `quick-xml`: `model.rs`, `parser.rs`, `path
 `tests/mod.rs` y `fixtures/collection_small.nml` (anonimizado). Módulo **sin** gating desktop, sin DB, sin
 comandos y sin `async`. 36 tests + 1 `#[ignore]`d contra el corpus real.
 
-### S4 — Import real
+### S4 — Import real (implementado)
 
-Match por `file_path` normalizado y `file_hash`; merge (nunca insert ciego: el bug de duplicados de
-Harmony); playlists con jerarquía real (`parent_id`), no aplanadas; cues con dedup; reporte de
-no-matcheados.
+Aterrizó en `services/traktor_import.rs` (gateado `desktop`, porque reusa `LibraryService` y
+`compute_audio_hash`) más dos comandos IPC y el wrapper TS.
+
+- **Match path-first**: `find_track_by_file_path` (UNIQUE) primero, después `find_track_by_hash`, después
+  ingest. Así un archivo cuyo contenido cambió desde el último scan sigue matcheando por path en vez de
+  reportarse como fallo (este hueco lo detectó el propio verificador del slice y se corrigió antes de commitear).
+- **Ingest**: una entrada cuyo archivo no está en Crate se lee con `build_track_from_file` + `insert_track_in`,
+  nunca una fila a medio llenar. Un archivo ausente o ilegible se reporta en `unmatched` y **no** crea fila.
+- **Cues**: pasan por `CueService::replace_cues_for_track` (validación + dedup + `_hlc`); una lista vacía nunca
+  borra cues existentes.
+- **Grilla y key**: se escriben juntas en un solo `UPDATE` con `_hlc` + `mark_dirty`; `grid_source = "traktor"` y
+  la grilla **nunca** va a `tracks.bpm`.
+- **Playlists**: recorrido depth-first con `ensure_playlist` (find-or-create por `(name, parent_id)`), membresía
+  exacta con `replace_tracks` (tombstonea lo que desaparece), internas omitidas por nombre, smartlists como
+  playlist estática.
 
 ## Tasks
 
@@ -287,10 +300,15 @@ no-matcheados.
 - [x] T4 Store `shared/stores/cues.ts` + barrel — `1cda13e`
 - [x] T5 Gates completos (cargo test/clippy/fmt, svelte, mobile, vitest, format, lint)
 - [x] S3 Parser NML read-only + dry-run — `df66775`
-- [ ] S2 Modelo de beat grid (va **antes** de S4)
-- [ ] S4 Import real con merge por path/hash + playlists con jerarquía
+- [x] S2 Modelo de beat grid (va **antes** de S4) — `dd73019`
+- [x] S4a Import real (match path/hash, ingest, cues, grilla, key) + IPC + TS — `23fff71`, `e560a06`, `7ffa409`
+- [x] S4b Playlists con jerarquía real (`parent_id`), internas omitidas — `5751792`, `f0b8e0b`
 - [ ] Follow-up: `<NODE/>` self-closing en el parser
 - [ ] Follow-up: variante `TraktorError::Invalid` sin construir
+- [ ] Follow-up: `replace_tracks` bumpea `_hlc`/`date_modified` tambien en un replay sin cambios (push de sync inofensivo, pero ruidoso)
+- [ ] Follow-up: los hot loops de Traktor no persisten su slot (`Cue::new_loop` no lleva `hot_cue_index`)
+- [ ] Follow-up: el match por `file_path` es igualdad exacta de string (sin normalizar separadores ni case)
+- [ ] Follow-up: no hay UI para el import (solo IPC + wrapper TS)
 
 ## Constraints
 
@@ -324,6 +342,12 @@ no-matcheados.
 | `a2cd6a0` | `feat(cues): add the cue points service and IPC commands` |
 | `1cda13e` | `feat(cues): expose cue points through the api and store layer` |
 | `df66775` | `feat(traktor): parse Traktor NML collections read-only` |
+| `dd73019` | `feat(tracks): persist an imported beat-grid triple` (S2) |
+| `23fff71` | `feat(library): look up a track by its file path` (S4a) |
+| `e560a06` | `feat(traktor): import an NML collection into the library` (S4a) |
+| `7ffa409` | `feat(traktor): expose the NML import over IPC` (S4a, IPC + TS) |
+| `5751792` | `feat(playlist): add find-or-create and exact membership replacement` (S4b) |
+| `f0b8e0b` | `feat(traktor): import the playlist forest` (S4b) |
 
 El orden es deliberado: Rust primero, así cada commit deja el árbol consistente (el servicio y los comandos
 compilan y pasan sus tests sin depender de la capa TS).
@@ -379,12 +403,42 @@ Dos hipótesis propias resultaron **refutadas** por la verificación, y se regis
    **0 colisiones con valor exacto, 0 con valor redondeado, 0 tracks que ganen una colisión por redondeo**. El
    `INTEGER` no pierde datos en esta colección.
 
+### Gates de S2 y S4 (verificados por verificadores independientes)
+
+| Gate | S2 | S4 (final) |
+| --- | --- | --- |
+| `cargo test --features desktop` | 585 passed, 0 failed, 11 ignored | 616 passed, 0 failed, 11 ignored |
+| `cargo clippy --features desktop -- -D warnings` | limpio | limpio |
+| `cargo fmt --check` | exit 0 | exit 0 |
+| `cargo test --features desktop -- --ignored real_collection` | (no aplica) | pasa contra `data/collection.nml` |
+| `yarn vitest run` | 124 passed | 124 passed |
+| `yarn check:svelte` / `:mobile` | 0 errores, 0 warnings | 0 errores, 0 warnings |
+| `yarn format:check` / `yarn lint:check` | exit 0 | exit 0 |
+
+Confirmado adversarialmente sobre S2+S4: migración 19 con exactamente 3 `Effect::Column` al final de la tabla;
+**10** lecturas posicionales de `Track` con la grilla en 30/31/32 y **ningún** índice desplazado; el `ON CONFLICT`
+de `insert_track_in` omite la grilla; `writers.rs` la escribe en INSERT **y** `DO UPDATE`; el orden de match es
+path → hash → ingest y la única inserción es inalcanzable antes del chequeo de existencia; cues sin SQL crudo;
+`_LOOPS`/`_RECORDINGS` omitidas con su subárbol; los dos comandos registrados **una sola vez** y gateados;
+y el espejo TS campo por campo, incluidos los 4 campos nuevos del outcome.
+
+Dos desvíos detectados y corregidos antes de commitear: (1) el match inicial era sólo por hash y un conflicto de
+`file_path` con hash viejo se reportaba como `metadata-failed`; se cambió a path-first. (2) un `#![allow(dead_code)]`
+quedó obsoleto al consumirse toda la superficie; se removió y clippy lo confirmó limpio.
+
+No verificado: compilación Rust de mobile (no hay toolchain iOS en este host; el módulo está `desktop`-gateado),
+las ramas `cfg(windows)` del volumen, y que `data/` **no** está en `.gitignore` en la rama de feature — el commit
+que lo ignora vive en `dev`, así que en la rama hay que evitar `git add data/`.
+
 ### Hallazgos abiertos (no bloqueantes)
 
 | Hallazgo | Evidencia | Impacto |
 | --- | --- | --- |
+| `replace_tracks` bumpea `_hlc`/`date_modified` aun sin cambios | `playlist/tracks.rs` | Push de sync ruidoso en un replay, sin corrupción |
+| Los hot loops de Traktor no persisten su slot | `mapped_cue_to_model` usa `Cue::new_loop` sin `hot_cue_index` | Hot loops de Traktor llegan como loops sin slot |
+| El match por `file_path` es exacto (sin normalizar) | `find_track_by_file_path` = `WHERE file_path = ?1` | Una fila guardada con otro separador/case no matchea por path y cae al hash |
 | Un `<NODE .../>` self-closing corrompería la pila del parser | `parser.rs:132-140,168-173` | 0 casos en el corpus real, pero otro exportador podría emitirlo |
-| `TraktorError::Invalid` nunca se construye | `mod.rs:32` | Lo enmascara el `#![allow(dead_code)]` del módulo; el `allow` es deliberado porque S4 consume la superficie |
+| `TraktorError::Invalid` nunca se construye | `mod.rs:32` | Lo enmascara el `#![allow(dead_code)]` de `services/traktor/mod.rs` (el de `traktor_import.rs` ya se removió) |
 | El fixture tiene 7 tracks y no 10–20 | `fixtures/collection_small.nml` | Cubre los 13 casos pedidos; solo es menos volumen del sugerido |
 
 ### Hallazgos registrados
