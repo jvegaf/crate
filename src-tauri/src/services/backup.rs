@@ -71,7 +71,8 @@ impl BackupService {
             "SELECT id, file_path, file_hash, title, artist, album, year, genre, label,
                     catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format,
                     rating, play_count, date_added, date_modified, last_played,
-                    rekordbox_id, artwork_path, artwork_source, color, url
+                    rekordbox_id, artwork_path, artwork_source, color, url,
+                    grid_bpm, grid_anchor_ms, grid_source
              FROM tracks",
         )?;
         let tracks = stmt
@@ -103,6 +104,9 @@ impl BackupService {
                     artwork_source: row.get(23)?,
                     color: row.get(24)?,
                     url: row.get(25)?,
+                    grid_bpm: row.get(26)?,
+                    grid_anchor_ms: row.get(27)?,
+                    grid_source: row.get(28)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -573,9 +577,10 @@ impl BackupService {
                     "INSERT INTO tracks (id, file_path, file_hash, title, artist, album, year, genre, label,
                                          catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format,
                                          analysis_source, waveform_data, rating, play_count, date_added,
-                                         date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, url)
+                                         date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, url,
+                                         grid_bpm, grid_anchor_ms, grid_source)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-                             NULL, NULL, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
+                             NULL, NULL, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)",
                 )?;
                 for t in &data.tracks {
                     stmt.execute(params![
@@ -605,6 +610,9 @@ impl BackupService {
                         t.artwork_source,
                         t.color,
                         t.url,
+                        t.grid_bpm,
+                        t.grid_anchor_ms,
+                        t.grid_source,
                     ])?;
                 }
             }
@@ -1596,5 +1604,76 @@ mod tests {
             })
             .unwrap();
         assert_eq!(url.as_deref(), Some("https://example.test/track-9"));
+    }
+
+    /// `(grid_bpm, grid_anchor_ms, grid_source)` of a restored track, read as raw SQL so
+    /// the assertion is on persisted state rather than on the wire struct under test.
+    fn track_grid_of(
+        service: &BackupService,
+        id: &str,
+    ) -> (Option<f64>, Option<i64>, Option<String>) {
+        service
+            .conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT grid_bpm, grid_anchor_ms, grid_source FROM tracks WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap()
+    }
+
+    /// The beat grid is user data, exactly like cue points: it cannot be recomputed, so a
+    /// backup/restore cycle must preserve it (unlike `waveform_data`/`analysis_source`).
+    #[test]
+    fn backup_roundtrip_preserves_the_beat_grid() {
+        let track = test_utils::sentinel_track(); // grid 128.75 / 4321 / "s-grid-source"
+        let source = BackupService::new(Arc::new(Mutex::new(test_utils::make_memory_db())));
+        test_utils::insert_sentinel_track(&source.connection().lock().unwrap(), &track);
+
+        let data = source.create_backup_data("0.0.0-test").unwrap();
+        let restored = BackupService::new(Arc::new(Mutex::new(test_utils::make_memory_db())));
+        restored.restore_from_backup_data(data).unwrap();
+
+        assert_eq!(
+            track_grid_of(&restored, &track.id),
+            (Some(128.75), Some(4321), Some("s-grid-source".to_string()))
+        );
+    }
+
+    /// A track without a grid must round-trip as SQL NULL, never as a fabricated
+    /// `0.0` / `0`: inventing a first-beat anchor is worse than a missing grid.
+    #[test]
+    fn backup_roundtrip_keeps_a_missing_grid_null() {
+        let mut track = test_utils::sentinel_track();
+        track.grid_bpm = None;
+        track.grid_anchor_ms = None;
+        track.grid_source = None;
+        let source = BackupService::new(Arc::new(Mutex::new(test_utils::make_memory_db())));
+        test_utils::insert_sentinel_track(&source.connection().lock().unwrap(), &track);
+
+        let data = source.create_backup_data("0.0.0-test").unwrap();
+        let restored = BackupService::new(Arc::new(Mutex::new(test_utils::make_memory_db())));
+        restored.restore_from_backup_data(data).unwrap();
+
+        assert_eq!(track_grid_of(&restored, &track.id), (None, None, None));
+    }
+
+    /// A payload written before the grid columns existed (no `grid_*` keys at all) must
+    /// deserialize with an absent grid, so restoring an older `.cratebackup` still works.
+    #[test]
+    fn backup_track_deserializes_a_payload_without_grid_columns() {
+        let json = r#"{"id":"t","file_path":"/x","file_hash":null,"title":null,
+            "artist":null,"album":null,"year":null,"genre":null,"label":null,
+            "catalog_number":null,"duration_ms":1000,"bpm":null,"key":null,
+            "bitrate":null,"sample_rate":null,"format":null,"rating":0,"play_count":0,
+            "date_added":"2020-01-01T00:00:00Z","date_modified":"2020-01-01T00:00:00Z",
+            "last_played":null,"rekordbox_id":null,"artwork_path":null,
+            "artwork_source":null,"color":null,"url":null}"#;
+        let t: BackupTrack = serde_json::from_str(json).unwrap();
+        assert_eq!(t.grid_bpm, None);
+        assert_eq!(t.grid_anchor_ms, None);
+        assert_eq!(t.grid_source, None);
     }
 }

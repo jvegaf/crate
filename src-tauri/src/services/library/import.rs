@@ -393,7 +393,8 @@ impl LibraryService {
                 rating, play_count,
                 date_added, date_modified, last_played,
                 rekordbox_id, artwork_path, artwork_source, color,
-                _hlc, library_root_id, relative_path, url
+                _hlc, library_root_id, relative_path, url,
+                grid_bpm, grid_anchor_ms, grid_source
             ) VALUES (
                 ?1, ?2, ?3,
                 ?4, ?5, ?6, ?7, ?8, ?9, ?10,
@@ -402,7 +403,8 @@ impl LibraryService {
                 ?19, ?20,
                 ?21, ?22, ?23,
                 ?24, ?25, ?26, ?27,
-                ?28, ?29, ?30, ?31
+                ?28, ?29, ?30, ?31,
+                ?32, ?33, ?34
             )
             ON CONFLICT(file_path) DO UPDATE SET
                 title = excluded.title,
@@ -449,6 +451,12 @@ impl LibraryService {
                 library_root_id,
                 relative_path,
                 track.url,
+                // The grid is not file metadata, and the ON CONFLICT branch above
+                // deliberately omits it: a directory rescan must not clobber an
+                // already-imported grid with `None`.
+                track.grid_bpm,
+                track.grid_anchor_ms,
+                track.grid_source,
             ],
         )?;
 
@@ -818,5 +826,58 @@ mod tests {
         assert_eq!(pcm_bitrate_kbps(Some(44_100), Some(0), Some(16)), None);
         assert_eq!(pcm_bitrate_kbps(Some(44_100), Some(2), Some(0)), None);
         assert_eq!(pcm_bitrate_kbps(Some(1), Some(1), Some(1)), None);
+    }
+
+    /// S2: [`LibraryService::insert_track_in`] is the write path that persists a `Track`
+    /// row, so the grid triple must land in the `tracks` table on first insert.
+    #[test]
+    fn insert_track_in_persists_the_beat_grid_triple() {
+        let conn = test_utils::make_memory_db();
+        let mut track = test_utils::fixture_track("grid-import-1", "Grid Import", "hash-grid-1");
+        track.grid_bpm = Some(174.0);
+        track.grid_anchor_ms = Some(37);
+        track.grid_source = Some("traktor".to_string());
+
+        LibraryService::insert_track_in(&conn, &track).unwrap();
+
+        let (bpm, anchor, source): (Option<f64>, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT grid_bpm, grid_anchor_ms, grid_source FROM tracks WHERE id = ?1",
+                [&track.id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(bpm, Some(174.0));
+        assert_eq!(anchor, Some(37));
+        assert_eq!(source.as_deref(), Some("traktor"));
+    }
+
+    /// A directory rescan hands in a fresh `Track` with no grid. The `ON CONFLICT` branch
+    /// deliberately leaves the grid columns out, so an already-imported grid survives.
+    #[test]
+    fn insert_track_in_conflict_does_not_clobber_an_existing_grid() {
+        let conn = test_utils::make_memory_db();
+        let mut track = test_utils::fixture_track("grid-import-2", "Grid Import", "hash-grid-2");
+        track.grid_bpm = Some(128.0);
+        track.grid_anchor_ms = Some(500);
+        track.grid_source = Some("traktor".to_string());
+        LibraryService::insert_track_in(&conn, &track).unwrap();
+
+        // Same file, different row id: the UNIQUE(file_path) upsert fires.
+        let mut rescanned =
+            test_utils::fixture_track("grid-import-rescan", "Grid Import", "hash-grid-2");
+        rescanned.file_path = track.file_path.clone();
+        LibraryService::insert_track_in(&conn, &rescanned).unwrap();
+
+        let (bpm, anchor, source): (Option<f64>, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT grid_bpm, grid_anchor_ms, grid_source FROM tracks WHERE id = ?1",
+                [&track.id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(bpm, Some(128.0));
+        assert_eq!(anchor, Some(500));
+        assert_eq!(source.as_deref(), Some("traktor"));
     }
 }

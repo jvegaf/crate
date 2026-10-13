@@ -56,6 +56,21 @@ pub struct Track {
     pub library_root_id: Option<String>,
     pub relative_path: Option<String>,
 
+    // Beat grid. A grid is a `(bpm, anchor, source)` triple, not a bare BPM: without the
+    // anchor the first beat's position is unknown. Kept separate from `bpm` above, which
+    // is Crate's own measurement (`analysis_source = 'crate'`), so a grid's BPM and anchor
+    // always come from the same source. All three are nullable — only imported grids
+    // populate them today.
+    /// The grid's BPM.
+    #[serde(default)]
+    pub grid_bpm: Option<f64>,
+    /// Position in milliseconds of the grid's first beat.
+    #[serde(default)]
+    pub grid_anchor_ms: Option<i64>,
+    /// Origin of the grid: `'traktor'`, `'crate'`, …
+    #[serde(default)]
+    pub grid_source: Option<String>,
+
     // Tags (populated when fetching tracks)
     #[serde(default)]
     pub tags: Vec<super::Tag>,
@@ -97,6 +112,9 @@ impl Track {
             color: None,
             library_root_id: None,
             relative_path: None,
+            grid_bpm: None,
+            grid_anchor_ms: None,
+            grid_source: None,
             tags: Vec::new(),
         }
     }

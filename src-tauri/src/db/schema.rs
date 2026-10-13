@@ -806,5 +806,37 @@ CREATE INDEX idx_discovery_track_tags_hlc ON discovery_track_tags(_hlc);
                 Effect::Index("idx_discovery_track_tags_hlc"),
             ],
         },
+        // Migration 19: beat-grid storage on `tracks`. A grid is a `(bpm, anchor, source)`
+        // triple, not a bare BPM: without the anchor there is no way to know where the
+        // first beat falls. Kept separate from `tracks.bpm` (Crate's own measurement,
+        // stamped `analysis_source = 'crate'`), so a grid's BPM and anchor always come
+        // from the same source. All three nullable — only imported grids populate them.
+        //
+        // Appended at the END of the table on purpose: every track read is a positional
+        // `row.get(N)` over an explicit SELECT list, so a column inserted in the middle
+        // would silently shift every later index (see
+        // `odd/tasks/sql-positional-regression-tests.md`). Each SELECT list appends these
+        // columns at its end too.
+        Migration {
+            sql: r#"
+ALTER TABLE tracks ADD COLUMN grid_bpm REAL;
+ALTER TABLE tracks ADD COLUMN grid_anchor_ms INTEGER;
+ALTER TABLE tracks ADD COLUMN grid_source TEXT;
+"#,
+            effects: &[
+                Effect::Column {
+                    table: "tracks",
+                    column: "grid_bpm",
+                },
+                Effect::Column {
+                    table: "tracks",
+                    column: "grid_anchor_ms",
+                },
+                Effect::Column {
+                    table: "tracks",
+                    column: "grid_source",
+                },
+            ],
+        },
     ]
 }

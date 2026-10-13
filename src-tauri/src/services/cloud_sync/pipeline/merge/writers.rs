@@ -5,6 +5,9 @@
 //! - **UPSERTs write ONLY synced columns.** The track UPSERT never touches
 //!   `analysis_source`, `waveform_data`, `library_root_id`, or `relative_path`, so a
 //!   peer that analyzed a track keeps its waveform when it pulls a metadata edit.
+//!   The beat-grid triple (`grid_bpm`/`grid_anchor_ms`/`grid_source`) is NOT one of
+//!   those: it is library data the user cannot recompute, so the track UPSERT writes
+//!   it and it merges/propagates like any other synced column.
 //! - **Entity upserts run inside a per-row SAVEPOINT** and skip (rather than abort
 //!   the whole bucket) on a secondary `UNIQUE` collision — two devices that
 //!   independently created e.g. a tag category named "House" must not wedge sync.
@@ -99,12 +102,21 @@ fn upsert_entity_inner(tx: &Connection, bucket: &Bucket, row: &ParsedRow) -> Res
 }
 
 fn upsert_track(tx: &Connection, t: &BackupTrack, hlc: &str) -> Result<()> {
+    // The beat grid participates in the merge: it is written here like every other
+    // synced column. Unlike the device-local artifacts the track UPSERT deliberately
+    // leaves alone (`analysis_source`, `waveform_data`, `library_root_id`,
+    // `relative_path`), an imported grid is library data — the user's own beat anchor,
+    // not something this device can recompute — so it must propagate to peers, exactly
+    // like cue points. It rides the ordinary row-LWW path: no separate entity, no
+    // tombstone, and therefore no chance of tombstoning a RETAINED track id (which,
+    // under the delete-wins-tie rule, would erase the very row the grid belongs to).
     tx.execute(
         "INSERT INTO tracks \
             (id, file_path, file_hash, title, artist, album, year, genre, label, catalog_number, \
              duration_ms, bpm, key, bitrate, sample_rate, format, rating, play_count, date_added, \
-             date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, url, _hlc) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27) \
+             date_modified, last_played, rekordbox_id, artwork_path, artwork_source, color, url, \
+             grid_bpm, grid_anchor_ms, grid_source, _hlc) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30) \
          ON CONFLICT(id) DO UPDATE SET \
             file_path=excluded.file_path, file_hash=excluded.file_hash, title=excluded.title, \
             artist=excluded.artist, album=excluded.album, year=excluded.year, genre=excluded.genre, \
@@ -114,12 +126,15 @@ fn upsert_track(tx: &Connection, t: &BackupTrack, hlc: &str) -> Result<()> {
             date_added=excluded.date_added, date_modified=excluded.date_modified, \
             last_played=excluded.last_played, rekordbox_id=excluded.rekordbox_id, \
             artwork_path=excluded.artwork_path, artwork_source=excluded.artwork_source, \
-            color=excluded.color, url=excluded.url, _hlc=excluded._hlc",
+            color=excluded.color, url=excluded.url, grid_bpm=excluded.grid_bpm, \
+            grid_anchor_ms=excluded.grid_anchor_ms, grid_source=excluded.grid_source, \
+            _hlc=excluded._hlc",
         params![
             t.id, t.file_path, t.file_hash, t.title, t.artist, t.album, t.year, t.genre, t.label,
             t.catalog_number, t.duration_ms, t.bpm, t.key, t.bitrate, t.sample_rate, t.format,
             t.rating, t.play_count, t.date_added, t.date_modified, t.last_played, t.rekordbox_id,
-            t.artwork_path, t.artwork_source, t.color, t.url, hlc,
+            t.artwork_path, t.artwork_source, t.color, t.url, t.grid_bpm, t.grid_anchor_ms,
+            t.grid_source, hlc,
         ],
     )?;
     Ok(())

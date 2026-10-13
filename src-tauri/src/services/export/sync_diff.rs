@@ -246,6 +246,9 @@ mod tests {
             color: None,
             library_root_id: None,
             relative_path: None,
+            grid_bpm: None,
+            grid_anchor_ms: None,
+            grid_source: None,
             tags: vec![],
         }
     }

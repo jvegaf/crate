@@ -145,6 +145,11 @@ export interface Track {
 	library_root_id: string | null
 	relative_path: string | null
 
+	// Beat grid: a (bpm, anchor, source) triple, kept separate from `bpm` above
+	grid_bpm: number | null
+	grid_anchor_ms: number | null
+	grid_source: string | null
+
 	// Related data
 	tags: Tag[]
 }

@@ -14,7 +14,8 @@ impl LibraryService {
                 t.rating, t.play_count,
                 t.date_added, t.date_modified, t.last_played,
                 t.rekordbox_id, t.artwork_path, t.artwork_source, t.color,
-                t.library_root_id, t.relative_path, t.url
+                t.library_root_id, t.relative_path, t.url,
+                t.grid_bpm, t.grid_anchor_ms, t.grid_source
             FROM tracks t
             "#,
         );
@@ -136,6 +137,9 @@ impl LibraryService {
                     library_root_id: row.get(27)?,
                     relative_path: row.get(28)?,
                     url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
                     tags: Vec::new(),
                 })
             })?
@@ -226,7 +230,8 @@ impl LibraryService {
                 rating, play_count,
                 date_added, date_modified, last_played,
                 rekordbox_id, artwork_path, artwork_source, color,
-                library_root_id, relative_path, url
+                library_root_id, relative_path, url,
+                grid_bpm, grid_anchor_ms, grid_source
             FROM tracks WHERE id = ?1
             "#,
             [id],
@@ -262,6 +267,9 @@ impl LibraryService {
                     library_root_id: row.get(27)?,
                     relative_path: row.get(28)?,
                     url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
                     tags: Vec::new(),
                 })
             },
@@ -299,7 +307,8 @@ impl LibraryService {
                 rating, play_count,
                 date_added, date_modified, last_played,
                 rekordbox_id, artwork_path, artwork_source, color,
-                library_root_id, relative_path, url
+                library_root_id, relative_path, url,
+                grid_bpm, grid_anchor_ms, grid_source
             FROM tracks WHERE file_hash = ?1
             "#,
             [file_hash],
@@ -335,6 +344,9 @@ impl LibraryService {
                     library_root_id: row.get(27)?,
                     relative_path: row.get(28)?,
                     url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
                     tags: Vec::new(),
                 })
             },
@@ -488,5 +500,74 @@ mod tests {
             }))
             .unwrap();
         assert!(wrong_tag.is_empty());
+    }
+
+    /// S2: the beat grid is a `(bpm, anchor, source)` triple and must survive every
+    /// positional read path that builds a `Track` from a row.
+    #[test]
+    fn beat_grid_triple_round_trips_through_the_normal_read_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = test_utils::make_memory_db();
+        let mut track = test_utils::sentinel_track();
+        track.grid_bpm = Some(128.75);
+        track.grid_anchor_ms = Some(4321);
+        track.grid_source = Some("traktor".to_string());
+        test_utils::insert_sentinel_track(&conn, &track);
+        let library = library(conn, dir.path());
+
+        let expected = (Some(128.75), Some(4321), Some("traktor".to_string()));
+
+        let from_list = library.get_tracks(None).unwrap();
+        assert_eq!(from_list.len(), 1);
+        assert_eq!(
+            (
+                from_list[0].grid_bpm,
+                from_list[0].grid_anchor_ms,
+                from_list[0].grid_source.clone(),
+            ),
+            expected
+        );
+
+        let from_id = library.get_track(&track.id).unwrap();
+        assert_eq!(
+            (
+                from_id.grid_bpm,
+                from_id.grid_anchor_ms,
+                from_id.grid_source.clone(),
+            ),
+            expected
+        );
+
+        let by_hash = library
+            .find_track_by_hash(track.file_hash.as_deref().unwrap())
+            .unwrap()
+            .expect("track must be found by hash");
+        assert_eq!(
+            (
+                by_hash.grid_bpm,
+                by_hash.grid_anchor_ms,
+                by_hash.grid_source.clone(),
+            ),
+            expected
+        );
+    }
+
+    /// A track with no grid must read back as `None` in all three columns, not as a
+    /// neighbouring column's value.
+    #[test]
+    fn beat_grid_columns_read_back_as_null_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = test_utils::make_memory_db();
+        let mut track = test_utils::sentinel_track();
+        track.grid_bpm = None;
+        track.grid_anchor_ms = None;
+        track.grid_source = None;
+        test_utils::insert_sentinel_track(&conn, &track);
+        let library = library(conn, dir.path());
+
+        let read = library.get_track(&track.id).unwrap();
+        assert_eq!(read.grid_bpm, None);
+        assert_eq!(read.grid_anchor_ms, None);
+        assert_eq!(read.grid_source, None);
     }
 }

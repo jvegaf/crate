@@ -34,6 +34,9 @@ function makeTrack(overrides: Partial<Track> = {}): Track {
 		color: null,
 		library_root_id: null,
 		relative_path: null,
+		grid_bpm: null,
+		grid_anchor_ms: null,
+		grid_source: null,
 		tags: [],
 		...overrides,
 	}
