@@ -639,6 +639,7 @@ export type SettingsPage =
 	| 'diagnostics'
 	| 'about'
 	| 'tagger'
+	| 'traktor'
 
 export type FollowCheckCadence = 'on-launch' | 'hourly' | 'daily' | 'manual'
 export type AutoFollowOnImport = 'off' | 'artist' | 'label' | 'both'

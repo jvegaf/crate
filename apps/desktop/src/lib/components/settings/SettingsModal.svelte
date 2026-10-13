@@ -16,6 +16,7 @@
 		DiagnosticsTab,
 		AboutTab,
 		TaggerTab,
+		TraktorTab,
 	} from './tabs'
 	import { isSyncAvailable, cloudSyncStore } from '$shared/stores/cloudSync'
 
@@ -35,6 +36,7 @@
 		{ page: 'appearance', icon: 'palette' },
 		{ page: 'discovery', icon: 'globe' },
 		{ page: 'library', icon: 'library' },
+		{ page: 'traktor', icon: 'download' },
 		{ page: 'sound', icon: 'volume-full', fill: true },
 		{ page: 'tagger', icon: 'tag' },
 		{ page: 'cloudSync', icon: 'cloud', requireSync: true },
@@ -122,6 +124,8 @@
 				<AboutTab />
 			{:else if activePage === 'tagger'}
 				<TaggerTab />
+			{:else if activePage === 'traktor'}
+				<TraktorTab />
 			{/if}
 		</div>
 	</div>
