@@ -7,7 +7,7 @@ use serde_json::json;
 
 use super::merge_bucket;
 use crate::services::cloud_sync::pipeline::buckets::Bucket;
-use crate::services::cloud_sync::pipeline::rows::ParsedRow;
+use crate::services::cloud_sync::pipeline::rows::{self, ParsedRow};
 
 fn mem() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
@@ -855,4 +855,135 @@ fn discovery_track_tag_orphan_is_skipped_and_insert_works() {
         })
         .unwrap();
     assert_eq!(n, 1, "tag on a missing track is skipped");
+}
+
+// --- tracks (the beat grid rides the row) ---------------------------------
+
+/// Seed a track whose id shards into `tracks/a`. `grid` is applied as an explicit
+/// column tuple so a test can prove a missing grid stays NULL.
+fn seed_grid_track(
+    conn: &Connection,
+    id: &str,
+    hlc: &str,
+    grid: (Option<f64>, Option<i64>, Option<&str>),
+) {
+    conn.execute(
+        "INSERT INTO tracks (id, file_path, duration_ms, date_added, date_modified, \
+                            grid_bpm, grid_anchor_ms, grid_source, _hlc) \
+         VALUES (?1, '/music/grid.mp3', 1000, '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', ?2, ?3, ?4, ?5)",
+        params![id, grid.0, grid.1, grid.2, hlc],
+    )
+    .unwrap();
+}
+
+/// `(grid_bpm, grid_anchor_ms, grid_source)` of a track row, read as raw SQL so the
+/// assertion is on persisted state rather than on the wire struct under test.
+fn track_grid(conn: &Connection, id: &str) -> (Option<f64>, Option<i64>, Option<String>) {
+    conn.query_row(
+        "SELECT grid_bpm, grid_anchor_ms, grid_source FROM tracks WHERE id = ?1",
+        [id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap()
+}
+
+/// A grid on the local row must reach the wire and survive the merge on a peer.
+#[test]
+fn track_grid_survives_a_serialize_merge_round_trip() {
+    let source = mem();
+    seed_grid_track(
+        &source,
+        "a1-track",
+        "0005",
+        (Some(128.75), Some(4321), Some("traktor")),
+    );
+    let bucket = Bucket::Tracks(0xa);
+
+    let bytes = rows::serialize_bucket(&source, &bucket).unwrap();
+    let parsed = rows::parse_bucket(&bucket, &bytes).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(
+        parsed[0].value["grid_bpm"].as_f64(),
+        Some(128.75),
+        "grid_bpm must reach the wire"
+    );
+    assert_eq!(parsed[0].value["grid_anchor_ms"].as_i64(), Some(4321));
+    assert_eq!(parsed[0].value["grid_source"].as_str(), Some("traktor"));
+
+    let dest = mem();
+    merge_bucket(&dest, &bucket, &parsed).unwrap();
+    assert_eq!(
+        track_grid(&dest, "a1-track"),
+        (Some(128.75), Some(4321), Some("traktor".to_string()))
+    );
+    // The grid rides the normal entity upsert on a RETAINED id: nothing here may
+    // tombstone the track (a tombstone at >= the live HLC would win the delete tie).
+    assert_eq!(tomb_hlc(&dest, "tracks", "a1-track"), None);
+}
+
+/// A remote row without a grid must not fabricate one: the triple round-trips as
+/// SQL NULL, never as a defaulted `0.0` / `0`.
+#[test]
+fn track_without_a_grid_round_trips_as_null() {
+    let source = mem();
+    seed_grid_track(&source, "a1-track", "0005", (None, None, None));
+    let bucket = Bucket::Tracks(0xa);
+
+    let bytes = rows::serialize_bucket(&source, &bucket).unwrap();
+    let parsed = rows::parse_bucket(&bucket, &bytes).unwrap();
+    assert!(
+        parsed[0].value["grid_bpm"].is_null(),
+        "absent grid stays null on the wire"
+    );
+    assert!(parsed[0].value["grid_anchor_ms"].is_null());
+    assert!(parsed[0].value["grid_source"].is_null());
+
+    let dest = mem();
+    merge_bucket(&dest, &bucket, &parsed).unwrap();
+    assert_eq!(track_grid(&dest, "a1-track"), (None, None, None));
+}
+
+/// The grid merges onto a peer that already knows the track but has no grid yet —
+/// the ordinary LWW update path, with the track RETAINED (no tombstone), and a stale
+/// gridless remote cannot clear a grid a newer row already delivered.
+#[test]
+fn track_grid_merges_onto_an_existing_gridless_track() {
+    let conn = mem();
+    seed_grid_track(&conn, "a1-track", "0005", (None, None, None));
+    let grid_row = |hlc: &str, grid: (Option<f64>, Option<i64>, Option<&str>)| {
+        parsed(json!({
+            "id": "a1-track", "file_path": "/music/grid.mp3", "duration_ms": 1000,
+            "rating": 0, "play_count": 0,
+            "date_added": "2020-01-01T00:00:00Z", "date_modified": "2020-01-01T00:00:00Z",
+            "grid_bpm": grid.0, "grid_anchor_ms": grid.1, "grid_source": grid.2,
+            "_hlc": hlc, "_deleted": false
+        }))
+    };
+    merge_bucket(
+        &conn,
+        &Bucket::Tracks(0xa),
+        &[grid_row("0009", (Some(124.0), Some(999), Some("traktor")))],
+    )
+    .unwrap();
+    assert_eq!(
+        track_grid(&conn, "a1-track"),
+        (Some(124.0), Some(999), Some("traktor".to_string()))
+    );
+    assert_eq!(
+        tomb_hlc(&conn, "tracks", "a1-track"),
+        None,
+        "a retained track must not be tombstoned"
+    );
+
+    // Older-HLC gridless row: LWW keeps the newer local grid instead of clearing it.
+    merge_bucket(
+        &conn,
+        &Bucket::Tracks(0xa),
+        &[grid_row("0005", (None, None, None))],
+    )
+    .unwrap();
+    assert_eq!(
+        track_grid(&conn, "a1-track"),
+        (Some(124.0), Some(999), Some("traktor".to_string()))
+    );
 }

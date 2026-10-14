@@ -89,8 +89,8 @@ impl StreamFetchPermits {
 }
 
 use services::{
-    discovery::n_transform::NsigSolverState, BackupService, DiscoveryService, FollowService,
-    PlaylistService, SettingsService, TagService, TaggerService,
+    discovery::n_transform::NsigSolverState, BackupService, CueService, DiscoveryService,
+    FollowService, PlaylistService, SettingsService, TagService, TaggerService,
 };
 // Desktop-only services and their backing crates are excluded from the mobile build.
 #[cfg(feature = "desktop")]
@@ -304,6 +304,11 @@ pub fn run() {
       commands::playlist::get_smart_playlist_tracks,
       commands::playlist::get_smart_playlist_releases,
       commands::playlist::preview_smart_rules_count,
+      // Cue commands (cross-platform: the cues table exists on mobile)
+      commands::cue::get_cues_for_track,
+      commands::cue::replace_cues_for_track,
+      commands::cue::delete_cues_for_track,
+      commands::cue::delete_cue,
       // Settings commands
       commands::settings::get_settings,
       commands::settings::set_setting,
@@ -422,6 +427,11 @@ pub fn run() {
       // Applying remote artwork reuses the desktop-only LibraryService.
       #[cfg(feature = "desktop")]
       commands::tagger::set_track_artwork_from_url,
+      // Traktor NML import commands (desktop-only: reuses LibraryService + audio hashing).
+      #[cfg(feature = "desktop")]
+      commands::traktor::preview_traktor_import,
+      #[cfg(feature = "desktop")]
+      commands::traktor::import_traktor_collection,
       // Beatport recommendations (shared, not feature-gated: reqwest only).
       commands::recommendations::find_beatport_similar_tracks,
       commands::recommendations::register_beatport_sample_streams,
@@ -589,7 +599,13 @@ pub fn run() {
         app_data_dir.clone(),
         file_tags_service.clone(),
       );
+      #[cfg(feature = "desktop")]
+      let traktor_import_service = services::traktor_import::TraktorImportService::new(
+        conn.clone(),
+        library_service.clone(),
+      );
       let tag_service = TagService::new(conn.clone());
+      let cue_service = CueService::new(conn.clone());
       let playlist_service = PlaylistService::new(conn.clone());
       let settings_service = SettingsService::new(conn.clone());
       #[cfg(feature = "desktop")]
@@ -646,7 +662,10 @@ pub fn run() {
 
       #[cfg(feature = "desktop")]
       app.manage(library_service);
+      #[cfg(feature = "desktop")]
+      app.manage(traktor_import_service);
       app.manage(tag_service);
+      app.manage(cue_service);
       app.manage(playlist_service);
       app.manage(settings_service);
       #[cfg(feature = "desktop")]

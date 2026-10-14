@@ -14,7 +14,8 @@ impl LibraryService {
                 t.rating, t.play_count,
                 t.date_added, t.date_modified, t.last_played,
                 t.rekordbox_id, t.artwork_path, t.artwork_source, t.color,
-                t.library_root_id, t.relative_path, t.url
+                t.library_root_id, t.relative_path, t.url,
+                t.grid_bpm, t.grid_anchor_ms, t.grid_source
             FROM tracks t
             "#,
         );
@@ -136,6 +137,9 @@ impl LibraryService {
                     library_root_id: row.get(27)?,
                     relative_path: row.get(28)?,
                     url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
                     tags: Vec::new(),
                 })
             })?
@@ -226,7 +230,8 @@ impl LibraryService {
                 rating, play_count,
                 date_added, date_modified, last_played,
                 rekordbox_id, artwork_path, artwork_source, color,
-                library_root_id, relative_path, url
+                library_root_id, relative_path, url,
+                grid_bpm, grid_anchor_ms, grid_source
             FROM tracks WHERE id = ?1
             "#,
             [id],
@@ -262,6 +267,9 @@ impl LibraryService {
                     library_root_id: row.get(27)?,
                     relative_path: row.get(28)?,
                     url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
                     tags: Vec::new(),
                 })
             },
@@ -279,6 +287,79 @@ impl LibraryService {
     pub fn find_track_by_hash(&self, file_hash: &str) -> Result<Option<Track>> {
         let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
         Self::find_track_by_hash_in(&conn, file_hash)
+    }
+
+    /// Find an existing track by its `file_path` (the `tracks.file_path` UNIQUE key).
+    ///
+    /// Mirrors [`Self::find_track_by_hash`]: the same explicit positional SELECT list and
+    /// `row.get(N)` order, so the trailing `grid_bpm, grid_anchor_ms, grid_source` triple
+    /// stays at indices 30/31/32.
+    pub fn find_track_by_file_path(&self, file_path: &str) -> Result<Option<Track>> {
+        let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
+        let result = conn.query_row(
+            r#"
+            SELECT
+                id, file_path, file_hash,
+                title, artist, album, year, genre, label, catalog_number,
+                duration_ms, bpm, key, bitrate, sample_rate, format,
+                analysis_source, waveform_data,
+                rating, play_count,
+                date_added, date_modified, last_played,
+                rekordbox_id, artwork_path, artwork_source, color,
+                library_root_id, relative_path, url,
+                grid_bpm, grid_anchor_ms, grid_source
+            FROM tracks WHERE file_path = ?1
+            "#,
+            [file_path],
+            |row| {
+                Ok(Track {
+                    id: row.get(0)?,
+                    file_path: row.get(1)?,
+                    file_hash: row.get(2)?,
+                    title: row.get(3)?,
+                    artist: row.get(4)?,
+                    album: row.get(5)?,
+                    year: row.get(6)?,
+                    genre: row.get(7)?,
+                    label: row.get(8)?,
+                    catalog_number: row.get(9)?,
+                    duration_ms: row.get(10)?,
+                    bpm: row.get(11)?,
+                    key: row.get(12)?,
+                    bitrate: row.get(13)?,
+                    sample_rate: row.get(14)?,
+                    format: row.get(15)?,
+                    analysis_source: row.get(16)?,
+                    waveform_data: row.get(17)?,
+                    rating: row.get(18)?,
+                    play_count: row.get(19)?,
+                    date_added: row.get(20)?,
+                    date_modified: row.get(21)?,
+                    last_played: row.get(22)?,
+                    rekordbox_id: row.get(23)?,
+                    artwork_path: row.get(24)?,
+                    artwork_source: row.get(25)?,
+                    color: row.get(26)?,
+                    library_root_id: row.get(27)?,
+                    relative_path: row.get(28)?,
+                    url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
+                    tags: Vec::new(),
+                })
+            },
+        );
+
+        match result {
+            Ok(track) => {
+                // Fetch tags for the track
+                let tracks_with_tags = Self::fetch_tags_for_tracks(&conn, vec![track])?;
+                Ok(tracks_with_tags.into_iter().next())
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(CrateError::Database(e)),
+        }
     }
 
     /// Find an existing track by its file hash on a caller-supplied connection.
@@ -299,7 +380,8 @@ impl LibraryService {
                 rating, play_count,
                 date_added, date_modified, last_played,
                 rekordbox_id, artwork_path, artwork_source, color,
-                library_root_id, relative_path, url
+                library_root_id, relative_path, url,
+                grid_bpm, grid_anchor_ms, grid_source
             FROM tracks WHERE file_hash = ?1
             "#,
             [file_hash],
@@ -335,6 +417,9 @@ impl LibraryService {
                     library_root_id: row.get(27)?,
                     relative_path: row.get(28)?,
                     url: row.get(29)?,
+                    grid_bpm: row.get(30)?,
+                    grid_anchor_ms: row.get(31)?,
+                    grid_source: row.get(32)?,
                     tags: Vec::new(),
                 })
             },
@@ -488,5 +573,98 @@ mod tests {
             }))
             .unwrap();
         assert!(wrong_tag.is_empty());
+    }
+
+    /// S2: the beat grid is a `(bpm, anchor, source)` triple and must survive every
+    /// positional read path that builds a `Track` from a row.
+    #[test]
+    fn beat_grid_triple_round_trips_through_the_normal_read_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = test_utils::make_memory_db();
+        let mut track = test_utils::sentinel_track();
+        track.grid_bpm = Some(128.75);
+        track.grid_anchor_ms = Some(4321);
+        track.grid_source = Some("traktor".to_string());
+        test_utils::insert_sentinel_track(&conn, &track);
+        let library = library(conn, dir.path());
+
+        let expected = (Some(128.75), Some(4321), Some("traktor".to_string()));
+
+        let from_list = library.get_tracks(None).unwrap();
+        assert_eq!(from_list.len(), 1);
+        assert_eq!(
+            (
+                from_list[0].grid_bpm,
+                from_list[0].grid_anchor_ms,
+                from_list[0].grid_source.clone(),
+            ),
+            expected
+        );
+
+        let from_id = library.get_track(&track.id).unwrap();
+        assert_eq!(
+            (
+                from_id.grid_bpm,
+                from_id.grid_anchor_ms,
+                from_id.grid_source.clone(),
+            ),
+            expected
+        );
+
+        let by_hash = library
+            .find_track_by_hash(track.file_hash.as_deref().unwrap())
+            .unwrap()
+            .expect("track must be found by hash");
+        assert_eq!(
+            (
+                by_hash.grid_bpm,
+                by_hash.grid_anchor_ms,
+                by_hash.grid_source.clone(),
+            ),
+            expected
+        );
+    }
+
+    /// A track with no grid must read back as `None` in all three columns, not as a
+    /// neighbouring column's value.
+    #[test]
+    fn beat_grid_columns_read_back_as_null_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = test_utils::make_memory_db();
+        let mut track = test_utils::sentinel_track();
+        track.grid_bpm = None;
+        track.grid_anchor_ms = None;
+        track.grid_source = None;
+        test_utils::insert_sentinel_track(&conn, &track);
+        let library = library(conn, dir.path());
+
+        let read = library.get_track(&track.id).unwrap();
+        assert_eq!(read.grid_bpm, None);
+        assert_eq!(read.grid_anchor_ms, None);
+        assert_eq!(read.grid_source, None);
+    }
+
+    /// The file-path lookup must return the exact seeded row and `None` for a path no row
+    /// owns. A second row with a different path proves the query filters on the path.
+    #[test]
+    fn find_track_by_file_path_finds_the_seeded_row_and_misses_otherwise() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = test_utils::make_memory_db();
+        let track = test_utils::sentinel_track();
+        test_utils::insert_sentinel_track(&conn, &track);
+        let other = test_utils::fixture_track("other-track", "Other", "other-hash");
+        test_utils::insert_sentinel_track(&conn, &other);
+        let library = library(conn, dir.path());
+
+        let found = library
+            .find_track_by_file_path(&track.file_path)
+            .unwrap()
+            .expect("seeded row must be found by file_path");
+        test_utils::assert_track_eq(&found, &track);
+
+        assert!(library
+            .find_track_by_file_path("/music/does-not-exist.mp3")
+            .unwrap()
+            .is_none());
     }
 }

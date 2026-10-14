@@ -751,7 +751,8 @@ impl AnalysisService {
                    rating, play_count,
                    date_added, date_modified, last_played,
                    rekordbox_id, artwork_path, artwork_source, color,
-                   library_root_id, relative_path, url
+                   library_root_id, relative_path, url,
+                   grid_bpm, grid_anchor_ms, grid_source
             FROM tracks
             WHERE id = ?1
             "#,
@@ -789,6 +790,9 @@ impl AnalysisService {
                 library_root_id: row.get(27)?,
                 relative_path: row.get(28)?,
                 url: row.get(29)?,
+                grid_bpm: row.get(30)?,
+                grid_anchor_ms: row.get(31)?,
+                grid_source: row.get(32)?,
                 tags: Vec::new(),
             })
         })?;
@@ -843,7 +847,8 @@ impl AnalysisService {
                    rating, play_count,
                    date_added, date_modified, last_played,
                    rekordbox_id, artwork_path, artwork_source, color,
-                   library_root_id, relative_path, url
+                   library_root_id, relative_path, url,
+                   grid_bpm, grid_anchor_ms, grid_source
             FROM tracks
             WHERE id = ?1
             "#,
@@ -881,6 +886,9 @@ impl AnalysisService {
                 library_root_id: row.get(27)?,
                 relative_path: row.get(28)?,
                 url: row.get(29)?,
+                grid_bpm: row.get(30)?,
+                grid_anchor_ms: row.get(31)?,
+                grid_source: row.get(32)?,
                 tags: Vec::new(),
             })
         })?;

@@ -36,6 +36,22 @@ pub struct BackupTrack {
     pub color: Option<String>,
     /// Store page URL (ID3v2 WOAR). `Option` so older backups deserialize with `None`.
     pub url: Option<String>,
+    /// Imported beat grid: the `(bpm, anchor, source)` triple stored on `tracks`.
+    ///
+    /// The columns `BackupTrack` already omits (`waveform_data`, `analysis_source`,
+    /// `library_root_id`, `relative_path`) are device-local artifacts Crate can recompute
+    /// or re-derive; a grid cannot. It is user data, exactly like cue points, so it must
+    /// survive a backup/restore cycle and sync between devices. `None` means "no grid" and
+    /// must round-trip as SQL `NULL`, never as a defaulted `0.0`/`0`.
+    ///
+    /// `#[serde(default)]` (like the `Track` mirror) so a payload written before these
+    /// columns existed still deserializes with no grid instead of failing.
+    #[serde(default)]
+    pub grid_bpm: Option<f64>,
+    #[serde(default)]
+    pub grid_anchor_ms: Option<i64>,
+    #[serde(default)]
+    pub grid_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -111,6 +111,9 @@ pub fn fixture_track(id: &str, title: &str, file_hash: &str) -> Track {
         color: None,
         library_root_id: None,
         relative_path: None,
+        grid_bpm: None,
+        grid_anchor_ms: None,
+        grid_source: None,
         tags: vec![],
     }
 }
@@ -162,6 +165,9 @@ pub fn sentinel_track() -> Track {
         color: Some("s-color".to_string()),
         library_root_id: Some("s-library-root".to_string()),
         relative_path: Some("s/relative/track-9.mp3".to_string()),
+        grid_bpm: Some(128.75),
+        grid_anchor_ms: Some(4321),
+        grid_source: Some("s-grid-source".to_string()),
         tags: vec![],
     }
 }
@@ -184,8 +190,9 @@ pub fn insert_sentinel_track(conn: &Connection, track: &Track) {
                            catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format,
                            analysis_source, waveform_data, rating, play_count, date_added,
                            date_modified, last_played, rekordbox_id, artwork_path, artwork_source,
-                           color, library_root_id, relative_path, url)
-       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30)",
+                           color, library_root_id, relative_path, url,
+                           grid_bpm, grid_anchor_ms, grid_source)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33)",
       rusqlite::params![
         track.id,
         track.file_path,
@@ -217,6 +224,9 @@ pub fn insert_sentinel_track(conn: &Connection, track: &Track) {
         track.library_root_id,
         track.relative_path,
         track.url,
+        track.grid_bpm,
+        track.grid_anchor_ms,
+        track.grid_source,
       ],
     )
     .expect("failed to seed sentinel track");
@@ -270,7 +280,10 @@ pub fn assert_track_eq(actual: &Track, expected: &Track) {
         artwork_source,
         color,
         library_root_id,
-        relative_path
+        relative_path,
+        grid_bpm,
+        grid_anchor_ms,
+        grid_source
     );
     assert_eq!(actual.tags.len(), expected.tags.len(), "tags length");
     for (actual_tag, expected_tag) in actual.tags.iter().zip(expected.tags.iter()) {
@@ -316,6 +329,9 @@ pub fn backup_track_of(track: &Track) -> BackupTrack {
         artwork_source: track.artwork_source.clone(),
         color: track.color.clone(),
         url: track.url.clone(),
+        grid_bpm: track.grid_bpm,
+        grid_anchor_ms: track.grid_anchor_ms,
+        grid_source: track.grid_source.clone(),
     }
 }
 
@@ -350,7 +366,10 @@ pub fn assert_backup_track_eq(actual: &BackupTrack, expected: &BackupTrack) {
         artwork_path,
         artwork_source,
         color,
-        url
+        url,
+        grid_bpm,
+        grid_anchor_ms,
+        grid_source
     );
 }
 
@@ -432,6 +451,9 @@ mod tests {
             format!("{:?}", t.color),
             format!("{:?}", t.library_root_id),
             format!("{:?}", t.relative_path),
+            format!("{:?}", t.grid_bpm),
+            format!("{:?}", t.grid_anchor_ms),
+            format!("{:?}", t.grid_source),
         ];
         let unique: std::collections::HashSet<&String> = values.iter().collect();
         assert_eq!(

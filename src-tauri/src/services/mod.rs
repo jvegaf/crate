@@ -9,6 +9,7 @@ pub mod audio;
 pub mod backup;
 pub mod cloud_sync;
 pub mod collection;
+pub mod cue;
 #[cfg(feature = "desktop")]
 pub mod device;
 #[cfg(feature = "desktop")]
@@ -33,6 +34,11 @@ pub mod settings;
 pub mod smart_rules;
 pub mod tag;
 pub mod tagger;
+// Pure Rust NML import (S3): no desktop-only dependency, so it is not feature-gated.
+pub mod traktor;
+// DB-aware Traktor NML import (S4, slice A): needs the desktop library + hash services.
+#[cfg(feature = "desktop")]
+pub mod traktor_import;
 pub mod ui_zoom;
 pub mod watch_gate;
 
@@ -43,6 +49,7 @@ pub use artwork::ArtworkService;
 pub use audio::AudioService;
 pub use backup::BackupService;
 pub use collection::CollectionService;
+pub use cue::CueService;
 #[cfg(feature = "desktop")]
 pub use device::DeviceService;
 #[cfg(feature = "desktop")]

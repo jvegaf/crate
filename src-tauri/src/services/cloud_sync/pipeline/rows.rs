@@ -646,11 +646,20 @@ fn read_live_tracks(
     };
     // NOTE: reads the whole tracks table and filters by shard in Rust to match
     // `bucket_for_track_id` semantics exactly. Fine for Phase 1 (test scale).
+    //
+    // The beat grid columns are appended AFTER `_hlc` on purpose: every existing
+    // positional index (including `_hlc` at 26) must stay put, and the wire order is
+    // decided by `BackupTrack`'s field declaration order, not by this SELECT.
+    //
+    // NOTE: adding the grid triple to `BackupTrack` changes the serialized bytes of
+    // every non-empty `tracks` shard, hence its blake3 content hash. Peers therefore
+    // re-download and re-merge their tracks once after this change; that is the expected
+    // price of extending an entity's content, not a defect.
     let mut stmt = conn.prepare(
         "SELECT id, file_path, file_hash, title, artist, album, year, genre, label, \
          catalog_number, duration_ms, bpm, key, bitrate, sample_rate, format, rating, \
          play_count, date_added, date_modified, last_played, rekordbox_id, artwork_path, \
-         artwork_source, color, url, _hlc FROM tracks",
+         artwork_source, color, url, _hlc, grid_bpm, grid_anchor_ms, grid_source FROM tracks",
     )?;
     let rows = stmt.query_map([], |r| {
         let t = BackupTrack {
@@ -680,6 +689,9 @@ fn read_live_tracks(
             artwork_source: r.get(23)?,
             color: r.get(24)?,
             url: r.get(25)?,
+            grid_bpm: r.get(27)?,
+            grid_anchor_ms: r.get(28)?,
+            grid_source: r.get(29)?,
         };
         let hlc: String = r.get(26)?;
         Ok((t, hlc))

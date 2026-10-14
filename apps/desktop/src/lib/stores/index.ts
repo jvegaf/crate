@@ -135,6 +135,7 @@ export {
 	ownedReleaseIds,
 	ownedTrackIds,
 } from '$shared/stores/collection'
+export { traktorStore } from './traktor'
 export { updaterStore, updateStatus, updateAvailable } from './updater'
 export { expandedReleaseIds } from '$shared/stores/expandedReleases'
 export { discoveryPlaylistStore, discoveryPlaylistReleases } from '$shared/stores/discoveryPlaylist'
