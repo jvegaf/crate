@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-14
+
+### Added
+
+- Added importing your Traktor collection: point Crate at a Traktor `collection.nml` and it brings in your tracks, hot cues and loops, the beat grid, musical keys and the whole playlist forest. It runs as a preview-then-confirm flow under Settings → Traktor, and it is read-only over Traktor — nothing is ever written back to your `collection.nml`. Files in the collection that Crate has not seen yet are ingested from disk, and a track whose file is missing or unreadable is reported as unmatched instead of being imported. Traktor's internal `_LOOPS` and `_RECORDINGS` playlists are skipped, and Traktor smartlists come in as ordinary static playlists.
+
 ### Changed
 
+- Cloud sync is switched off in this build: it has no backend of its own here, so the sync account UI, the sync indicator and the background sync loops are gone. Your local library, playlists, cues, tags and backups are unaffected, and the shared sync plumbing underneath still stamps edits as before so nothing is lost.
+- Stopped producing macOS and iOS builds: this build targets Windows only, so the macOS and iOS jobs were spending runner time without producing artifacts anyone could use.
 - Disabled the auto-updater and the cloud release publishing in this build: they were still pointed at the upstream project's update feed and signing key, so a newer upstream release would have been offered as an update and installed over this one. Auto-updates return once this fork has its own signing key and update endpoint.
 
 ## [0.4.0] - 2026-10-12
@@ -231,7 +239,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Waveform display with cue point management
 - Search and filter across entire collection
 
-[Unreleased]: https://github.com/blackboxaudio/crate/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/blackboxaudio/crate/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/blackboxaudio/crate/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/blackboxaudio/crate/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/blackboxaudio/crate/compare/v0.2.9...v0.3.0
 [0.2.9]: https://github.com/blackboxaudio/crate/compare/v0.2.8...v0.2.9
