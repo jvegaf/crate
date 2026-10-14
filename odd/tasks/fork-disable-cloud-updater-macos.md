@@ -38,8 +38,8 @@ it may travel in a PR to `blackboxaudio/crate`.
 - [x] X1 (unplanned) Fail the `#[ignore]d` `appcheck::tests::debug_token_probe` fast with the real reason:
       it asserts `CLOUD_SYNC_ENABLED` so a manual run does not report the misleading
       "cloud_sync.config.json present" message once the switch is off
-- [ ] Merge `traktor-nml-import` into `dev` (10 commits, see the divergence below)
-- [ ] Bump the minor version (0.4.0 → 0.5.0) and tag `v0.5.0`
+- [x] Merge `traktor-nml-import` into `dev` (10 commits) — `5b1b0e4`
+- [x] Bump the minor version (0.4.0 → 0.5.0) and tag `v0.5.0` — `bcb1274`, annotated tag `v0.5.0`
 
 ## Decisions
 
@@ -103,6 +103,19 @@ release rebuild, 1m44s). BOOTED. Verbatim evidence from the run log:
   matches: dropping `updater:default` produces no ACL failure, and nothing calls the updater IPC anymore
 - no `Fatal:` / `failed to run Tauri application` / `panicked at`
 
+**Post-merge gates (2026-10-14) on `5b1b0e4` — 10/10 PASS**
+
+The merge brought 48 files and +5,249 lines, so every gate was re-run on the merged tree rather than
+assumed to still hold. All of the nine above pass again, plus:
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Rust tests (merged) | `cargo test --features desktop` | PASS — **616 passed, 0 failed, 11 ignored** (+1 doc-test ignored) |
+| Release build | `cargo build --release --features desktop` | PASS — 1m52s, `target/release/crate-app`, 64,229,936 bytes |
+
+`616 passed` is the number recorded for the traktor branch before the merge, so the merge added no
+regression to the pre-merge baseline of 519.
+
 **Workflow YAML (parsed, not eyeballed)** — all three files load; `build.matrix` reduces to
 `windows-latest` only in `ci.build.yml`, `test.release.yml` and `cd.release.yml`; `jobs.ios.if` parses
 as the boolean `false` in `ci.build.yml` and `cd.release.yml`. `cd.release.yml`'s `release` job guard
@@ -110,29 +123,57 @@ does accept `needs.ios.result == 'skipped'` (read at `cd.release.yml:564`), so d
 
 **Residual risk**
 
-- clippy was a cache hit; the Rust edits are four lines in `config.rs` plus a test-only `assert!`, so a
-  cold re-lint is not worth a `cargo clean` on a 2.8 GB release target.
+- clippy was a cache hit **before the merge**; the post-merge run re-compiled (`9.76s`) and reports 0
+  warnings under `-D warnings`, so the merged tree is genuinely re-linted. The pre-merge cache hit
+  covered only a four-line `config.rs` change plus a test-only `assert!`.
+- The merged tree was **never booted**. The app runs on Windows and booting it here would apply
+  migration 19 to the user's dev database, so the boot test was kept for the ACL change it was written
+  for (pre-merge) and deliberately skipped after the merge. `cargo test` exercises the migrations on
+  throwaway databases, and the app was not the thing that changed in the merge.
 - Mobile is now unguarded in CI (`ci.build.yml`'s `ios` job is `if: false`) and the iOS cross-compile
   check cannot run on the user's Windows box. Mobile breakage will not be caught until the job returns.
+- Nothing is pushed, so `cd.release.yml` has not run for `v0.5.0` and no GitHub Release exists yet.
 
 ## Commit evidence
 
-All three code commits are on `dev`, verified with `git show --stat` to touch only the intended files:
+All commits are on `dev`, each verified with `git show --stat` to touch only the intended files:
 
 | Commit | Subject | Files | Task items |
 | --- | --- | --- | --- |
 | `6bfeced` | chore(fork): disable cloud sync behind a one-line switch | 5 (+48/−15) | C1, C2, C3, C4, X1 |
 | `bdbead3` | chore(fork): disable the auto-updater and drop its capability | 4 (+25/−16) | U1, U2, U3, U4 |
 | `47676ea` | chore(fork): drop the macOS and iOS build and release jobs | 3 (+15/−5) | M1, M2, M3 |
+| `9288bcb` | docs(odd): record the fork cloud/updater/macOS trim | 1 | this file |
+| `5b1b0e4` | Merge branch 'traktor-nml-import' into dev | 48 (+5249/−26) | merge |
+| `bcb1274` | chore: release `v0.5.0` | 6 (+15/−6) | bump |
 
-The `docs(odd)` commit that carries this file follows the three above. Each commit body names the exact
-revert. Nothing is pushed: `origin/dev` is 5 commits behind `dev` before this work, and the merge and the
-release commit add more.
+Every commit body names the exact revert. The merge was conflict-free: the traktor side and the four
+commits above share **zero** touched files (`comm -12` on the two file lists is empty).
+
+## Release
+
+- `bcb1274` = `chore: release \`v0.5.0\``, the same six-file shape as the `d72d9f6` precedent
+  (`CHANGELOG.md`, `package.json`, `src-tauri/{Cargo.lock,Cargo.toml,tauri.conf.json,tauri.dev.conf.json}`).
+- `node scripts/version.js minor` wrote 0.5.0 into `package.json`, `Cargo.toml`, `tauri.conf.json` and
+  `0.5.0-dev` into `tauri.dev.conf.json`; `tauri.staging.conf.json` inherits by design.
+- `cargo update --workspace` moved exactly one line (`crate-app 0.4.0 -> 0.5.0`); 156 dependencies
+  untouched.
+- `yarn changelog:prepare 0.5.0` moved `[Unreleased]` into `## [0.5.0] - 2026-10-14`. Three entries
+  were authored by hand before preparing, because the tool only moves `[Unreleased]` and the merged
+  Traktor feature had no entry of its own: the NML import under **Added**, and the cloud switch plus
+  the dropped macOS/iOS builds under **Changed**.
+- `git tag -a v0.5.0 -m 'Release \`v0.5.0\`'` → annotated tag object pointing at `bcb1274`, matching
+  the `v0.4.0` tag shape.
+- **Nothing was pushed.** `scripts/tag.sh` was deliberately not used: it chains a push to `origin` and
+  would have triggered `cd.release.yml`. `origin/dev` is now well behind `dev`, and pushing `dev` plus
+  the `v0.5.0` tag remains the user's decision.
 
 ## Left out of scope (deliberate)
 
 - `odd/` scaffolding stays on `dev`, never on a feature branch (AGENTS.md §1.2). Nothing here is a
   candidate for a PR to `blackboxaudio/crate`.
 - Nothing was deleted, so every item above is a one-line revert.
+- The 12 Traktor follow-ups listed in `odd/tasks/traktor-nml-import.md` are untouched; they are the
+  merge's own backlog, not this feature's.
 - `scripts/tag.sh` must NOT be used for the version bump — it chains a push to `origin` (memory:
   `crate/fork-release-flow`). Replicate its steps 1–4 by hand.
