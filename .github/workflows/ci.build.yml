@@ -12,7 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os:
+          # TEMPORARY (fork): macOS build disabled — uncomment to restore.
+          # - macos-latest
+          - windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -60,6 +63,8 @@ jobs:
   # that leaks into shared code can't silently break the mobile build. The feature flags from
   # #141 exclude desktop-only code via `--no-default-features --features mobile`.
   ios:
+    # TEMPORARY (fork): the iOS compile gate is disabled — remove this line to restore.
+    if: false
     runs-on: macos-latest
     defaults:
       run:

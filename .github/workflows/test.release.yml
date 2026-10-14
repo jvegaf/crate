@@ -20,8 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            artifact_name: macos
+          # TEMPORARY (fork): macOS build disabled — uncomment to restore.
+          # - os: macos-latest
+          #   artifact_name: macos
           - os: windows-latest
             artifact_name: windows
     steps:

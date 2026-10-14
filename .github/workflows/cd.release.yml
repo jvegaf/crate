@@ -129,8 +129,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            artifact_name: macos
+          # TEMPORARY (fork): macOS build disabled — uncomment to restore.
+          # - os: macos-latest
+          #   artifact_name: macos
           - os: windows-latest
             artifact_name: windows
     steps:
@@ -383,6 +384,9 @@ jobs:
   ios:
     name: Build iOS (TestFlight)
     needs: validate
+    # TEMPORARY (fork): iOS release disabled — remove this line to restore. The `release` job's
+    # guard accepts `needs.ios.result == 'skipped'`, so a disabled iOS job does not block it.
+    if: false
     # macos-latest gives macOS Tahoe + Xcode 26, REQUIRED: App Store Connect rejects uploads built
     # with anything older than the iOS 26 SDK. Xcode 26's `$(TOOLCHAIN_DIR)` resolves to a Metal
     # cryptex toolchain that lacks the Swift back-compat libs (which broke linking Tauri's Swift
