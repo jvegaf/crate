@@ -29,6 +29,7 @@
 		updateAvailable,
 		expandedReleaseIds,
 	} from '$lib/stores'
+	import { UPDATER_ENABLED } from '$lib/stores/updater'
 	import { toastStore } from '$shared/stores/toast'
 	import { discoveryPlaylistStore } from '$shared/stores/discoveryPlaylist'
 	import { translate } from '$shared/i18n'
@@ -624,8 +625,10 @@
 
 <!-- Update Modal — held back while onboarding or the feature tour is up: the modal is a
      native showModal() dialog, which makes those overlays inert (their Skip / Maybe later
-     buttons stop working) while the dialog itself sits under the layout's pointer-events: none. -->
-{#if $updateAvailable && !$uiStore.isOnboarding && !$uiStore.isWizardTourActive}
+     buttons stop working) while the dialog itself sits under the layout's pointer-events: none.
+     TEMPORARY fork gate: `UPDATER_ENABLED` is false in this fork, so the modal never mounts;
+     flip the constant back to `true` to restore it. -->
+{#if UPDATER_ENABLED && $updateAvailable && !$uiStore.isOnboarding && !$uiStore.isWizardTourActive}
 	<UpdateModal open={true} onClose={() => updaterStore.dismiss()} />
 {/if}
 

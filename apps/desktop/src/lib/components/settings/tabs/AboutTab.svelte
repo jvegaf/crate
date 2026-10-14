@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button, Text } from '$lib/components/common'
 	import { appInfo } from '$lib/stores/app'
-	import { updaterStore } from '$lib/stores/updater'
+	import { updaterStore, UPDATER_ENABLED } from '$lib/stores/updater'
 	import { translate } from '$shared/i18n'
 
 	const statusLabel = $derived.by(() => {
@@ -42,15 +42,18 @@
 		</div>
 	</section>
 
-	<!-- Updates Section -->
-	<section>
-		<Text variant="header-3" class="mb-4">{$translate('settings.about.updates')}</Text>
-		<div class="flex items-center justify-between">
-			<Text size="sm" color="secondary" as="span">{statusLabel}</Text>
-			<!-- Updater disabled in this fork: no cloud release channel is configured yet. -->
-			<Button size="sm" variant="secondary" disabled>
-				{$translate('settings.about.checkForUpdates')}
-			</Button>
-		</div>
-	</section>
+	<!-- Updates Section — TEMPORARY fork gate: hidden while `UPDATER_ENABLED` is false (no release
+	     channel in this fork). Flip the constant back to `true` to restore the section. -->
+	{#if UPDATER_ENABLED}
+		<section>
+			<Text variant="header-3" class="mb-4">{$translate('settings.about.updates')}</Text>
+			<div class="flex items-center justify-between">
+				<Text size="sm" color="secondary" as="span">{statusLabel}</Text>
+				<!-- Updater disabled in this fork: no cloud release channel is configured yet. -->
+				<Button size="sm" variant="secondary" disabled>
+					{$translate('settings.about.checkForUpdates')}
+				</Button>
+			</div>
+		</section>
+	{/if}
 </div>

@@ -5,6 +5,9 @@ import { appVersion, isDev } from '$lib/stores/app'
 import { toastStore } from '$shared/stores/toast'
 import { translate } from '$shared/i18n'
 
+/** TEMPORARY fork switch: the updater has no release channel in this fork. Flip to `true` to restore it. */
+export const UPDATER_ENABLED = false
+
 // =============================================================================
 // Types
 // =============================================================================
