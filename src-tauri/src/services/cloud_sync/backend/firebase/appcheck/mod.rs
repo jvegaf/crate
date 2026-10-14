@@ -408,6 +408,13 @@ mod tests {
     async fn debug_token_probe() {
         use crate::services::cloud_sync::config::load_cloud_config;
 
+        // This probe needs a live, configured backend, but the fork ships cloud sync off. Fail
+        // loudly with the real reason instead of the misleading "config present" message below.
+        assert!(
+            crate::services::cloud_sync::config::CLOUD_SYNC_ENABLED,
+            "cloud sync is disabled by the fork switch `CLOUD_SYNC_ENABLED`; flip it back on before running this probe"
+        );
+
         let config = load_cloud_config(None)
             .expect("read cloud_sync.config.json")
             .expect("cloud_sync.config.json present with the 5 core fields");

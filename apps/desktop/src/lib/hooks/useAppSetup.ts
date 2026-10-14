@@ -41,7 +41,7 @@ import { firstPlayablePreviewIndex } from '$shared/stores/playbackQueue'
 import { tagFilterMode } from '$shared/stores/ui'
 import { recentlyToggledMixedTags } from '$shared/stores/ui'
 import { syncStore } from '$lib/stores/sync'
-import { cloudSyncStore } from '$shared/stores/cloudSync'
+import { cloudSyncStore, CLOUD_SYNC_ENABLED } from '$shared/stores/cloudSync'
 import { toastStore } from '$shared/stores/toast'
 import { exportStore } from '$lib/stores/export'
 import { dismissSplash } from '$lib/stores/splash'
@@ -692,10 +692,14 @@ export function createAppSetup(config: AppSetupConfig): AppSetupResult {
 		}
 
 		// Cloud sync: load initial status + poll for updates so the indicator stays current,
-		// and listen for override-conflict toasts.
-		await cloudSyncStore.load()
-		cloudSyncStore.startPolling()
-		cloudSyncStore.startOverrideListener()
+		// and listen for override-conflict toasts. TEMPORARY fork gate: the always-on polling
+		// stays off while the fork keeps cloud disabled (`CLOUD_SYNC_ENABLED`); the backend
+		// constant alone already hides the UI, this stops the loop and the listeners.
+		if (CLOUD_SYNC_ENABLED) {
+			await cloudSyncStore.load()
+			cloudSyncStore.startPolling()
+			cloudSyncStore.startOverrideListener()
+		}
 
 		dismissSplash()
 
@@ -713,8 +717,10 @@ export function createAppSetup(config: AppSetupConfig): AppSetupResult {
 			unsubscribePreviewContext()
 			playbackQueue.setLibraryPlayableFilter(null)
 			exportStore.stopListening()
-			cloudSyncStore.stopPolling()
-			cloudSyncStore.stopOverrideListener()
+			if (CLOUD_SYNC_ENABLED) {
+				cloudSyncStore.stopPolling()
+				cloudSyncStore.stopOverrideListener()
+			}
 		}
 	}
 

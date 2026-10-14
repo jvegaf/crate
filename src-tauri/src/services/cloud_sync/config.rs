@@ -28,6 +28,14 @@ use crate::error::{CrateError, Result};
 
 const CONFIG_FILE_NAME: &str = "cloud_sync.config.json";
 
+/// TEMPORARY fork switch: cloud sync is off in this fork. Flip to `true` to restore it;
+/// everything else stays in the tree so the revert is this one line.
+///
+/// Returning `None` from `load_cloud_config` makes `CloudSyncState::is_available()` false, which
+/// puts the frontend in phase `disabled` and therefore hides the CloudSync settings tab, the
+/// toolbar indicator and the mobile chip on its own, and skips the startup background loop.
+pub const CLOUD_SYNC_ENABLED: bool = false;
+
 /// Points the app at a Firebase project. Loaded from a gitignored JSON file; cloned
 /// into the Firebase backend and the auth flow.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -166,6 +174,11 @@ impl CloudConfig {
 ///
 /// A missing file is not an error; a present-but-malformed file is.
 pub fn load_cloud_config(app_config_dir: Option<&Path>) -> Result<Option<CloudConfig>> {
+    if !CLOUD_SYNC_ENABLED {
+        log::info!("cloud_sync: disabled by CLOUD_SYNC_ENABLED; cloud sync unavailable");
+        return Ok(None);
+    }
+
     let mut candidates: Vec<PathBuf> = vec![PathBuf::from(CONFIG_FILE_NAME)];
     if let Some(dir) = app_config_dir {
         candidates.push(dir.join(CONFIG_FILE_NAME));

@@ -448,6 +448,9 @@ function createCloudSyncStore() {
 
 export const cloudSyncStore = createCloudSyncStore()
 
+/** TEMPORARY fork switch: mirrors the Rust `CLOUD_SYNC_ENABLED`. Flip both to restore cloud sync. */
+export const CLOUD_SYNC_ENABLED = false
+
 // =============================================================================
 // Derived Stores
 // =============================================================================

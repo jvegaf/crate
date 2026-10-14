@@ -6,7 +6,7 @@
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 	import { initializeI18n, type Language } from '$shared/i18n'
 	import { settingsStore } from '$shared/stores/settings'
-	import { cloudSyncStore } from '$shared/stores/cloudSync'
+	import { cloudSyncStore, CLOUD_SYNC_ENABLED } from '$shared/stores/cloudSync'
 	import { startWebMediaSession } from '$shared/services/webMediaSession'
 	import { startAndroidMediaSession } from '$shared/services/androidMediaSession'
 	import { playerStore, previewInfo } from '$shared/stores/player'
@@ -108,14 +108,18 @@
 	// the battery and iOS/Android freeze the process when backgrounded anyway) — startForegroundSync() runs
 	// one pull-then-push pass on launch and on every foreground (visibilitychange / focus) instead. The
 	// override listener toasts when another device supersedes a local edit. On a build without cloud config
-	// the status stays `disabled` and the chip stays hidden.
+	// the status stays `disabled` and the chip stays hidden. TEMPORARY fork gate: `CLOUD_SYNC_ENABLED` is
+	// false in this fork, so this startup work (load + foreground sync + listeners) is skipped; flip the
+	// constant back to `true` to restore it.
 	onMount(() => {
-		void cloudSyncStore.load()
-		cloudSyncStore.startForegroundSync()
-		void cloudSyncStore.startOverrideListener()
-		return () => {
-			cloudSyncStore.stopForegroundSync()
-			cloudSyncStore.stopOverrideListener()
+		if (CLOUD_SYNC_ENABLED) {
+			void cloudSyncStore.load()
+			cloudSyncStore.startForegroundSync()
+			void cloudSyncStore.startOverrideListener()
+			return () => {
+				cloudSyncStore.stopForegroundSync()
+				cloudSyncStore.stopOverrideListener()
+			}
 		}
 	})
 
