@@ -167,9 +167,10 @@ fn existing_cue_ids(conn: &Connection, track_id: &str) -> Result<Vec<String>> {
 /// Reject cues the `cues` table CHECK constraints would reject, with a clearer message.
 fn validate_cue(cue: &Cue) -> Result<()> {
     if let Some(index) = cue.hot_cue_index {
-        if !(1..=8).contains(&index) {
+        // 0-based, matching Traktor's `HOTCUE` and Pioneer's `hot_cue` byte.
+        if !(0..=7).contains(&index) {
             return Err(CrateError::InvalidOperation(format!(
-                "hot_cue_index must be within 1..=8, got {index}"
+                "hot_cue_index must be within 0..=7, got {index}"
             )));
         }
     }
@@ -491,7 +492,8 @@ mod tests {
     #[test]
     fn hot_index_out_of_range_is_rejected() {
         let service = service_with_track("track-1");
-        for index in [0, 9] {
+        // Slots are 0-based: 0 and 7 are valid, -1 and 8 are not.
+        for index in [-1, 8] {
             let cue = hot("track-1", 1_000, index);
             let err = service
                 .replace_cues_for_track("track-1", vec![cue])

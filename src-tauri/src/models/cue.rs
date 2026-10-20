@@ -39,6 +39,8 @@ pub struct Cue {
     pub position_ms: i64,
     pub cue_type: CueType,
     pub loop_end_ms: Option<i64>,
+    /// 0-based hot-cue slot (`0..=7`), the same base Traktor's `HOTCUE` and Pioneer's
+    /// `hot_cue` byte use. `None` for memory cues and loops.
     pub hot_cue_index: Option<i32>,
     pub name: Option<String>,
     pub color: Option<String>,

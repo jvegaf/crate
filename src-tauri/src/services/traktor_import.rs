@@ -360,7 +360,7 @@ fn mapped_cue_to_model(track_id: &str, mapped: &MappedCue) -> Option<Cue> {
         CueType::Hot => Cue::new_hot(
             track_id.to_string(),
             mapped.position_ms,
-            mapped.hot_cue_index.filter(|i| (1..=8).contains(i))?,
+            mapped.hot_cue_index.filter(|i| (0..=7).contains(i))?,
         ),
         CueType::Loop => Cue::new_loop(
             track_id.to_string(),
@@ -687,7 +687,7 @@ mod tests {
         assert_eq!(cues.len(), 3);
         assert!(cues
             .iter()
-            .any(|cue| cue.cue_type == CueType::Hot && cue.hot_cue_index == Some(1)));
+            .any(|cue| cue.cue_type == CueType::Hot && cue.hot_cue_index == Some(0)));
         assert!(cues.iter().any(|cue| cue.cue_type == CueType::Memory));
         assert!(cues
             .iter()

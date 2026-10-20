@@ -137,6 +137,8 @@ CREATE TABLE playlist_tracks (
 );
 
 -- Cue points
+-- `hot_cue_index` is the 0-based hot-cue slot (`0..=7`), the same base Traktor's
+-- `HOTCUE` and Pioneer's `hot_cue` byte use; NULL for memory cues and loops.
 CREATE TABLE cues (
     id TEXT PRIMARY KEY,
     track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,

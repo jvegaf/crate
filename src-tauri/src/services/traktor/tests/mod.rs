@@ -63,16 +63,16 @@ fn grid_is_detected_by_type_never_by_name() {
 }
 
 #[test]
-fn hot_cue_hotcue_zero_maps_to_one_based_index() {
+fn hot_cue_keeps_traktor_zero_based_slot() {
     let plan = fixture_plan();
     let hot = track(&plan, "Grid & Hot")
         .cues
         .iter()
         .find(|c| c.cue_type == crate::models::CueType::Hot)
         .expect("hot cue mapped");
-    // START="52.764416" rounds to 53; HOTCUE="0" becomes 1 (never the raw 0).
+    // START="52.764416" rounds to 53; HOTCUE="0" stays 0 (Traktor's slot base).
     assert_eq!(hot.position_ms, 53);
-    assert_eq!(hot.hot_cue_index, Some(1));
+    assert_eq!(hot.hot_cue_index, Some(0));
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn loop_maps_length_and_hot_index() {
     assert_eq!(lp.position_ms, 146487);
     // round(START + LEN) = round(161487.206...) = 161487
     assert_eq!(lp.loop_end_ms, Some(161487));
-    assert_eq!(lp.hot_cue_index, Some(2));
+    assert_eq!(lp.hot_cue_index, Some(1));
 }
 
 #[test]

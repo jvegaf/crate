@@ -20,7 +20,7 @@ pub struct MappedCue {
     pub position_ms: i64,
     pub cue_type: CueType,
     pub loop_end_ms: Option<i64>,
-    /// 1-based slot (`1..=8`), never Traktor's raw 0-based value.
+    /// 0-based slot (`0..=7`), the same base as Traktor's raw `HOTCUE`.
     pub hot_cue_index: Option<i32>,
     pub name: Option<String>,
 }
@@ -189,9 +189,11 @@ fn round_ms(value: f64) -> i64 {
     value.round() as i64
 }
 
-/// Traktor `HOTCUE` is 0-based; Crate's `hot_cue_index` is 1-based (`1..=8`).
+/// Traktor `HOTCUE` is 0-based (`0` = slot 1 on the hardware). Crate stores the same
+/// 0-based slot, so the value passes through unchanged; only the "no slot" sentinel
+/// (`-1`) is dropped.
 fn hot_cue_index(hot_cue: i32) -> Option<i32> {
-    (hot_cue >= 0).then_some(hot_cue + 1)
+    (hot_cue >= 0).then_some(hot_cue)
 }
 
 /// Deterministic ordering rank used for cues with the same position.

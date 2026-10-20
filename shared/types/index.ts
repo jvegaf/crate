@@ -1365,7 +1365,7 @@ export interface TraktorMappedCue {
 	position_ms: number
 	cue_type: CueType
 	loop_end_ms: number | null
-	/** 1-based slot (`1..=8`), never Traktor's raw 0-based value. */
+	/** 0-based slot (`0..=7`), the same base as Traktor's `HOTCUE`. */
 	hot_cue_index: number | null
 	name: string | null
 }
