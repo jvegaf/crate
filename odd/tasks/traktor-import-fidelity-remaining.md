@@ -103,7 +103,7 @@ Distributions that pin the transforms:
 | T4 | done | `c4317b2` — `NmlTrack` + parser + mapper + D11 write path; `info_fields_map_onto_crate_columns` |
 | T5 | done | `c4317b2` — `ImportReport.not_persisted` / `mapped_fields`; mirrored in `shared/types/index.ts` |
 | T6 | done | `c4317b2` — `real_collection` extended; passes on the real 264-entry file |
-| T3 | out of scope | deferred to a Windows machine |
+| T3 | not started | out of scope here; see `odd/tasks/traktor-import-t3-windows-volume.md` |
 
 Baseline: `cargo test --features desktop` → 616 passed, 0 failed, 11 ignored.
 `real_collection --ignored` → 1 passed.

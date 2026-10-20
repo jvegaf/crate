@@ -159,7 +159,7 @@ so a chain strategy will be requested before the second slice, not sprung after 
 | --- | --- | --- |
 | T1 | done | `8f7ef31` (continued in `odd/tasks/traktor-import-fidelity-remaining.md`) |
 | T2 | done | `8f7ef31` |
-| T3 | out of scope | deferred to a Windows machine |
+| T3 | not started | deferred to a Windows machine — tasks, evidence baseline and the open decision are in `odd/tasks/traktor-import-t3-windows-volume.md` |
 | T4 | done | `c4317b2` |
 | T5 | done | `c4317b2` |
 | T6 | done | `c4317b2` |
