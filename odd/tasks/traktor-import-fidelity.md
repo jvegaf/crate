@@ -157,13 +157,16 @@ so a chain strategy will be requested before the second slice, not sprung after 
 
 | Task | State | Evidence |
 | --- | --- | --- |
-| T1 | not started | — |
-| T2 | not started | — |
-| T3 | not started | — |
-| T4 | not started | — |
-| T5 | not started | — |
-| T6 | not started | — |
+| T1 | done | `8f7ef31` (continued in `odd/tasks/traktor-import-fidelity-remaining.md`) |
+| T2 | done | `8f7ef31` |
+| T3 | out of scope | deferred to a Windows machine |
+| T4 | done | `c4317b2` |
+| T5 | done | `c4317b2` |
+| T6 | done | `c4317b2` |
 | T7 | done | `628ffe5`; 616 passed / 0 failed; rustfmt + clippy `-D warnings` + eslint + prettier + svelte-check clean |
+
+The continued slice (T1/T2/T4/T5/T6) is tracked in
+`odd/tasks/traktor-import-fidelity-remaining.md`, which carries decisions D7-D12.
 
 Baseline captured before any edit: `cargo test --features desktop` → **616 passed, 0 failed,
 11 ignored**. `cargo test --features desktop real_collection -- --ignored` → **1 passed**
