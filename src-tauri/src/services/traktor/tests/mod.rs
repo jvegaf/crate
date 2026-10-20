@@ -43,7 +43,7 @@ fn expected_path(volume: &str, segments: &[&str], file: &str) -> String {
 fn parses_the_collection_and_playlist_tree() {
     let doc = parser::parse_str(FIXTURE).expect("fixture must parse");
     assert_eq!(doc.version.as_deref(), Some("20"));
-    assert_eq!(doc.tracks.len(), 7);
+    assert_eq!(doc.tracks.len(), 8);
     // `$ROOT` is transparent: its children are the parsed forest.
     assert_eq!(doc.playlists.len(), 2);
     assert_eq!(doc.playlists[0].kind, model::NmlNodeKind::Smartlist);
@@ -70,8 +70,8 @@ fn hot_cue_keeps_traktor_zero_based_slot() {
         .iter()
         .find(|c| c.cue_type == crate::models::CueType::Hot)
         .expect("hot cue mapped");
-    // START="52.764416" rounds to 53; HOTCUE="0" stays 0 (Traktor's slot base).
-    assert_eq!(hot.position_ms, 53);
+    // START="52.764416" keeps full precision; HOTCUE="0" stays 0 (Traktor's slot base).
+    assert_eq!(hot.position_ms, 52.764416);
     assert_eq!(hot.hot_cue_index, Some(0));
 }
 
@@ -84,7 +84,7 @@ fn memory_cue_with_hotcue_minus_one_has_no_index() {
         .find(|c| c.name.as_deref() == Some("Memory"))
         .expect("memory cue mapped");
     assert_eq!(memory.cue_type, crate::models::CueType::Memory);
-    assert_eq!(memory.position_ms, 60);
+    assert_eq!(memory.position_ms, 60.100000);
     assert_eq!(memory.hot_cue_index, None);
     assert_eq!(memory.loop_end_ms, None);
 }
@@ -97,9 +97,9 @@ fn loop_maps_length_and_hot_index() {
         .iter()
         .find(|c| c.cue_type == crate::models::CueType::Loop)
         .expect("loop mapped");
-    assert_eq!(lp.position_ms, 146487);
-    // round(START + LEN) = round(161487.206...) = 161487
-    assert_eq!(lp.loop_end_ms, Some(161487));
+    assert_eq!(lp.position_ms, 146487.200771);
+    // START + LEN as floats; the integer conversion happens at the DB boundary.
+    assert_eq!(lp.loop_end_ms, Some(161487.20613500001));
     assert_eq!(lp.hot_cue_index, Some(1));
 }
 
@@ -131,7 +131,7 @@ fn duplicate_cue_identity_is_collapsed() {
     assert_eq!(
         eps.cues
             .iter()
-            .filter(|c| c.position_ms == 40 && c.cue_type == crate::models::CueType::Memory)
+            .filter(|c| c.position_ms == 40.0 && c.cue_type == crate::models::CueType::Memory)
             .count(),
         1
     );
@@ -143,8 +143,8 @@ fn duplicate_cue_identity_is_collapsed() {
 fn cues_are_ordered_by_position_then_type_then_slot() {
     let plan = fixture_plan();
     let cues = &track(&plan, "Grid & Hot").cues;
-    let positions: Vec<i64> = cues.iter().map(|c| c.position_ms).collect();
-    assert_eq!(positions, vec![53, 60, 146487]);
+    let positions: Vec<f64> = cues.iter().map(|c| c.position_ms).collect();
+    assert_eq!(positions, vec![52.764416, 60.100000, 146487.200771]);
 }
 
 #[test]
@@ -288,24 +288,47 @@ fn playlist_counts_ignore_the_virtual_root() {
 fn totals_partition_cues_and_grids() {
     let plan = fixture_plan();
     let t = &plan.report.totals;
-    assert_eq!(t.tracks, 7);
-    assert_eq!(t.grids, 5);
-    assert_eq!(t.hot_cues, 1);
+    assert_eq!(t.tracks, 8);
+    assert_eq!(t.grids, 6);
+    assert_eq!(t.hot_cues, 3);
     assert_eq!(t.memory_cues, 6);
     assert_eq!(t.loops, 1);
-    assert_eq!(t.cues, 8);
+    assert_eq!(t.cues, 10);
 }
 
 #[test]
-fn position_ms_rounds_rather_than_truncates() {
+fn mixed_precision_cues_keep_distinct_positions() {
+    let plan = fixture_plan();
+    let cues = &track(&plan, "Mixed Precision").cues;
+    // The AutoGrid is read as the grid, never as a cue.
+    assert_eq!(
+        track(&plan, "Mixed Precision").grid_position_ms,
+        Some(52.496647)
+    );
+    assert_eq!(track(&plan, "Mixed Precision").grid_bpm, Some(129.000046));
+    // Two hot cues: one shares the grid's exact timestamp, the other is multi-second.
+    // Both must survive as distinct positions instead of collapsing into one rounded ms.
+    assert_eq!(cues.len(), 2, "both hot cues must survive");
+    let hot0 = cues.iter().find(|c| c.hot_cue_index == Some(0)).unwrap();
+    let hot1 = cues.iter().find(|c| c.hot_cue_index == Some(1)).unwrap();
+    assert_eq!(hot0.position_ms, 52.496647);
+    assert_eq!(hot1.position_ms, 14883.715649);
+    assert_ne!(
+        hot0.position_ms, hot1.position_ms,
+        "the pair must not collapse to one position"
+    );
+}
+
+#[test]
+fn cue_positions_keep_full_float_precision() {
     let plan = fixture_plan();
     let intro = track(&plan, "No Grid")
         .cues
         .iter()
         .find(|c| c.name.as_deref() == Some("Intro"))
         .unwrap();
-    // START="5.500000": truncation would give 5, f64::round gives 6.
-    assert_eq!(intro.position_ms, 6);
+    // START="5.500000": the mapper keeps the exact value; no rounding, no truncation.
+    assert_eq!(intro.position_ms, 5.5);
 }
 
 #[test]
@@ -313,7 +336,7 @@ fn report_serializes_with_the_expected_shape() {
     let plan = fixture_plan();
     let value = serde_json::to_value(&plan.report).expect("report serializes");
     assert_eq!(value["nml_version"], "20");
-    assert_eq!(value["totals"]["tracks"], 7);
+    assert_eq!(value["totals"]["tracks"], 8);
     assert_eq!(value["playlists_by_type"]["smartlists"], 1);
     assert!(value["warnings"]["unsupported_cue_types"].is_array());
 }

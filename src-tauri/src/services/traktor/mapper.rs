@@ -15,11 +15,19 @@ use super::model::{NmlCue, NmlDocument, NmlNodeKind, NmlPlaylistNode, NmlTrack};
 use super::path;
 
 /// A cue as it would be written to Crate's `cues` table.
+///
+/// Positions keep Traktor's full `f64` millisecond precision. Crate's persisted
+/// `cues.position_ms` / `loop_end_ms` columns are `INTEGER`, so the lossy rounding
+/// happens exactly once at that boundary (see `traktor_import::round_ms_to_column`),
+/// never here: cue identity, ordering and de-duplication must compare the precise
+/// value or two distinct cues that share a rounded position would collapse.
 #[derive(Debug, Clone, Serialize)]
 pub struct MappedCue {
-    pub position_ms: i64,
+    /// `START`, full float milliseconds as Traktor wrote it.
+    pub position_ms: f64,
     pub cue_type: CueType,
-    pub loop_end_ms: Option<i64>,
+    /// `START + LEN` for a loop, full float milliseconds.
+    pub loop_end_ms: Option<f64>,
     /// 0-based slot (`0..=7`), the same base as Traktor's raw `HOTCUE`.
     pub hot_cue_index: Option<i32>,
     pub name: Option<String>,
@@ -36,7 +44,8 @@ pub struct MappedTrack {
     /// Canonical Camelot, e.g. `"6B"`. Never the raw `INFO KEY`.
     pub key: Option<String>,
     pub grid_bpm: Option<f64>,
-    pub grid_position_ms: Option<i64>,
+    /// Position of the grid's first beat, full float milliseconds as Traktor wrote it.
+    pub grid_position_ms: Option<f64>,
     pub cues: Vec<MappedCue>,
 }
 
@@ -106,7 +115,8 @@ pub struct UnresolvedKeyWarning {
 pub struct UnsupportedCueTypeWarning {
     pub file_path: String,
     pub traktor_type: i32,
-    pub position_ms: i64,
+    /// Full float milliseconds, matching [`MappedCue::position_ms`].
+    pub position_ms: f64,
 }
 
 /// A playlist `PRIMARYKEY` that does not resolve to a parsed track.
@@ -180,15 +190,6 @@ fn map_document(document: &NmlDocument) -> ImportPlan {
     }
 }
 
-/// Round float milliseconds to the `INTEGER` `position_ms` Crate stores.
-///
-/// Traktor writes sub-millisecond precision (`146487.200771`); the column is an
-/// integer, so the fractional part is rounded (not truncated) and the sub-ms
-/// loss is accepted for this slice — see the feature brief's open decision 4.
-fn round_ms(value: f64) -> i64 {
-    value.round() as i64
-}
-
 /// Traktor `HOTCUE` is 0-based (`0` = slot 1 on the hardware). Crate stores the same
 /// 0-based slot, so the value passes through unchanged; only the "no slot" sentinel
 /// (`-1`) is dropped.
@@ -206,14 +207,16 @@ fn cue_rank(cue_type: &CueType) -> u8 {
 }
 
 fn map_cue(cue: &NmlCue, file_path: &str, warnings: &mut ImportWarnings) -> Option<MappedCue> {
-    let position_ms = round_ms(cue.start_ms);
+    // Keep Traktor's full float precision here: identity and ordering depend on it.
+    let position_ms = cue.start_ms;
     match cue.traktor_type {
         // Beat-grid marker: read as the grid, never emitted as a Crate cue.
         4 => None,
         5 => Some(MappedCue {
             position_ms,
             cue_type: CueType::Loop,
-            loop_end_ms: Some(round_ms(cue.start_ms + cue.length_ms)),
+            // `START + LEN` as floats; the integer conversion happens at the DB boundary.
+            loop_end_ms: Some(cue.start_ms + cue.length_ms),
             hot_cue_index: hot_cue_index(cue.hot_cue),
             name: cue.name.clone(),
         }),
@@ -296,17 +299,31 @@ fn map_track(track: &NmlTrack, report: &mut ImportReport) -> MappedTrack {
         }
     }
     // DISPL_ORDER is 0 for every real cue, so order by (position, type, slot).
-    cues.sort_by_key(|cue| {
-        (
-            cue.position_ms,
-            cue_rank(&cue.cue_type),
-            cue.hot_cue_index.unwrap_or(-1),
-        )
+    // `f64` is not `Ord`, so order through `partial_cmp` on the precise value; the
+    // `TotalOrder` fallback only fires for a NaN position, which a real cue never has.
+    cues.sort_by(|a, b| {
+        a.position_ms
+            .partial_cmp(&b.position_ms)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| cue_rank(&a.cue_type).cmp(&cue_rank(&b.cue_type)))
+            .then_with(|| {
+                a.hot_cue_index
+                    .unwrap_or(-1)
+                    .cmp(&b.hot_cue_index.unwrap_or(-1))
+            })
     });
-    // S1 guarantees cue identity as (position_ms, type, hot_cue_index).
+    // S1 guarantees cue identity as (position_ms, type, hot_cue_index). Identity uses
+    // the exact `f64` bits, so two cues at the same precise position collapse but the
+    // `Paseando` `52.496647` grid + hot-cue pair no longer share a rounded position.
     let before = cues.len();
-    let mut seen: HashSet<(i64, u8, Option<i32>)> = HashSet::new();
-    cues.retain(|cue| seen.insert((cue.position_ms, cue_rank(&cue.cue_type), cue.hot_cue_index)));
+    let mut seen: HashSet<(u64, u8, Option<i32>)> = HashSet::new();
+    cues.retain(|cue| {
+        seen.insert((
+            cue.position_ms.to_bits(),
+            cue_rank(&cue.cue_type),
+            cue.hot_cue_index,
+        ))
+    });
     report.warnings.collapsed_cue_duplicates += before - cues.len();
 
     MappedTrack {
@@ -317,7 +334,7 @@ fn map_track(track: &NmlTrack, report: &mut ImportReport) -> MappedTrack {
         bpm: track.tempo_bpm,
         key,
         grid_bpm: grid.map(|grid| grid.bpm),
-        grid_position_ms: grid.map(|grid| round_ms(grid.position_ms)),
+        grid_position_ms: grid.map(|grid| grid.position_ms),
         cues,
     }
 }

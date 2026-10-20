@@ -339,33 +339,52 @@ fn is_internal_playlist(name: &str) -> bool {
     matches!(name, "_LOOPS" | "_RECORDINGS")
 }
 
+/// Round a mapped float millisecond value to the `INTEGER` Crate column that stores it.
+///
+/// The mapper deliberately keeps Traktor's full `f64` precision so cue identity,
+/// ordering and de-duplication compare the precise value (a `52.496647` grid and a
+/// hot cue at the same timestamp must not collapse). Crate's `cues.position_ms`,
+/// `cues.loop_end_ms` and `tracks.grid_anchor_ms` are `INTEGER`, so this is the ONE
+/// place the fractional part is dropped — at the persistence boundary, never inside
+/// the mapper.
+fn round_ms_to_column(value: f64) -> i64 {
+    value.round() as i64
+}
+
 /// The mapper's grid is a pair, and Crate stores it as a `(bpm, anchor, source)` triple.
-/// Both fields must be present; a partial grid is never written.
+/// Both fields must be present; a partial grid is never written. The anchor is rounded
+/// to the `INTEGER` column by [`round_ms_to_column`].
 fn grid_triple(track: &MappedTrack) -> Option<(f64, i64, &'static str)> {
     match (track.grid_bpm, track.grid_position_ms) {
-        (Some(bpm), Some(anchor_ms)) => Some((bpm, anchor_ms, GRID_SOURCE_TRAKTOR)),
+        (Some(bpm), Some(anchor_ms)) => {
+            Some((bpm, round_ms_to_column(anchor_ms), GRID_SOURCE_TRAKTOR))
+        }
         _ => None,
     }
 }
 
 /// Convert one mapped Traktor cue into a Crate [`Cue`].
 ///
-/// The mapper already guarantees the type-specific fields (a `Hot` cue carries a 1-based
-/// slot, a `Loop` carries an end after its start). The `?` guards are defensive: a future
-/// mapper regression drops one cue instead of aborting the whole import inside
-/// `replace_cues_for_track`'s validation or inventing a value.
+/// The mapper already guarantees the type-specific fields (a `Hot` cue carries a
+/// 0-based slot, a `Loop` carries an end after its start). The `?` guards are
+/// defensive: a future mapper regression drops one cue instead of aborting the whole
+/// import inside `replace_cues_for_track`'s validation or inventing a value.
+///
+/// Positions arrive as full-precision `f64` and are rounded once here, at the DB
+/// boundary ([`round_ms_to_column`]).
 fn mapped_cue_to_model(track_id: &str, mapped: &MappedCue) -> Option<Cue> {
+    let position_ms = round_ms_to_column(mapped.position_ms);
     let mut cue = match mapped.cue_type {
-        CueType::Memory => Cue::new_memory(track_id.to_string(), mapped.position_ms),
+        CueType::Memory => Cue::new_memory(track_id.to_string(), position_ms),
         CueType::Hot => Cue::new_hot(
             track_id.to_string(),
-            mapped.position_ms,
+            position_ms,
             mapped.hot_cue_index.filter(|i| (0..=7).contains(i))?,
         ),
         CueType::Loop => Cue::new_loop(
             track_id.to_string(),
-            mapped.position_ms,
-            mapped.loop_end_ms.filter(|end| *end > mapped.position_ms)?,
+            position_ms,
+            round_ms_to_column(mapped.loop_end_ms.filter(|end| *end > mapped.position_ms)?),
         ),
     };
     cue.name = mapped.name.clone();

@@ -10,9 +10,14 @@
   Camelot / note-name INFO KEY values, XML entities and a typographic apostrophe
   in FILE names, a nested FOLDER, a SMARTLIST with SEARCH_EXPRESSION, and
   PRIMARYKEY playlist references (one of which intentionally does not resolve).
+
+  The final entry ("Mixed Precision") pins T1: a sub-second TYPE="4" grid and a
+  TYPE="0" hot cue share `START="52.496647"`, and a second hot cue sits at
+  `14883.715649`. Both hot cues must survive as distinct positions instead of
+  collapsing into one rounded millisecond.
 -->
 <NML VERSION="20"><HEAD COMPANY="www.native-instruments.com" PROGRAM="Traktor Pro 4"></HEAD>
-<COLLECTION ENTRIES="7">
+<COLLECTION ENTRIES="8">
 <ENTRY MODIFIED_DATE="2026/8/23" MODIFIED_TIME="76022" AUDIO_ID="AAA1" TITLE="Grid &amp; Hot" ARTIST="Alpha"><LOCATION DIR="/:Users/:dj/:Music/:BOX/:One/:" FILE="Alpha - Grid &amp; Hot.mp3" VOLUME="C:" VOLUMEID="9c03fd8a"></LOCATION>
 <ALBUM OF_TRACKS="1" TRACK="1" TITLE="One EP"></ALBUM>
 <MODIFICATION_INFO AUTHOR_TYPE="user"></MODIFICATION_INFO>
@@ -79,6 +84,17 @@
 <LOUDNESS PEAK_DB="-0.800000" PERCEIVED_DB="0.500000" ANALYZED_DB="0.500000"></LOUDNESS>
 <CUE_V2 NAME="AutoGrid" DISPL_ORDER="0" TYPE="4" START="12.000000" LEN="0.000000" REPEATS="-1" HOTCUE="-1"><GRID BPM="127.000000"></GRID>
 </CUE_V2>
+</ENTRY>
+<ENTRY MODIFIED_DATE="2026/8/23" MODIFIED_TIME="13360" AUDIO_ID="AAA8" TITLE="Mixed Precision" ARTIST="Eta"><LOCATION DIR="/:Users/:dj/:Music/:BOX/:Three/:" FILE="Eta - Mixed Precision.mp3" VOLUME="C:" VOLUMEID="9c03fd8a"></LOCATION>
+<ALBUM OF_TRACKS="1" TRACK="1" TITLE="Seven EP"></ALBUM>
+<MODIFICATION_INFO AUTHOR_TYPE="user"></MODIFICATION_INFO>
+<INFO BITRATE="320000" GENRE="House" LABEL="Seven Records" COMMENT="Purchased at Beatport.com" COVERARTID="007/GGGGGGGGGGGGGGGGGGGGGGGG" KEY="8A" PLAYCOUNT="2" PLAYTIME="350" RANKING="255" IMPORT_DATE="2026/8/23" LAST_PLAYED="2026/8/24" RELEASE_DATE="2025/7/7" FLAGS="12" FILESIZE="19000"></INFO>
+<TEMPO BPM="129.000046" BPM_QUALITY="100.000000"></TEMPO>
+<MUSICAL_KEY VALUE="9"></MUSICAL_KEY>
+<CUE_V2 NAME="AutoGrid" DISPL_ORDER="0" TYPE="4" START="52.496647" LEN="0.000000" REPEATS="-1" HOTCUE="-1"><GRID BPM="129.000046"></GRID>
+</CUE_V2>
+<CUE_V2 NAME="n.n." DISPL_ORDER="0" TYPE="0" START="52.496647" LEN="0.000000" REPEATS="-1" HOTCUE="0"></CUE_V2>
+<CUE_V2 NAME="n.n." DISPL_ORDER="0" TYPE="0" START="14883.715649" LEN="0.000000" REPEATS="-1" HOTCUE="1"></CUE_V2>
 </ENTRY>
 </COLLECTION>
 <SETS ENTRIES="0"></SETS>
