@@ -339,6 +339,9 @@ fn report_serializes_with_the_expected_shape() {
     assert_eq!(value["totals"]["tracks"], 8);
     assert_eq!(value["playlists_by_type"]["smartlists"], 1);
     assert!(value["warnings"]["unsupported_cue_types"].is_array());
+    // The two new censuses are present so nothing is silently dropped (D12).
+    assert_eq!(value["mapped_fields"]["rating"], 8);
+    assert!(value["not_persisted"]["tempo_bpm"].is_number());
 }
 
 #[test]
@@ -350,6 +353,67 @@ fn primary_key_path_matches_the_location_triple() {
     );
     let key = path::resolve_primary_key("C:/:Users/:dj/:Music/:BOX/:One/:Alpha - Grid & Hot.mp3");
     assert_eq!(loc, key);
+}
+
+#[test]
+fn info_fields_map_onto_crate_columns() {
+    let plan = fixture_plan();
+    let t = track(&plan, "Grid & Hot");
+    // RANKING="204" -> round(204 / 51) = 4; BITRATE="320000" bps -> 320 kbps.
+    assert_eq!(t.rating, Some(4));
+    assert_eq!(t.bitrate, Some(320));
+    assert_eq!(t.play_count, Some(1));
+    assert_eq!(t.genre.as_deref(), Some("House"));
+    assert_eq!(t.label.as_deref(), Some("One Records"));
+    // IMPORT_DATE="2026/8/23" / LAST_PLAYED="2026/8/24" -> RFC3339, never raw.
+    assert_eq!(t.date_added.as_deref(), Some("2026-08-23T00:00:00+00:00"));
+    assert_eq!(t.last_played.as_deref(), Some("2026-08-24T00:00:00+00:00"));
+    // Preserved identifiers, never silently dropped.
+    assert_eq!(t.audio_id.as_deref(), Some("AAA1"));
+    assert_eq!(
+        t.coverart_id.as_deref(),
+        Some("001/AAAAAAAAAAAAAAAAAAAAAAAA")
+    );
+}
+
+#[test]
+fn ranking_maps_onto_the_full_zero_to_five_scale() {
+    let plan = fixture_plan();
+    // The fixture spans RANKING="255" (Mixed Precision) and RANKING="0" (Recording).
+    assert_eq!(track(&plan, "Mixed Precision").rating, Some(5));
+    assert_eq!(
+        track(&plan, "Recording_2026-08-24_00h08m12s").rating,
+        Some(0)
+    );
+    // RANKING="153" -> round(153 / 51) = 3.
+    assert_eq!(track(&plan, "Don’t Stop").rating, Some(3));
+}
+
+#[test]
+fn empty_info_attributes_map_to_none_not_empty_strings() {
+    let plan = fixture_plan();
+    let rec = track(&plan, "Recording_2026-08-24_00h08m12s");
+    // Traktor writes GENRE="" / LABEL="" / COMMENT="" for unset fields; those must be
+    // absent so a re-import never blanks an existing Crate value.
+    assert_eq!(rec.genre, None);
+    assert_eq!(rec.label, None);
+    // BITRATE="0" stays a value (0 kbps) rather than an empty string; it is a real number.
+    assert_eq!(rec.bitrate, Some(0));
+}
+
+#[test]
+fn report_census_surfaces_fields_crate_cannot_store() {
+    let plan = fixture_plan();
+    let census = &plan.report.not_persisted;
+    // TEMPO BPM is reported, never written to tracks.bpm (D10).
+    assert_eq!(census.tempo_bpm, 7, "7 of 8 entries carry a TEMPO");
+    assert_eq!(census.filesize, 8);
+    assert_eq!(census.release_date, 7);
+    assert_eq!(census.audio_id, 8);
+    assert_eq!(census.coverart_id, 7, "the empty COVERARTID is absent");
+    // Shared with T6's field-count assertions: what Crate *can* store.
+    assert_eq!(plan.report.mapped_fields.bitrate, 8);
+    assert_eq!(plan.report.mapped_fields.genre, 7);
 }
 
 /// Parses the private 264-entry export when it is present on disk. The file is
@@ -371,7 +435,48 @@ fn real_collection() {
 
     let plan = mapper::build_import_plan(&doc);
     assert_eq!(plan.report.totals.tracks, 264);
+    // Every entry maps to a distinct file path (no path collisions in the export).
+    let distinct_paths: std::collections::HashSet<&str> =
+        plan.tracks.iter().map(|t| t.file_path.as_str()).collect();
+    assert_eq!(distinct_paths.len(), 264);
     assert_eq!(plan.report.totals.grids, 246);
     // 246 memory/grid cues with HOTCUE=-1 are grids, not Crate cues.
     assert_eq!(plan.report.playlists_by_type.smartlists, 3);
+
+    // Crate cue totals: 43 hot cues + 2 loops + 0 memory cues.
+    let t = &plan.report.totals;
+    assert_eq!(t.cues, 45);
+    assert_eq!(t.memory_cues, 0);
+    assert_eq!(t.hot_cues, 43);
+    assert_eq!(t.loops, 2);
+
+    // `Paseando Por Sans`: the AutoGrid and hot cue 0 share the exact float timestamp
+    // `52.496647` (only possible because T1 keeps full precision), hot cue 1 sits at
+    // `14883.715649`. This is the proof that the rounded collision is gone.
+    let paseando = plan
+        .tracks
+        .iter()
+        .find(|t| t.title.as_deref() == Some("Paseando Por Sans (Original Mix)"))
+        .expect("Paseando present in the real export");
+    assert_eq!(paseando.grid_position_ms, Some(52.496647));
+    assert_eq!(paseando.cues.len(), 2);
+    let hot0 = paseando
+        .cues
+        .iter()
+        .find(|c| c.hot_cue_index == Some(0))
+        .expect("hot cue 0");
+    let hot1 = paseando
+        .cues
+        .iter()
+        .find(|c| c.hot_cue_index == Some(1))
+        .expect("hot cue 1");
+    assert_eq!(hot0.position_ms, 52.496647);
+    assert_eq!(hot1.position_ms, 14883.715649);
+
+    // `INFO` field census: what Crate stores, and what it can only report.
+    let mapped = &plan.report.mapped_fields;
+    assert_eq!(mapped.rating, 224);
+    assert_eq!(mapped.play_count, 73);
+    assert_eq!(mapped.bitrate, 264);
+    assert_eq!(plan.report.not_persisted.coverart_id, 255);
 }

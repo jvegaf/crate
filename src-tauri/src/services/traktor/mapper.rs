@@ -34,18 +34,48 @@ pub struct MappedCue {
 }
 
 /// A track as it would be imported.
+///
+/// Fields with no Crate column (`filesize_kb`, `release_date`, `playtime_s`,
+/// `tempo_bpm`, `audio_id`, `coverart_id`) are still carried so the dry-run report
+/// can surface them: nothing Traktor wrote disappears silently (decision D12).
 #[derive(Debug, Clone, Serialize)]
 pub struct MappedTrack {
     pub file_path: String,
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
+    /// Traktor's `TEMPO BPM`. Reported and preserved, never written to `tracks.bpm`,
+    /// which belongs to Crate's own analysis (decision D10).
     pub bpm: Option<f64>,
     /// Canonical Camelot, e.g. `"6B"`. Never the raw `INFO KEY`.
     pub key: Option<String>,
     pub grid_bpm: Option<f64>,
     /// Position of the grid's first beat, full float milliseconds as Traktor wrote it.
     pub grid_position_ms: Option<f64>,
+    // --- Fields with a Crate `tracks` column (decision D11) ---
+    /// `INFO RANKING` (0-255) mapped onto Crate's 0-5 stars (decision D7).
+    pub rating: Option<i32>,
+    /// `INFO PLAYCOUNT` as-is.
+    pub play_count: Option<i32>,
+    /// `INFO BITRATE` (bps) converted to kbps for `tracks.bitrate` (decision D8).
+    pub bitrate: Option<i32>,
+    /// `INFO IMPORT_DATE`, normalized from `YYYY/M/D` to RFC3339 (decision D9).
+    pub date_added: Option<String>,
+    /// `INFO LAST_PLAYED`, normalized from `YYYY/M/D` to RFC3339 (decision D9).
+    pub last_played: Option<String>,
+    pub genre: Option<String>,
+    pub label: Option<String>,
+    // --- Fields preserved for reporting / exporter input (decision D12) ---
+    /// `ENTRY AUDIO_ID`: Traktor's stable track identifier, kept for the exporter.
+    pub audio_id: Option<String>,
+    /// `INFO COVERARTID`: artwork reference, kept for the exporter.
+    pub coverart_id: Option<String>,
+    /// `INFO FILESIZE` in KB. No Crate column.
+    pub filesize_kb: Option<i64>,
+    /// `INFO RELEASE_DATE` as Traktor wrote it (`YYYY/M/D`). No Crate column.
+    pub release_date: Option<String>,
+    /// `INFO PLAYTIME` in seconds. No Crate column.
+    pub playtime_s: Option<i32>,
     pub cues: Vec<MappedCue>,
 }
 
@@ -85,6 +115,25 @@ pub struct ImportTotals {
     pub hot_cues: usize,
     pub loops: usize,
     pub grids: usize,
+}
+
+/// How many mapped tracks carried each field Traktor wrote but Crate has no column
+/// for (decision D12). Reported so a dry-run consumer can see the data existed
+/// instead of it disappearing silently.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct NotPersistedCounts {
+    /// Tracks with a Traktor `TEMPO BPM` (never written to `tracks.bpm`, decision D10).
+    pub tempo_bpm: usize,
+    /// Tracks with `INFO FILESIZE` (no Crate column).
+    pub filesize: usize,
+    /// Tracks with `INFO RELEASE_DATE` (no Crate column).
+    pub release_date: usize,
+    /// Tracks with `INFO PLAYTIME` (no Crate column).
+    pub playtime: usize,
+    /// Tracks with an `ENTRY AUDIO_ID` (preserved for the exporter, no Crate column).
+    pub audio_id: usize,
+    /// Tracks with an `INFO COVERARTID` (preserved for the exporter, no Crate column).
+    pub coverart_id: usize,
 }
 
 /// Playlist node counts by type (the virtual `$ROOT` is not counted).
@@ -138,11 +187,35 @@ pub struct ImportWarnings {
     pub unresolved_playlist_references: Vec<UnresolvedPlaylistReferenceWarning>,
 }
 
+/// How many mapped tracks carried each `INFO` field Crate **can** store (decision D11).
+/// Lets the dry run report the same field census the fidelity probe produced.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct MappedFieldCounts {
+    /// Tracks with an `INFO RANKING` mapped onto `tracks.rating`.
+    pub rating: usize,
+    /// Tracks with an `INFO PLAYCOUNT` mapped onto `tracks.play_count`.
+    pub play_count: usize,
+    /// Tracks with an `INFO BITRATE` mapped onto `tracks.bitrate`.
+    pub bitrate: usize,
+    /// Tracks with an `INFO IMPORT_DATE` parsed into `tracks.date_added`.
+    pub date_added: usize,
+    /// Tracks with an `INFO LAST_PLAYED` parsed into `tracks.last_played`.
+    pub last_played: usize,
+    /// Tracks with an `INFO GENRE`.
+    pub genre: usize,
+    /// Tracks with an `INFO LABEL`.
+    pub label: usize,
+}
+
 /// The dry-run report. Mirrored in TypeScript in a later slice.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ImportReport {
     pub nml_version: Option<String>,
     pub totals: ImportTotals,
+    /// Field census of what Crate will store.
+    pub mapped_fields: MappedFieldCounts,
+    /// Field census of what Crate has no column for.
+    pub not_persisted: NotPersistedCounts,
     pub playlists_by_type: PlaylistTypeCounts,
     pub warnings: ImportWarnings,
 }
@@ -180,6 +253,7 @@ fn map_document(document: &NmlDocument) -> ImportPlan {
                 CueType::Loop => report.totals.loops += 1,
             }
         }
+        census(track, &mut report);
     }
     report.totals.tracks = tracks.len();
 
@@ -188,6 +262,29 @@ fn map_document(document: &NmlDocument) -> ImportPlan {
         playlists,
         report,
     }
+}
+
+/// Count, for one mapped track, which `INFO` fields it carried — split between the
+/// ones Crate stores (`mapped_fields`) and the ones it has no column for
+/// (`not_persisted`). Values that failed to map (e.g. an unparseable date) count as
+/// absent for the mapped side, so the report never claims a field was persisted.
+fn census(track: &MappedTrack, report: &mut ImportReport) {
+    let mapped = &mut report.mapped_fields;
+    mapped.rating += usize::from(track.rating.is_some());
+    mapped.play_count += usize::from(track.play_count.is_some());
+    mapped.bitrate += usize::from(track.bitrate.is_some());
+    mapped.date_added += usize::from(track.date_added.is_some());
+    mapped.last_played += usize::from(track.last_played.is_some());
+    mapped.genre += usize::from(track.genre.is_some());
+    mapped.label += usize::from(track.label.is_some());
+
+    let not_persisted = &mut report.not_persisted;
+    not_persisted.tempo_bpm += usize::from(track.bpm.is_some());
+    not_persisted.filesize += usize::from(track.filesize_kb.is_some());
+    not_persisted.release_date += usize::from(track.release_date.is_some());
+    not_persisted.playtime += usize::from(track.playtime_s.is_some());
+    not_persisted.audio_id += usize::from(track.audio_id.is_some());
+    not_persisted.coverart_id += usize::from(track.coverart_id.is_some());
 }
 
 /// Traktor `HOTCUE` is 0-based (`0` = slot 1 on the hardware). Crate stores the same
@@ -335,8 +432,66 @@ fn map_track(track: &NmlTrack, report: &mut ImportReport) -> MappedTrack {
         key,
         grid_bpm: grid.map(|grid| grid.bpm),
         grid_position_ms: grid.map(|grid| grid.position_ms),
+        rating: track.ranking.map(rating_from_ranking),
+        play_count: track.play_count,
+        bitrate: track.bitrate_bps.map(bitrate_kbps),
+        date_added: track
+            .import_date
+            .as_deref()
+            .and_then(traktor_date_to_rfc3339),
+        last_played: track
+            .last_played
+            .as_deref()
+            .and_then(traktor_date_to_rfc3339),
+        genre: track.genre.clone(),
+        label: track.label.clone(),
+        audio_id: track.audio_id.clone(),
+        coverart_id: track.coverart_id.clone(),
+        filesize_kb: track.filesize_kb,
+        release_date: track.release_date.clone(),
+        playtime_s: track.playtime_s,
         cues,
     }
+}
+
+/// Map Traktor's 0-255 `INFO RANKING` onto Crate's 0-5 star rating (decision D7).
+///
+/// `round(v / 51)` places the six steps Traktor writes `{0, 51, 102, 153, 204, 255}`
+/// exactly on `{0, 1, 2, 3, 4, 5}` (`255 / 51 == 5`). The result is clamped to
+/// `0..=5` so a malformed value can never violate the `valid_rating` CHECK
+/// constraint on `tracks.rating`.
+fn rating_from_ranking(ranking: i32) -> i32 {
+    let ranking = ranking.clamp(0, 255);
+    ((ranking as f64 / 51.0).round() as i32).clamp(0, 5)
+}
+
+/// Convert Traktor's `INFO BITRATE` from bits per second to the kbps Crate stores
+/// in `tracks.bitrate` (decision D8). Traktor writes `320000`; writing that raw
+/// would make the track claim ~320 Mbps.
+fn bitrate_kbps(bits_per_second: i32) -> i32 {
+    ((bits_per_second as f64) / 1000.0).round() as i32
+}
+
+/// Normalize Traktor's `YYYY/M/D` date attributes to the RFC3339 string Crate's
+/// `date_added` / `last_played` columns hold (decision D9).
+///
+/// `tracks.date_added` is `TEXT NOT NULL` written as RFC3339 by `Track::new`
+/// (`chrono::Utc::now().to_rfc3339()`); Traktor's format is neither zero-padded nor
+/// RFC3339 and must never be written raw. The components are split on `/` and fed to
+/// `NaiveDate::from_ymd_opt` rather than a `strftime` pattern, so no platform-specific
+/// format specifier (`%-m`, `%-d`) is involved. A date that does not parse yields
+/// `None` — the importer then leaves the existing column value alone, never panics.
+fn traktor_date_to_rfc3339(value: &str) -> Option<String> {
+    let mut parts = value.split('/');
+    let year: i32 = parts.next()?.trim().parse().ok()?;
+    let month: u32 = parts.next()?.trim().parse().ok()?;
+    let day: u32 = parts.next()?.trim().parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    let date = chrono::NaiveDate::from_ymd_opt(year, month, day)?;
+    let datetime = date.and_hms_opt(0, 0, 0)?.and_utc();
+    Some(datetime.to_rfc3339())
 }
 
 fn map_playlists(

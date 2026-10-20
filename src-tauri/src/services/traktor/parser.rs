@@ -43,6 +43,18 @@ fn parse_i32(element: &BytesStart<'_>, name: &[u8]) -> quick_xml::Result<Option<
     Ok(attr(element, name)?.and_then(|value| value.trim().parse().ok()))
 }
 
+fn parse_i64(element: &BytesStart<'_>, name: &[u8]) -> quick_xml::Result<Option<i64>> {
+    Ok(attr(element, name)?.and_then(|value| value.trim().parse().ok()))
+}
+
+/// Read a string attribute, treating an empty value as absent.
+///
+/// Traktor writes empty attributes for unset fields (`GENRE=""`, `COMMENT=""`), which
+/// must not overwrite an existing non-empty Crate value with an empty string.
+fn parse_text(element: &BytesStart<'_>, name: &[u8]) -> quick_xml::Result<Option<String>> {
+    Ok(attr(element, name)?.filter(|value| !value.is_empty()))
+}
+
 fn parse_events(xml: &str) -> Result<NmlDocument> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
@@ -64,9 +76,11 @@ fn parse_events(xml: &str) -> Result<NmlDocument> {
                     b"ENTRY" => {
                         if in_collection {
                             current_track = Some(NmlTrack {
-                                audio_id: attr(element, b"AUDIO_ID")?,
-                                title: attr(element, b"TITLE")?,
-                                artist: attr(element, b"ARTIST")?,
+                                audio_id: parse_text(element, b"AUDIO_ID")?,
+                                title: parse_text(element, b"TITLE")?,
+                                artist: parse_text(element, b"ARTIST")?,
+                                modified_date: parse_text(element, b"MODIFIED_DATE")?,
+                                modified_time: parse_i32(element, b"MODIFIED_TIME")?,
                                 ..Default::default()
                             });
                         }
@@ -80,12 +94,29 @@ fn parse_events(xml: &str) -> Result<NmlDocument> {
                     }
                     b"ALBUM" => {
                         if let Some(track) = current_track.as_mut() {
-                            track.album = attr(element, b"TITLE")?;
+                            track.album = parse_text(element, b"TITLE")?;
+                            track.album_of_tracks = parse_i32(element, b"OF_TRACKS")?;
+                            track.album_track = parse_i32(element, b"TRACK")?;
                         }
                     }
                     b"INFO" => {
                         if let Some(track) = current_track.as_mut() {
-                            track.info_key = attr(element, b"KEY")?;
+                            track.info_key = parse_text(element, b"KEY")?;
+                            track.bitrate_bps = parse_i32(element, b"BITRATE")?;
+                            track.genre = parse_text(element, b"GENRE")?;
+                            track.label = parse_text(element, b"LABEL")?;
+                            track.comment = parse_text(element, b"COMMENT")?;
+                            track.coverart_id = parse_text(element, b"COVERARTID")?;
+                            track.play_count = parse_i32(element, b"PLAYCOUNT")?;
+                            track.playtime_s = parse_i32(element, b"PLAYTIME")?;
+                            track.playtime_float = parse_f64(element, b"PLAYTIME_FLOAT")?;
+                            track.ranking = parse_i32(element, b"RANKING")?;
+                            track.import_date = parse_text(element, b"IMPORT_DATE")?;
+                            track.last_played = parse_text(element, b"LAST_PLAYED")?;
+                            track.release_date = parse_text(element, b"RELEASE_DATE")?;
+                            track.flags = parse_i32(element, b"FLAGS")?;
+                            track.filesize_kb = parse_i64(element, b"FILESIZE")?;
+                            track.remixer = parse_text(element, b"REMIXER")?;
                         }
                     }
                     b"TEMPO" => {

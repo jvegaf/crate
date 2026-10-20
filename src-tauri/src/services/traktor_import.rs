@@ -58,6 +58,9 @@ pub struct TraktorImportOutcome {
     pub grids_written: usize,
     /// Keys written across all touched tracks.
     pub keys_written: usize,
+    /// Tracks that received at least one mapped `INFO` field (`rating`, `play_count`,
+    /// `bitrate`, `date_added`, `last_played`, `genre` or `label`).
+    pub fields_written: usize,
     /// Entries that were reported and skipped without creating a row.
     pub unmatched: Vec<UnmatchedTraktorTrack>,
     /// Playlists and folders created or reused by this run (folders included).
@@ -114,6 +117,7 @@ impl TraktorImportService {
             cues_written: 0,
             grids_written: 0,
             keys_written: 0,
+            fields_written: 0,
             unmatched: Vec::new(),
             playlists_imported: 0,
             playlist_tracks_written: 0,
@@ -126,12 +130,16 @@ impl TraktorImportService {
                 continue;
             };
 
-            let (key_written, grid_written) = self.apply_key_and_grid(&id, track)?;
+            let (key_written, grid_written, fields_written) =
+                self.apply_track_fields(&id, track)?;
             if key_written {
                 outcome.keys_written += 1;
             }
             if grid_written {
                 outcome.grids_written += 1;
+            }
+            if fields_written {
+                outcome.fields_written += 1;
             }
 
             let cues: Vec<Cue> = track
@@ -283,16 +291,21 @@ impl TraktorImportService {
         }
     }
 
-    /// Write the Traktor key and/or beat grid onto one resolved track row in a single
-    /// mutation, mirroring `insert_track_in`'s `_hlc` stamp and dirty mark.
+    /// Write every Traktor field Crate can store onto one resolved track row in a single
+    /// mutation: key, beat grid, and the per-track `INFO` fields (`rating`, `play_count`,
+    /// `bitrate`, `date_added`, `last_played`, `genre`, `label`). Mirrors
+    /// `insert_track_in`'s `_hlc` stamp and dirty mark so there is exactly ONE UPDATE and
+    /// one `_hlc` stamp per track — a second statement would race the stamp (decision D11).
     ///
-    /// Returns `(key_written, grid_written)`. A partial triple is never written: the grid
-    /// columns are all written together or not at all.
-    fn apply_key_and_grid(&self, id: &str, track: &MappedTrack) -> Result<(bool, bool)> {
+    /// Returns `(key_written, grid_written, fields_written)`. A partial triple is never
+    /// written: the grid columns are all written together or not at all. `fields_written`
+    /// is `true` when at least one of the mapped `INFO` fields was persisted.
+    fn apply_track_fields(&self, id: &str, track: &MappedTrack) -> Result<(bool, bool, bool)> {
         let grid = grid_triple(track);
         let has_key = track.key.is_some();
-        if !has_key && grid.is_none() {
-            return Ok((false, false));
+        let has_fields = has_persisted_fields(track);
+        if !has_key && grid.is_none() && !has_fields {
+            return Ok((false, false, false));
         }
 
         let conn = self.conn.lock().map_err(|_| CrateError::LockPoisoned)?;
@@ -302,20 +315,44 @@ impl TraktorImportService {
         let mut set: Vec<String> = Vec::new();
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
+        // Append `column = ?N` only for the fields the NML actually carried, so a missing
+        // attribute leaves the existing Crate value alone instead of overwriting it.
+        let mut push = |column: &str, value: Box<dyn rusqlite::ToSql>| {
+            params.push(value);
+            set.push(format!("{column} = ?{}", params.len()));
+        };
+
         if let Some(key) = &track.key {
-            params.push(Box::new(key.clone()));
-            set.push(format!("key = ?{}", params.len()));
+            push("key", Box::new(key.clone()));
         }
         if let Some((grid_bpm, grid_anchor_ms, grid_source)) = grid {
-            params.push(Box::new(grid_bpm));
-            set.push(format!("grid_bpm = ?{}", params.len()));
-            params.push(Box::new(grid_anchor_ms));
-            set.push(format!("grid_anchor_ms = ?{}", params.len()));
-            params.push(Box::new(grid_source));
-            set.push(format!("grid_source = ?{}", params.len()));
+            push("grid_bpm", Box::new(grid_bpm));
+            push("grid_anchor_ms", Box::new(grid_anchor_ms));
+            push("grid_source", Box::new(grid_source));
         }
-        params.push(Box::new(hlc));
-        set.push(format!("_hlc = ?{}", params.len()));
+        if let Some(rating) = track.rating {
+            push("rating", Box::new(rating));
+        }
+        if let Some(play_count) = track.play_count {
+            push("play_count", Box::new(play_count));
+        }
+        if let Some(bitrate) = track.bitrate {
+            push("bitrate", Box::new(bitrate));
+        }
+        if let Some(date_added) = &track.date_added {
+            push("date_added", Box::new(date_added.clone()));
+        }
+        if let Some(last_played) = &track.last_played {
+            push("last_played", Box::new(last_played.clone()));
+        }
+        if let Some(genre) = &track.genre {
+            push("genre", Box::new(genre.clone()));
+        }
+        if let Some(label) = &track.label {
+            push("label", Box::new(label.clone()));
+        }
+
+        push("_hlc", Box::new(hlc));
         params.push(Box::new(id.to_string()));
         let id_index = params.len();
 
@@ -329,8 +366,22 @@ impl TraktorImportService {
         dirty::mark_dirty(&tx, &buckets::bucket_for_track_id(id))?;
         tx.commit()?;
 
-        Ok((has_key, grid.is_some()))
+        Ok((has_key, grid.is_some(), has_fields))
     }
+}
+
+/// Whether any of the mapped per-track `INFO` fields Crate can store is present.
+///
+/// The grid is handled separately ([`grid_triple`]); this covers `rating`, `play_count`,
+/// `bitrate`, `date_added`, `last_played`, `genre` and `label`.
+fn has_persisted_fields(track: &MappedTrack) -> bool {
+    track.rating.is_some()
+        || track.play_count.is_some()
+        || track.bitrate.is_some()
+        || track.date_added.is_some()
+        || track.last_played.is_some()
+        || track.genre.is_some()
+        || track.label.is_some()
 }
 
 /// Traktor's own bookkeeping playlists (`_LOOPS`, `_RECORDINGS`) are not user playlists.
@@ -653,9 +704,9 @@ mod tests {
     }
 
     /// The XML body used by most tests: a Camelot key, an analyzed grid, one hot cue, one
-    /// memory cue and one loop.
+    /// memory cue, one loop, and the `INFO` fields Crate can store (D11).
     fn full_body() -> &'static str {
-        r#"<INFO KEY="8B"></INFO><MUSICAL_KEY VALUE="0"></MUSICAL_KEY><TEMPO BPM="128.000000"></TEMPO>
+        r#"<INFO KEY="8B" BITRATE="320000" PLAYCOUNT="3" RANKING="204" IMPORT_DATE="2026/8/23" LAST_PLAYED="2026/8/24" GENRE="House" LABEL="One Records" COMMENT="keep me" COVERARTID="001/AAAA" FILESIZE="12345" RELEASE_DATE="2019/5/17" PLAYTIME="300"></INFO><MUSICAL_KEY VALUE="0"></MUSICAL_KEY><TEMPO BPM="128.000000"></TEMPO>
 <CUE_V2 NAME="AutoGrid" TYPE="4" START="1000.000000" LEN="0.000000" REPEATS="-1" HOTCUE="-1"><GRID BPM="128.000000"></GRID></CUE_V2>
 <CUE_V2 NAME="Hot" TYPE="0" START="2000.000000" LEN="0.000000" REPEATS="-1" HOTCUE="0"></CUE_V2>
 <CUE_V2 NAME="Memory" TYPE="0" START="3000.000000" LEN="0.000000" REPEATS="-1" HOTCUE="-1"></CUE_V2>
@@ -687,6 +738,7 @@ mod tests {
         assert_eq!(outcome.cues_written, 3);
         assert_eq!(outcome.grids_written, 1);
         assert_eq!(outcome.keys_written, 1);
+        assert_eq!(outcome.fields_written, 1);
         assert!(outcome.unmatched.is_empty());
         assert_eq!(outcome.dry_run.totals.tracks, 1);
 
@@ -697,6 +749,17 @@ mod tests {
         assert_eq!(track.grid_bpm, Some(128.0));
         assert_eq!(track.grid_anchor_ms, Some(1000));
         assert_eq!(track.grid_source.as_deref(), Some("traktor"));
+        // The mapped INFO fields reach their Crate columns (D11).
+        assert_eq!(track.rating, 4, "RANKING=204 -> 4 stars");
+        assert_eq!(track.play_count, 3);
+        assert_eq!(track.bitrate, Some(320), "320000 bps -> 320 kbps");
+        assert_eq!(track.genre.as_deref(), Some("House"));
+        assert_eq!(track.label.as_deref(), Some("One Records"));
+        assert_eq!(track.date_added, "2026-08-23T00:00:00+00:00");
+        assert_eq!(
+            track.last_played.as_deref(),
+            Some("2026-08-24T00:00:00+00:00")
+        );
         assert_eq!(
             track.bpm, None,
             "the grid must not be written into tracks.bpm"
@@ -785,6 +848,7 @@ mod tests {
         assert_eq!(second.cues_written, first.cues_written);
         assert_eq!(second.grids_written, first.grids_written);
         assert_eq!(second.keys_written, first.keys_written);
+        assert_eq!(second.fields_written, first.fields_written);
         assert!(second.unmatched.is_empty());
 
         let tracks = service.library.get_tracks(None).unwrap();

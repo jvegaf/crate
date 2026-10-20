@@ -1359,7 +1359,8 @@ export type TraktorNodeKind = 'folder' | 'playlist' | 'smartlist'
  * A cue as it would be written to Crate's `cues` table.
  *
  * Mirrors `MappedCue` in `services/traktor/mapper.rs` in snake_case. Optional
- * fields are `T | null` because serde emits `null` for `None`.
+ * fields are `T | null` because serde emits `null` for `None`. Positions keep
+ * Traktor's full float precision; the DB boundary rounds them once.
  */
 export interface TraktorMappedCue {
 	position_ms: number
@@ -1376,11 +1377,35 @@ export interface TraktorMappedTrack {
 	title: string | null
 	artist: string | null
 	album: string | null
+	/** Traktor's `TEMPO BPM`. Reported, never written to `tracks.bpm` (decision D10). */
 	bpm: number | null
 	/** Canonical Camelot, e.g. `"6B"`. Never the raw `INFO KEY`. */
 	key: string | null
 	grid_bpm: number | null
+	/** Full float milliseconds as Traktor wrote it; rounded once at the DB boundary. */
 	grid_position_ms: number | null
+	/** `INFO RANKING` (0-255) mapped onto Crate's 0-5 stars (decision D7). */
+	rating: number | null
+	/** `INFO PLAYCOUNT` as-is. */
+	play_count: number | null
+	/** `INFO BITRATE` (bps) converted to kbps (decision D8). */
+	bitrate: number | null
+	/** `INFO IMPORT_DATE`, normalized from `YYYY/M/D` to RFC3339 (decision D9). */
+	date_added: string | null
+	/** `INFO LAST_PLAYED`, normalized from `YYYY/M/D` to RFC3339 (decision D9). */
+	last_played: string | null
+	genre: string | null
+	label: string | null
+	/** `ENTRY AUDIO_ID`: Traktor's stable identifier, kept for the exporter. */
+	audio_id: string | null
+	/** `INFO COVERARTID`: artwork reference, kept for the exporter. */
+	coverart_id: string | null
+	/** `INFO FILESIZE` in KB. No Crate column. */
+	filesize_kb: number | null
+	/** `INFO RELEASE_DATE` as Traktor wrote it (`YYYY/M/D`). No Crate column. */
+	release_date: string | null
+	/** `INFO PLAYTIME` in seconds. No Crate column. */
+	playtime_s: number | null
 	cues: TraktorMappedCue[]
 }
 
@@ -1456,12 +1481,49 @@ export interface TraktorImportWarnings {
 }
 
 /**
+ * How many mapped tracks carried each `INFO` field Crate can store.
+ * Mirrors `MappedFieldCounts` in `mapper.rs`.
+ */
+export interface TraktorMappedFieldCounts {
+	rating: number
+	play_count: number
+	bitrate: number
+	date_added: number
+	last_played: number
+	genre: number
+	label: number
+}
+
+/**
+ * How many mapped tracks carried each field Traktor wrote but Crate has no column
+ * for. Mirrors `NotPersistedCounts` in `mapper.rs`; nothing here is silently dropped.
+ */
+export interface TraktorNotPersistedCounts {
+	/** Tracks with a Traktor `TEMPO BPM` (never written to `tracks.bpm`, decision D10). */
+	tempo_bpm: number
+	/** Tracks with `INFO FILESIZE` (no Crate column). */
+	filesize: number
+	/** Tracks with `INFO RELEASE_DATE` (no Crate column). */
+	release_date: number
+	/** Tracks with `INFO PLAYTIME` (no Crate column). */
+	playtime: number
+	/** Tracks with an `ENTRY AUDIO_ID` (preserved for the exporter). */
+	audio_id: number
+	/** Tracks with an `INFO COVERARTID` (preserved for the exporter). */
+	coverart_id: number
+}
+
+/**
  * The dry-run report. Mirrors `ImportReport` in `services/traktor/mapper.rs`
  * (named `TraktorImportReport` in TypeScript to avoid a generic global name).
  */
 export interface TraktorImportReport {
 	nml_version: string | null
 	totals: TraktorImportTotals
+	/** Field census of what Crate will store. */
+	mapped_fields: TraktorMappedFieldCounts
+	/** Field census of what Crate has no column for. */
+	not_persisted: TraktorNotPersistedCounts
 	playlists_by_type: TraktorPlaylistTypeCounts
 	warnings: TraktorImportWarnings
 }
@@ -1502,6 +1564,8 @@ export interface TraktorImportOutcome {
 	grids_written: number
 	/** Keys written across all touched tracks. */
 	keys_written: number
+	/** Tracks that received at least one mapped `INFO` field. */
+	fields_written: number
 	/** Entries that were reported and skipped without creating a row. */
 	unmatched: TraktorUnmatchedTrack[]
 	/** Playlists and folders created or reused by this run (folders included). */

@@ -24,8 +24,43 @@ pub struct NmlTrack {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub location: NmlLocation,
+    /// `ENTRY MODIFIED_DATE` (`YYYY/M/D`). Parsed and preserved, not yet mapped.
+    pub modified_date: Option<String>,
+    /// `ENTRY MODIFIED_TIME` (seconds of day).
+    pub modified_time: Option<i32>,
+    /// `ALBUM OF_TRACKS`: how many tracks the release carries.
+    pub album_of_tracks: Option<i32>,
+    /// `ALBUM TRACK`: this track's position on the release.
+    pub album_track: Option<i32>,
     /// `INFO KEY`: Traktor's free-text key field (heterogeneous notation).
     pub info_key: Option<String>,
+    /// `INFO BITRATE`, bits per second (e.g. `320000`).
+    pub bitrate_bps: Option<i32>,
+    pub genre: Option<String>,
+    pub label: Option<String>,
+    /// `INFO COMMENT`: Traktor's free-text comment. Crate has no column for it.
+    pub comment: Option<String>,
+    /// `INFO COVERARTID`: artwork reference (`"001/<base64>"` or empty).
+    pub coverart_id: Option<String>,
+    pub play_count: Option<i32>,
+    /// `INFO PLAYTIME`, whole seconds.
+    pub playtime_s: Option<i32>,
+    /// `INFO PLAYTIME_FLOAT`, sub-second seconds.
+    pub playtime_float: Option<f64>,
+    /// `INFO RANKING`, Traktor's 0-255 scale.
+    pub ranking: Option<i32>,
+    /// `INFO IMPORT_DATE` (`YYYY/M/D`).
+    pub import_date: Option<String>,
+    /// `INFO LAST_PLAYED` (`YYYY/M/D`).
+    pub last_played: Option<String>,
+    /// `INFO RELEASE_DATE` (`YYYY/M/D`). Crate has no column for it.
+    pub release_date: Option<String>,
+    /// `INFO FLAGS`, Traktor's per-track bit flags.
+    pub flags: Option<i32>,
+    /// `INFO FILESIZE`, kilobytes. Crate has no column for it.
+    pub filesize_kb: Option<i64>,
+    /// `INFO REMIXER`.
+    pub remixer: Option<String>,
     /// `MUSICAL_KEY VALUE`: 0–11 major, 12–23 minor.
     pub musical_key: Option<i32>,
     /// `TEMPO BPM`. Independent of the beat grid.
