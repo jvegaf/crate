@@ -95,11 +95,15 @@ extraction from `COVERARTID`.
 - **D5 — persist derived analysis fields through Crate's existing path, not bespoke SQL.** Cues,
   grids and keys already go through `apply_key_and_grid` / `replace_cues_for_track`; new fields
   follow the same call, never a second UPDATE that would race the `_hlc` stamp.
-- **D6 — cue slot base (OPEN, blocks S6 only).** Traktor's `HOTCUE` is 0-based and Crate stores
-  0-based, but the importer maps `n → n+1`, so Traktor slot 0 becomes Crate slot 1 everywhere. Fix
-  the mapping (`hot_cue_index(n) == n`) or leave the shift and only fix the schema-doc claim? This
-  changes what a user's existing Traktor library looks like inside Crate, so it needs a human
-  decision before S6 lands.
+- **D6 — cue slot base: RESOLVED (align with Traktor).** Traktor's `HOTCUE` is 0-based and Crate
+  now stores the same 0-based slot; the importer maps `n → n` and the accepted range became
+  `0..=7`. Rationale: the two on-disk cue formats Crate already writes are 0-based (Pioneer's
+  `hot_cue` byte, ANLZ `pco2.rs`), so this makes the import/export round trip symmetrical and
+  removes an off-by-one that silently shifted all 43 real hot cues. The cost, accepted by the user:
+  previously imported Traktor cues move one slot down (slot 1 → 0) until they are re-imported.
+  Evidence gathered before deciding: across the real export's 264 entries the hot slots in use are
+  `{0,1,2,3,6}` (max 6), and on the fixture `{0,1}` — no source slot exceeds 7, so no valid cue is
+  pushed out of range by the realignment.
 
 ## Tasks
 
@@ -127,9 +131,12 @@ extraction from `COVERARTID`.
       264 tracks, 246 grids, the exact `Paseando` cue triple, 0 collided cues, and the dry-run
       field counts (224 rankings, 255 cover ids, 73 play counts).
       Route: inline.
-- [ ] **T7 (S6, blocked on D6).** Align Crate's `hot_cue_index` base with Traktor's, or fix the
-      schema doc and keep the shift, per the D6 decision.
-      Route: inline.
+- [x] **T7 (S6, D6 resolved).** Align Crate's `hot_cue_index` base with Traktor's 0-based slots
+      (`0..=7`) across the mapper, the write path, the `cues` validator and every doc that claimed
+      `1..=8`; update the affected assertions.
+      Route: inline. Files: `models/cue.rs`, `services/cue.rs`, `services/traktor/mapper.rs`,
+      `services/traktor_import.rs`, `tests/mod.rs`, `db/schema.rs`, `shared/types/index.ts`.
+      Evidence: commit `628ffe5`; `cargo test --features desktop` → 616 passed, 0 failed, 11 ignored.
 
 ## Acceptance criteria
 
@@ -156,7 +163,7 @@ so a chain strategy will be requested before the second slice, not sprung after 
 | T4 | not started | — |
 | T5 | not started | — |
 | T6 | not started | — |
-| T7 | blocked (D6) | — |
+| T7 | done | `628ffe5`; 616 passed / 0 failed; rustfmt + clippy `-D warnings` + eslint + prettier + svelte-check clean |
 
 Baseline captured before any edit: `cargo test --features desktop` → **616 passed, 0 failed,
 11 ignored**. `cargo test --features desktop real_collection -- --ignored` → **1 passed**
@@ -171,5 +178,6 @@ Baseline captured before any edit: `cargo test --features desktop` → **616 pas
 
 ## Next step
 
-Take decision **D6** (cue slot base), then implement T1 → T2 → T3 in that order: T1/T2 are the
-verifiable unit fix, T3 is what makes them observable against the real export.
+T7 is done (decision **D6** resolved in favour of Traktor's 0-based slots). Implement T1 → T2 → T3
+in that order next: T1/T2 are the verifiable unit fix, T3 is what makes them observable against the
+real export. T3 remains the gate — on this machine 264 entries map and 0 resolve on disk.
