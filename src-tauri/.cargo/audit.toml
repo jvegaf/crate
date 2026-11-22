@@ -5,4 +5,28 @@ ignore = [
     "RUSTSEC-2024-0429",
     # rand unsoundness with custom logger using `rand::rng()` - not applicable to this project.
     "RUSTSEC-2026-0097",
+
+    # libsqlite3-sys: transitive via rusqlite; requires a major dependency bump to reach >=0.39.0.
+    "RUSTSEC-2026-0459",
+
+    # zip: transitive dependency; requires a major bump to reach >=9.0.x.
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    "RUSTSEC-2026-0429",
+    "RUSTSEC-2026-0545",
+    "RUSTSEC-2026-0548",
+
+    # Unmaintained transitive crates with no fixed upgrade available.
+    "RUSTSEC-2024-0370", # proc-macro-error
+    "RUSTSEC-2024-0436", # paste
+    "RUSTSEC-2025-0075", # unic-char-range
+    "RUSTSEC-2025-0080", # unic-common
+    "RUSTSEC-2025-0081", # unic-char-property
+    "RUSTSEC-2025-0098", # unic-ucd-version
+    "RUSTSEC-2025-0100", # unic-ucd-ident
+    "RUSTSEC-2026-0370", # zvariant
+    "RUSTSEC-2026-0371", # zbus_names
+    "RUSTSEC-2026-0372", # zvariant_derive
+    "RUSTSEC-2026-0543", # chrono
 ]
