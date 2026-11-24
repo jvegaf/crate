@@ -1,6 +1,6 @@
 {
 	"name": "@bbx-audio/crate",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Cross-platform DJ library manager with music discovery, track analysis, and USB export",
 	"type": "module",
 	"private": true,
@@ -35,11 +35,11 @@
 		"format": "yarn format:fix && yarn format:rust",
 		"format:check": "prettier --check \"**/*.{ts,js,json,svelte,css}\"",
 		"format:fix": "prettier --write \"**/*.{ts,js,json,svelte,css}\"",
-		"format:rust": "cd src-tauri/ && cargo +nightly fmt",
+		"format:rust": "cd src-tauri/ && cargo fmt",
 		"lint": "yarn lint:fix && yarn lint:rust",
 		"lint:check": "eslint --cache --debug \"**/*.{ts,js,svelte}\"",
 		"lint:fix": "eslint --cache --fix \"**/*.{ts,js,svelte}\"",
-		"lint:rust": "cd src-tauri/ && cargo +nightly clippy --release --features desktop",
+		"lint:rust": "cd src-tauri/ && cargo clippy --release --features desktop",
 		"pre-commit": "lint-staged",
 		"prepare": "yarn prepare:husky",
 		"prepare:husky": "husky install",
@@ -69,6 +69,9 @@
 		"prettier-plugin-tailwindcss": "0.7.2",
 		"typescript": "5.9.3",
 		"typescript-eslint": "8.50.0"
+	},
+	"resolutions": {
+		"@tauri-apps/api": "2.12.4"
 	},
 	"lint-staged": {
 		"**/*.{ts,js,svelte,json,css}": "yarn format:fix",

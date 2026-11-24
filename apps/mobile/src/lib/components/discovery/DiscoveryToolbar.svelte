@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { translate } from '$shared/i18n'
-	import { discoveryStore, facetFilters } from '$shared/stores/discovery'
+	import {
+		discoveryStore,
+		facetFilters,
+		playbackFollowsFilters,
+		setPlaybackFollowsFilters,
+	} from '$shared/stores/discovery'
 	import { hasLinkedCollection } from '$shared/stores/collection'
 	import type { DiscoverySortField } from '$shared/types'
 	import { countActiveFacets } from '$shared/utils/discoveryFilters'
@@ -19,8 +24,7 @@
 	let filterOpen = $state(false)
 
 	// The search box is a controlled input over the store's `filter.search` — the store is the single source
-	// of truth. (A tag assign/remove reloads the feed and resets `filter.search`; binding to the store keeps
-	// the box in lock-step instead of showing a stale query the feed no longer applies.)
+	// of truth, so the box always shows the query the feed actually applies (only navigation clears it).
 
 	// Active-filter count for the trigger badge: tag filters plus the liked/new/downloaded/purchased toggles
 	// (mirrors the desktop FilterDropdown badge) so the button reads as "active" whenever any filter is applied.
@@ -155,6 +159,7 @@
 		onToggleTag: (id) => mobileUIStore.toggleTagFilter(id),
 		onToggleMode: mobileUIStore.toggleTagFilterMode,
 	}}
+	playbackFollowsFilters={{ value: $playbackFollowsFilters, onChange: setPlaybackFollowsFilters }}
 	onClearAll={() => {
 		discoveryStore.clearFacetFilters()
 		mobileUIStore.clearTagFilters()
